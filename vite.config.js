@@ -12,6 +12,7 @@ export default defineConfig(function (_a) {
         plugins: [
             react(),
             VitePWA({
+                selfDestroying: true,
                 registerType: 'prompt',
                 includeAssets: ['favicon.svg', 'robots.txt', 'icons/*.svg', 'placeholders/*.svg'],
                 manifest: {

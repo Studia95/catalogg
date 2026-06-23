@@ -19,11 +19,10 @@ export async function loadCatalog() {
     return { restaurant, categories, products, cabins, theme: themeSettings, source: 'demo' as const };
   }
 
-  const [restaurantResult, categoriesResult, productsResult, themeResult] = await Promise.all([
+  const [restaurantResult, categoriesResult, productsResult] = await Promise.all([
     supabase.from('restaurant').select('*').limit(1).single(),
     supabase.from('category').select('*').order('name'),
-    supabase.from('product').select('*').order('title'),
-    supabase.from('theme_settings').select('*').limit(1).single()
+    supabase.from('product').select('*').order('title')
   ]);
 
   return {
@@ -31,7 +30,7 @@ export async function loadCatalog() {
     categories: categoriesResult.data ?? categories,
     products: productsResult.data ?? products,
     cabins,
-    theme: themeResult.data ?? themeSettings,
+    theme: themeSettings,
     source: 'supabase' as const
   };
 }

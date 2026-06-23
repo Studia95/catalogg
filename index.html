@@ -11,6 +11,17 @@
     <link rel="icon" href="./favicon.svg" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.svg" />
     <title>Мангал | PWA каталог ресторана</title>
+    <script>
+      window.__MANGAL_UI_VERSION__ = '2026-06-23-light-grid-v2';
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          registrations.forEach((registration) => registration.unregister());
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then((keys) => keys.forEach((key) => caches.delete(key)));
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
@@ -18,11 +29,11 @@
       import('./src/main.tsx').catch(() => {
         const stylesheet = document.createElement('link');
         stylesheet.rel = 'stylesheet';
-        stylesheet.href = './assets/index.css';
+        stylesheet.href = './assets/index.css?v=2026-06-23-light-grid-v2';
         document.head.appendChild(stylesheet);
         const script = document.createElement('script');
         script.type = 'module';
-        script.src = './assets/index.js';
+        script.src = './assets/index.js?v=2026-06-23-light-grid-v2';
         document.body.appendChild(script);
       });
     </script>
