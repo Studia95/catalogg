@@ -642,20 +642,24 @@ function CheckoutScreen({ products, restaurant }: { products: Product[]; restaur
         </button>
       </section>
 
-      <h2>Кабинки</h2>
-      <section className="cabin-grid">
-        {['cabin-1', 'cabin-2', 'big-cabin', 'main-hall'].map((id, index) => (
-          <button className={cabinId === id ? 'cabin-card is-active' : 'cabin-card'} type="button" key={id} onClick={() => setOrder({ cabinId: id })}>
-            <img src={`https://images.unsplash.com/photo-${['1514933651103-005eec06c04b', '1559329007-40df8a9345d8', '1544148103-0773bf10d330', '1552566626-52f8b828add9'][index]}?auto=format&fit=crop&w=900&q=78`} alt="" />
-            <Check />
-            <strong>{['Кабинка №1', 'Кабинка №2', 'Большая кабинка', 'Общий зал'][index]}</strong>
-            <span>
-              <Users /> {['до 4 гостей', 'до 4 гостей', 'до 10 гостей', 'до 20 гостей'][index]}
-            </span>
-            <span>{['Закрывается шторами', 'Отдельная дверь', 'Отдельная дверь', 'Открытое пространство'][index]}</span>
-          </button>
-        ))}
-      </section>
+      {mode === 'hall' && (
+        <>
+          <h2>Кабинки</h2>
+          <section className="cabin-grid">
+            {['cabin-1', 'cabin-2', 'big-cabin', 'main-hall'].map((id, index) => (
+              <button className={cabinId === id ? 'cabin-card is-active' : 'cabin-card'} type="button" key={id} onClick={() => setOrder({ cabinId: id })}>
+                <img src={`https://images.unsplash.com/photo-${['1514933651103-005eec06c04b', '1559329007-40df8a9345d8', '1544148103-0773bf10d330', '1552566626-52f8b828add9'][index]}?auto=format&fit=crop&w=900&q=78`} alt="" />
+                <Check />
+                <strong>{['Кабинка №1', 'Кабинка №2', 'Большая кабинка', 'Общий зал'][index]}</strong>
+                <span>
+                  <Users /> {['до 4 гостей', 'до 4 гостей', 'до 10 гостей', 'до 20 гостей'][index]}
+                </span>
+                <span>{['Закрывается шторами', 'Отдельная дверь', 'Отдельная дверь', 'Открытое пространство'][index]}</span>
+              </button>
+            ))}
+          </section>
+        </>
+      )}
 
       <section className="booking-box">
         <h3>Детали бронирования</h3>
@@ -1569,6 +1573,10 @@ function AppContent() {
     void hasAdminSession().then(setAdmin);
     return onAdminSessionChange(setAdmin);
   }, [setAdmin]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [screen, selectedProduct?.id]);
 
   useEffect(() => {
     if (data?.theme) {

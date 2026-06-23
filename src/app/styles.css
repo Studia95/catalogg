@@ -364,19 +364,20 @@ a {
 .product-tile {
   position: relative;
   display: grid;
-  grid-template-rows: minmax(118px, 52%) minmax(126px, 48%);
-  min-height: 244px;
+  grid-template-rows: 132px 128px;
+  height: 260px;
+  min-height: 0;
   overflow: hidden;
   color: var(--text);
   text-align: left;
 }
 
 .product-tile--large {
-  min-height: 0;
+  height: 260px;
 }
 
 .product-tile--drink {
-  min-height: 0;
+  height: 260px;
 }
 
 .product-tile.is-hidden {
@@ -385,6 +386,7 @@ a {
 
 .product-tile__image {
   position: relative;
+  height: 132px;
   min-height: 0;
   overflow: hidden;
 }
@@ -409,10 +411,14 @@ a {
 }
 
 .product-tile h3 {
+  display: -webkit-box;
   margin: 0;
+  overflow: hidden;
   color: var(--product-title);
   font-size: 15px;
   line-height: 1.15;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .product-tile p {
@@ -739,7 +745,8 @@ a {
 .mode-card,
 .cabin-card {
   position: relative;
-  min-height: 230px;
+  height: 230px;
+  min-height: 0;
   overflow: hidden;
   padding: 28px;
   color: var(--text);
@@ -815,7 +822,8 @@ a {
 }
 
 .cabin-card {
-  min-height: 390px;
+  height: 390px;
+  min-height: 0;
   padding: 0 22px 24px;
 }
 
@@ -1765,8 +1773,18 @@ a {
   }
 
   .product-tile {
-    grid-template-rows: minmax(92px, 50%) minmax(118px, 50%);
-    min-height: 210px;
+    grid-template-rows: 96px 122px;
+    height: 218px;
+    min-height: 0;
+  }
+
+  .product-tile--large,
+  .product-tile--drink {
+    height: 218px;
+  }
+
+  .product-tile__image {
+    height: 96px;
   }
 
   .product-tile__body {
