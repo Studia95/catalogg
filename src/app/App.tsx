@@ -2,10 +2,8 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import {
   ArrowLeft,
   ArrowRight,
-  Beef,
   CalendarDays,
   Check,
-  ChefHat,
   CloudUpload,
   Coffee,
   Download,
@@ -13,14 +11,11 @@ import {
   Eye,
   EyeOff,
   Flame,
-  Home,
   Instagram,
   LogOut,
-  MessageCircle,
   Minus,
   Package,
   Paintbrush,
-  Pizza,
   Plus,
   Search,
   Settings,
@@ -79,17 +74,6 @@ const defaultTags: CatalogTag[] = [
 ];
 
 const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-
-const iconMap = {
-  pot: ChefHat,
-  pizza: Pizza,
-  burger: Beef,
-  flame: Flame,
-  bottle: ShoppingBag,
-  glass: Coffee,
-  tea: Coffee,
-  home: Home
-};
 
 function applyTheme(theme: ThemeSettings) {
   return {
@@ -222,7 +206,7 @@ function ProductTile({
     <article className={`product-tile product-tile--${variant}${product.is_hidden ? ' is-hidden' : ''}`} onClick={() => onOpen(product)}>
       <div className="product-tile__image">
         <img src={product.image_url} alt={product.title} loading="lazy" />
-        {product.is_popular && (
+        {product.is_popular && !isAdmin && (
           <span className="product-state product-state--popular">
             <Star />
           </span>
@@ -230,11 +214,11 @@ function ProductTile({
         {product.is_hidden && <span className="product-state product-state--hidden">Скрыто</span>}
         {isAdmin && (
           <div className="admin-card-tools" onClick={(event) => event.stopPropagation()}>
-            <button type="button" aria-label="Редактировать" onClick={() => onEdit?.(product)}>
+            <button className="admin-card-tools__edit" type="button" aria-label="Редактировать" onClick={() => onEdit?.(product)}>
               <Edit3 />
             </button>
             <button
-              className={product.is_popular ? 'is-on' : ''}
+              className={`admin-card-tools__popular${product.is_popular ? ' is-on' : ''}`}
               type="button"
               aria-label="Популярное"
               onClick={() => onToggle?.(product.id, 'is_popular')}
@@ -242,14 +226,14 @@ function ProductTile({
               <Star />
             </button>
             <button
-              className={product.is_hidden ? 'is-on' : ''}
+              className={`admin-card-tools__visibility${product.is_hidden ? ' is-on' : ''}`}
               type="button"
               aria-label={product.is_hidden ? 'Показать' : 'Скрыть'}
               onClick={() => onToggle?.(product.id, 'is_hidden')}
             >
               {product.is_hidden ? <EyeOff /> : <Eye />}
             </button>
-            <button type="button" aria-label="Удалить" onClick={() => onDelete?.(product.id)}>
+            <button className="admin-card-tools__delete" type="button" aria-label="Удалить" onClick={() => onDelete?.(product.id)}>
               <Trash2 />
             </button>
           </div>
@@ -308,21 +292,15 @@ function CartBar({ onCheckout }: { onCheckout: () => void }) {
 }
 
 function HomeScreen({
-  restaurant,
   categories,
   products,
-  onOpenCatalog,
-  onOpenDrinks,
   onOpenProduct,
   onEditProduct,
   onDeleteProduct,
   onToggleProduct
 }: {
-  restaurant: Restaurant;
   categories: Category[];
   products: Product[];
-  onOpenCatalog: (categoryId?: string) => void;
-  onOpenDrinks: () => void;
   onOpenProduct: (product: Product) => void;
   onEditProduct: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
@@ -331,63 +309,42 @@ function HomeScreen({
   const [active, setActive] = useState('chechen');
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const visibleProducts = isAdmin ? products : products.filter((product) => !product.is_hidden);
-  const featuredCategories = categories.filter((category) => ['fastfood', 'chechen', 'pizza', 'lemonades', 'fridge', 'cabins'].includes(category.id));
-  const popular = visibleProducts.filter((product) => product.is_popular).slice(0, 6);
-  const whatsapp = restaurant.whatsapp.replace(/[^\d]/g, '');
+  const foodCategories = categories.filter((category) => category.kind !== 'space');
+  const filtered = visibleProducts.filter((product) => {
+    if (active === 'hits') {
+      return product.is_hit || product.is_popular;
+    }
+
+    return active === 'all' || product.category_id === active;
+  });
 
   return (
     <main className="screen">
-      <CategoryPills
-        categories={categories.filter((category) => category.kind !== 'space').slice(0, 5)}
-        active={active}
-        onSelect={(id) => {
-          setActive(id);
-          if (id === 'fridge' || id === 'lemonades' || id === 'tea') {
-            onOpenDrinks();
-          }
-        }}
-        includeAll={false}
-      />
-
-      <section className="category-grid">
-        {featuredCategories.map((category) => {
-          const Icon = iconMap[category.icon as keyof typeof iconMap] ?? ChefHat;
-          return (
-            <button
-              className="category-card"
-              type="button"
-              key={category.id}
-              onClick={() => {
-                if (category.kind === 'drink') {
-                  onOpenDrinks();
-                  return;
-                }
-                onOpenCatalog(category.id);
-              }}
-            >
-              <img src={category.image} alt="" loading="lazy" />
-              <span>
-                <Icon />
-              </span>
-              <strong>{category.name}</strong>
-              <ArrowRight />
-            </button>
-          );
-        })}
-      </section>
-
-      <section className="section-head">
-        <h2>Популярное</h2>
-        <button type="button" onClick={() => onOpenCatalog()}>
-          Показать все <ArrowRight />
+      <div className="pills">
+        <button className={active === 'all' ? 'pill is-active' : 'pill'} type="button" onClick={() => setActive('all')}>
+          Все
         </button>
-      </section>
+        <button className={active === 'hits' ? 'pill is-active' : 'pill'} type="button" onClick={() => setActive('hits')}>
+          Хиты <Flame />
+        </button>
+        {foodCategories.map((category) => (
+          <button
+            key={category.id}
+            className={active === category.id ? 'pill is-active' : 'pill'}
+            type="button"
+            onClick={() => setActive(category.id)}
+          >
+            {category.name}
+          </button>
+        ))}
+      </div>
 
       <section className="popular-grid">
-        {popular.map((product) => (
+        {filtered.map((product) => (
           <ProductTile
             key={product.id}
             product={product}
+            variant="large"
             onOpen={onOpenProduct}
             onEdit={onEditProduct}
             onDelete={onDeleteProduct}
@@ -396,20 +353,6 @@ function HomeScreen({
         ))}
       </section>
 
-      <section className="social-section">
-        <div>
-          <h2>Наши соцсети</h2>
-          <p>Свяжитесь с нами удобным способом</p>
-        </div>
-        <div className="social-actions">
-          <a href={restaurant.instagram_url || 'https://instagram.com/'} target="_blank" rel="noreferrer">
-            <Instagram /> Instagram
-          </a>
-          <a href={`https://wa.me/${whatsapp || '79990000000'}`} target="_blank" rel="noreferrer">
-            <MessageCircle /> WhatsApp
-          </a>
-        </div>
-      </section>
     </main>
   );
 }
@@ -1560,19 +1503,19 @@ function AppContent() {
     setLocalRestaurant({ ...demoRestaurant, name: 'Мангал', subtitle: '', whatsapp: '', instagram_url: '', address: '' });
     updateTheme({
       background_type: 'color',
-      background_color: '#070809',
+      background_color: '#F5F5F5',
       background_image_url: '',
-      card_color: '#121416',
-      card_radius: 16,
-      card_shadow: '0 22px 70px rgba(0, 0, 0, 0.32)',
-      text_primary: '#f8f5ef',
-      text_secondary: '#aaa39a',
-      product_title_color: '#f8f5ef',
-      category_title_color: '#f8f5ef',
-      accent_color: '#e8a23a',
-      accent_secondary: '#ffd082',
+      card_color: '#FFFFFF',
+      card_radius: 20,
+      card_shadow: '0 8px 22px rgba(34, 34, 34, 0.08)',
+      text_primary: '#222222',
+      text_secondary: '#666666',
+      product_title_color: '#222222',
+      category_title_color: '#222222',
+      accent_color: '#F5A623',
+      accent_secondary: '#F5A623',
       button_style: 'filled',
-      button_radius: 14,
+      button_radius: 10,
       header_style: 'centered'
     });
     setScreen('settings');
@@ -1653,14 +1596,8 @@ function AppContent() {
 
           {screen === 'home' && (
             <HomeScreen
-              restaurant={catalog.restaurant}
               categories={catalog.categories}
               products={catalog.products}
-              onOpenCatalog={(categoryId = 'all') => {
-                setCatalogCategory(categoryId);
-                setScreen('catalog');
-              }}
-              onOpenDrinks={() => setScreen('drinks')}
               onOpenProduct={openProduct}
               onEditProduct={editProduct}
               onDeleteProduct={deleteProduct}
