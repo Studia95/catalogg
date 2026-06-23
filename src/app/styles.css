@@ -739,6 +739,130 @@ a {
   padding-bottom: 112px;
 }
 
+.checkout-screen .mode-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.checkout-screen .mode-card {
+  display: inline-flex;
+  height: 44px;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 12px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 17px;
+}
+
+.checkout-screen .mode-card img,
+.checkout-screen .mode-card::after,
+.checkout-screen .mode-card span {
+  display: none;
+}
+
+.checkout-screen .mode-card > svg {
+  position: static;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: currentColor;
+}
+
+.checkout-screen .mode-card strong {
+  position: static;
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.checkout-screen .mode-card.is-active {
+  background: linear-gradient(180deg, #f5b24d, #e09a2d);
+  color: #111;
+  font-weight: 700;
+}
+
+.checkout-screen .cabin-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.checkout-screen .cabin-card {
+  height: 160px;
+  min-height: 0;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  padding: 0;
+  background: #111;
+  box-shadow: none;
+}
+
+.checkout-screen .cabin-card.is-active {
+  border-color: #f5a623;
+}
+
+.checkout-screen .cabin-card img {
+  width: 100%;
+  height: 100%;
+  opacity: 1;
+  object-fit: cover;
+}
+
+.checkout-screen .cabin-card::after {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.76), rgba(0, 0, 0, 0.08) 62%, transparent);
+}
+
+.checkout-screen .cabin-card > svg {
+  top: 10px;
+  right: 10px;
+  display: none;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  border: 0;
+  background: #f5a623;
+  color: #111;
+  stroke-width: 3;
+}
+
+.checkout-screen .cabin-card.is-active > svg {
+  display: block;
+}
+
+.checkout-screen .cabin-card strong {
+  position: absolute;
+  right: 12px;
+  bottom: 14px;
+  left: 12px;
+  z-index: 1;
+  margin: 0;
+  overflow: hidden;
+  color: #fff;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.checkout-screen .cabin-card span {
+  display: none;
+}
+
 .checkout-segment {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1878,8 +2002,6 @@ a {
     font-size: 15px;
   }
 
-  .mode-grid,
-  .cabin-grid,
   .booking-fields {
     grid-template-columns: 1fr;
   }
