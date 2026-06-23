@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Beef,
-  CalendarDays,
   Check,
   ChefHat,
   CloudUpload,
@@ -616,91 +615,78 @@ function ProductScreen({ product, products }: { product: Product; products: Prod
   );
 }
 
-function CheckoutScreen({ products, restaurant }: { products: Product[]; restaurant: Restaurant }) {
-  const { mode, cabinId, date, time, guests, setOrder } = useOrderStore();
-  const items = useCartStore((state) => state.items);
-  const total = selectCartTotal(items);
-  const orderText = encodeURIComponent(
-    `Здравствуйте\nЗаказ:\n${items.map((item) => `- ${item.product.title} x${item.quantity}`).join('\n')}\nИтого: ${formatPrice(total)}\nФормат: ${mode === 'hall' ? 'В зале' : 'На вынос'}\nДата: ${date}\nВремя: ${time}\nГости: ${guests}`
-  );
-  const drinks = products.filter((product) => product.drink_type).slice(0, 4);
+function CheckoutScreen() {
+  const { mode, cabinId, setOrder } = useOrderStore();
+  const cabins = [
+    {
+      id: 'cabin-1',
+      title: 'Кабинка 1',
+      icon: Home,
+      image: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=900&q=78'
+    },
+    {
+      id: 'cabin-2',
+      title: 'Кабинка 2',
+      icon: Home,
+      image: 'https://images.unsplash.com/photo-1559329007-40df8a9345d8?auto=format&fit=crop&w=900&q=78'
+    },
+    {
+      id: 'cabin-3',
+      title: 'Кабинка 3',
+      icon: Home,
+      image: 'https://images.unsplash.com/photo-1544148103-0773bf10d330?auto=format&fit=crop&w=900&q=78'
+    },
+    {
+      id: 'main-hall',
+      title: 'Общий зал',
+      icon: Users,
+      image: 'https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=900&q=78'
+    }
+  ];
 
   return (
     <main className="screen checkout-screen">
-      <section className="mode-grid">
-        <button className={mode === 'hall' ? 'mode-card is-active' : 'mode-card'} type="button" onClick={() => setOrder({ mode: 'hall' })}>
-          <img src="https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=900&q=78" alt="" />
-          <Check />
-          <strong>В зале</strong>
-          <span>Забронировать место в зале</span>
+      <section className="checkout-segment" aria-label="Тип заказа">
+        <button className={mode === 'hall' ? 'checkout-segment__button is-active' : 'checkout-segment__button'} type="button" onClick={() => setOrder({ mode: 'hall', cabinId: cabinId || 'cabin-1' })}>
+          <ShoppingCart />
+          В зале
         </button>
-        <button className={mode === 'takeaway' ? 'mode-card is-active' : 'mode-card'} type="button" onClick={() => setOrder({ mode: 'takeaway' })}>
-          <img src="https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=900&q=78" alt="" />
-          <Package />
-          <strong>На вынос</strong>
-          <span>Забрать заказ с собой</span>
+        <button className={mode === 'takeaway' ? 'checkout-segment__button is-active' : 'checkout-segment__button'} type="button" onClick={() => setOrder({ mode: 'takeaway', cabinId: '' })}>
+          <ShoppingBag />
+          На вынос
         </button>
       </section>
 
       {mode === 'hall' && (
         <>
-          <h2>Кабинки</h2>
-          <section className="cabin-grid">
-            {['cabin-1', 'cabin-2', 'big-cabin', 'main-hall'].map((id, index) => (
-              <button className={cabinId === id ? 'cabin-card is-active' : 'cabin-card'} type="button" key={id} onClick={() => setOrder({ cabinId: id })}>
-                <img src={`https://images.unsplash.com/photo-${['1514933651103-005eec06c04b', '1559329007-40df8a9345d8', '1544148103-0773bf10d330', '1552566626-52f8b828add9'][index]}?auto=format&fit=crop&w=900&q=78`} alt="" />
-                <Check />
-                <strong>{['Кабинка №1', 'Кабинка №2', 'Большая кабинка', 'Общий зал'][index]}</strong>
-                <span>
-                  <Users /> {['до 4 гостей', 'до 4 гостей', 'до 10 гостей', 'до 20 гостей'][index]}
+          <section className="checkout-section-head">
+            <h2>Кабинки</h2>
+            <p>Выберите кабинку в зале</p>
+          </section>
+          <section className="checkout-cabin-grid">
+            {cabins.map(({ id, title, icon: Icon, image }) => (
+              <button className={cabinId === id ? 'checkout-cabin is-active' : 'checkout-cabin'} type="button" key={id} onClick={() => setOrder({ cabinId: id })}>
+                <img className="checkout-cabin__image" src={image} alt="" />
+                <span className="checkout-cabin__overlay" />
+                {cabinId === id && (
+                  <span className="checkout-cabin__check">
+                    <Check />
+                  </span>
+                )}
+                <span className="checkout-cabin__label">
+                  <Icon />
+                  <strong>{title}</strong>
                 </span>
-                <span>{['Закрывается шторами', 'Отдельная дверь', 'Отдельная дверь', 'Открытое пространство'][index]}</span>
               </button>
             ))}
           </section>
         </>
       )}
 
-      <section className="booking-box">
-        <h3>Детали бронирования</h3>
-        <div className="booking-fields">
-          <label>
-            Дата
-            <span>
-              <input value={date} onChange={(event) => setOrder({ date: event.target.value })} />
-              <CalendarDays />
-            </span>
-          </label>
-          <label>
-            Время
-            <span>
-              <input value={time} onChange={(event) => setOrder({ time: event.target.value })} />
-            </span>
-          </label>
-          <label>
-            Гостей
-            <span>
-              <input type="number" min={1} value={guests} onChange={(event) => setOrder({ guests: Number(event.target.value) })} />
-              <Users />
-            </span>
-          </label>
-        </div>
-        <a className="primary-wide" href={`https://wa.me/${restaurant.whatsapp}?text=${orderText}`} target="_blank" rel="noreferrer">
-          Забронировать
-        </a>
-      </section>
-
-      <a className="instagram-link" href={restaurant.instagram_url} target="_blank" rel="noreferrer">
-        <Instagram /> Instagram ресторана
-      </a>
-
-      {!hasDrinkInCart(items) && (
-        <section className="forgot-inline">
-          <Coffee />
-          <div>
-            <strong>Можно сделать предзаказ напитков</strong>
-            <span>{drinks.map((drink) => drink.title).join(', ')}</span>
-          </div>
+      {mode === 'takeaway' && (
+        <section className="takeaway-note">
+          <Package />
+          <strong>Вы заберёте заказ самостоятельно</strong>
         </section>
       )}
     </main>
@@ -1847,7 +1833,7 @@ function AppContent() {
             />
           )}
           {screen === 'product' && selectedProduct && <ProductScreen product={selectedProduct} products={catalog.products} />}
-          {screen === 'checkout' && <CheckoutScreen products={catalog.products} restaurant={catalog.restaurant} />}
+          {screen === 'checkout' && <CheckoutScreen />}
           <CartBar onCheckout={goCheckout} />
         </>
       )}
