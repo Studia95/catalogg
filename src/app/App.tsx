@@ -6,7 +6,9 @@ import {
   CalendarDays,
   Check,
   ChefHat,
+  CloudUpload,
   Coffee,
+  Download,
   Edit3,
   Flame,
   Home,
@@ -14,6 +16,7 @@ import {
   LogOut,
   Minus,
   Package,
+  Paintbrush,
   Pizza,
   Plus,
   Search,
@@ -21,13 +24,16 @@ import {
   ShoppingBag,
   ShoppingCart,
   Star,
+  Store,
+  Tags,
   Trash2,
   User,
-  Users
+  Users,
+  GripVertical
 } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { categories as demoCategories, products as demoProducts, restaurant as demoRestaurant } from '../data/catalog';
-import type { Category, Product, Restaurant, ThemeSettings } from '../entities/models';
+import type { CatalogTag, Category, Product, Restaurant, ThemeSettings } from '../entities/models';
 import { DishEditorPage } from '../features/dish-editor/DishEditorPage';
 import {
   hasDrinkInCart,
@@ -45,8 +51,25 @@ const queryClient = new QueryClient();
 
 const formatPrice = (value: number) => `${new Intl.NumberFormat('ru-RU').format(value)} ₽`;
 
-type Screen = 'home' | 'catalog' | 'drinks' | 'product' | 'checkout';
+type SettingsScreen = 'settings' | 'settings-profile' | 'settings-categories' | 'settings-design' | 'settings-backup' | 'settings-delete';
+type Screen = 'home' | 'catalog' | 'drinks' | 'product' | 'checkout' | SettingsScreen;
 type ProductFlag = 'is_popular' | 'is_hit' | 'is_new';
+type CatalogDesignExport = {
+  theme?: 'light' | 'dark';
+  primaryColor?: string;
+  accentColor?: string;
+  cardStyle?: 'light' | 'dark';
+  radius?: number;
+};
+
+const defaultTags: CatalogTag[] = [
+  { id: 'hit', name: 'Хит', icon: '🔥', color: '#ef4444' },
+  { id: 'popular', name: 'Популярное', icon: '⭐', color: '#f59e0b' },
+  { id: 'new', name: 'Новинка', icon: 'NEW', color: '#38bdf8' },
+  { id: 'vegetarian', name: 'Вегетарианское', icon: '🌿', color: '#22c55e' }
+];
+
+const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
 const iconMap = {
   pot: ChefHat,
@@ -708,10 +731,9 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: ()
   );
 }
 
-function AdminPanel() {
+function AdminPanel({ onAdd, onSettings }: { onAdd: () => void; onSettings: () => void }) {
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const logout = useAuthStore((state) => state.logout);
-  const setEditor = useAdminStore((state) => state.setEditor);
 
   if (!isAdmin) {
     return null;
@@ -719,22 +741,469 @@ function AdminPanel() {
 
   return (
     <nav className="admin-panel">
-      <button type="button" onClick={() => setEditor('dish')}>
-        <Plus /> Добавить блюдо
+      <button type="button" onClick={onAdd}>
+        <Plus /> Добавить
       </button>
-      <button type="button" onClick={() => setEditor('categories')}>
-        <ChefHat /> Категории
-      </button>
-      <button type="button" onClick={() => setEditor('design')}>
-        <Star /> Дизайн
-      </button>
-      <button type="button" onClick={() => setEditor('settings')}>
+      <button type="button" onClick={onSettings}>
         <Settings /> Настройки
       </button>
       <button type="button" onClick={logout} aria-label="Выйти">
-        <LogOut />
+        <LogOut /> Выход
       </button>
     </nav>
+  );
+}
+
+function SettingsHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <header className="settings-header">
+      <button className="icon-button" type="button" onClick={onBack} aria-label="Назад">
+        <ArrowLeft />
+      </button>
+      <h1>{title}</h1>
+      <span />
+    </header>
+  );
+}
+
+function SettingsHome({ onOpen }: { onOpen: (screen: SettingsScreen) => void }) {
+  const items = [
+    ['settings-profile', Store, 'Профиль ресторана', 'Название + контакты'],
+    ['settings-categories', Tags, 'Параметры и категории', 'Категории + метки'],
+    ['settings-design', Paintbrush, 'Дизайн приложения', 'Цвета, тема'],
+    ['settings-backup', CloudUpload, 'Импорт и экспорт', 'Бэкапы'],
+    ['settings-delete', Trash2, 'Удалить каталог', 'Красная зона']
+  ] as const;
+
+  return (
+    <main className="settings-screen">
+      {items.map(([target, Icon, title, subtitle]) => (
+        <button
+          className={target === 'settings-delete' ? 'settings-card settings-card--danger' : 'settings-card'}
+          type="button"
+          key={target}
+          onClick={() => onOpen(target)}
+        >
+          <Icon />
+          <span>
+            <strong>{title}</strong>
+            <small>{subtitle}</small>
+          </span>
+          <ArrowRight />
+        </button>
+      ))}
+    </main>
+  );
+}
+
+function ProfileSettings({
+  restaurant,
+  onSave
+}: {
+  restaurant: Restaurant;
+  onSave: (restaurant: Restaurant) => void;
+}) {
+  const [draft, setDraft] = useState(restaurant);
+  const [error, setError] = useState('');
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!draft.name.trim()) {
+      setError('Название ресторана обязательно.');
+      return;
+    }
+    if (draft.whatsapp && !/^\+?\d{10,15}$/.test(draft.whatsapp)) {
+      setError('WhatsApp должен быть в формате +79990000000.');
+      return;
+    }
+    if (draft.instagram_url) {
+      try {
+        const url = new URL(draft.instagram_url);
+        if (!['http:', 'https:'].includes(url.protocol)) {
+          throw new Error('invalid');
+        }
+      } catch {
+        setError('Instagram должен быть корректной ссылкой.');
+        return;
+      }
+    }
+    onSave({ ...draft, name: draft.name.trim() });
+    setError('Сохранено');
+  };
+
+  return (
+    <main className="settings-screen">
+      <form className="settings-form-card" onSubmit={submit}>
+        <label>
+          Название ресторана
+          <input value={draft.name} required onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+        </label>
+        <label>
+          Описание
+          <textarea
+            maxLength={200}
+            value={draft.subtitle}
+            onChange={(event) => setDraft({ ...draft, subtitle: event.target.value })}
+          />
+          <small>{draft.subtitle.length}/200</small>
+        </label>
+        <label>
+          WhatsApp
+          <input
+            type="tel"
+            value={draft.whatsapp}
+            placeholder="+79990000000"
+            onChange={(event) => setDraft({ ...draft, whatsapp: event.target.value.replace(/[^\d+]/g, '') })}
+          />
+        </label>
+        <label>
+          Instagram
+          <input
+            type="url"
+            value={draft.instagram_url}
+            placeholder="https://instagram.com/mangal.rest"
+            onChange={(event) => setDraft({ ...draft, instagram_url: event.target.value })}
+          />
+        </label>
+        <label>
+          Адрес
+          <input value={draft.address} onChange={(event) => setDraft({ ...draft, address: event.target.value })} />
+        </label>
+        {error && <p className={error === 'Сохранено' ? 'settings-status' : 'settings-error'}>{error}</p>}
+        <button className="primary-wide" type="submit">
+          Сохранить изменения
+        </button>
+      </form>
+    </main>
+  );
+}
+
+function InlineEditor({
+  placeholder,
+  onAdd
+}: {
+  placeholder: string;
+  onAdd: (name: string) => void;
+}) {
+  const [value, setValue] = useState('');
+  return (
+    <div className="inline-editor">
+      <input value={value} placeholder={placeholder} onChange={(event) => setValue(event.target.value)} />
+      <button
+        type="button"
+        onClick={() => {
+          if (!value.trim()) return;
+          onAdd(value.trim());
+          setValue('');
+        }}
+        aria-label="Добавить"
+      >
+        <Plus />
+      </button>
+    </div>
+  );
+}
+
+function CategoriesSettings({
+  categories,
+  tags,
+  onChangeCategories,
+  onChangeTags
+}: {
+  categories: Category[];
+  tags: CatalogTag[];
+  onChangeCategories: (categories: Category[]) => void;
+  onChangeTags: (tags: CatalogTag[]) => void;
+}) {
+  const move = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= categories.length) return;
+    const next = [...categories];
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    onChangeCategories(next);
+  };
+
+  return (
+    <main className="settings-screen">
+      <section className="settings-form-card">
+        <div className="settings-section-head">
+          <h2>Категории</h2>
+        </div>
+        <InlineEditor
+          placeholder="Новая категория"
+          onAdd={(name) =>
+            onChangeCategories([
+              ...categories,
+              {
+                id: makeId('category'),
+                name,
+                icon: 'flame',
+                kind: 'food',
+                image: demoCategories[0]?.image ?? ''
+              }
+            ])
+          }
+        />
+        <div className="settings-list">
+          {categories.map((category, index) => (
+            <article className="settings-list-item" key={category.id}>
+              <GripVertical />
+              <input
+                value={category.name}
+                onChange={(event) =>
+                  onChangeCategories(categories.map((item) => (item.id === category.id ? { ...item, name: event.target.value } : item)))
+                }
+              />
+              <button type="button" onClick={() => move(index, -1)} aria-label="Выше">
+                ↑
+              </button>
+              <button type="button" onClick={() => move(index, 1)} aria-label="Ниже">
+                ↓
+              </button>
+              <button className="danger-icon" type="button" onClick={() => onChangeCategories(categories.filter((item) => item.id !== category.id))} aria-label="Удалить">
+                <Trash2 />
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="settings-form-card">
+        <div className="settings-section-head">
+          <h2>Метки (теги)</h2>
+        </div>
+        <InlineEditor
+          placeholder="Новая метка"
+          onAdd={(name) => onChangeTags([...tags, { id: makeId('tag'), name, icon: '⭐', color: '#f59e0b' }])}
+        />
+        <div className="settings-list">
+          {tags.map((tag) => (
+            <article className="settings-list-item settings-list-item--tag" key={tag.id}>
+              <input
+                value={tag.icon}
+                aria-label="Иконка"
+                onChange={(event) => onChangeTags(tags.map((item) => (item.id === tag.id ? { ...item, icon: event.target.value } : item)))}
+              />
+              <input
+                value={tag.name}
+                onChange={(event) => onChangeTags(tags.map((item) => (item.id === tag.id ? { ...item, name: event.target.value } : item)))}
+              />
+              <input
+                type="color"
+                value={tag.color}
+                aria-label="Цвет"
+                onChange={(event) => onChangeTags(tags.map((item) => (item.id === tag.id ? { ...item, color: event.target.value } : item)))}
+              />
+              <button className="danger-icon" type="button" onClick={() => onChangeTags(tags.filter((item) => item.id !== tag.id))} aria-label="Удалить">
+                <Trash2 />
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function DesignSettings({ theme, onChange }: { theme: ThemeSettings; onChange: (patch: Partial<ThemeSettings>) => void }) {
+  const primaryColors = ['#e8a23a', '#3b82f6', '#70ad47', '#ef4444', '#a855f7'];
+  const accentColors = ['#ffd082', '#b7791f', '#f97316', '#ec4899'];
+
+  return (
+    <main className="settings-screen">
+      <section className="settings-form-card">
+        <h2>Тема</h2>
+        <div className="choice-grid">
+          <button
+            className={theme.background_color === '#f7f3ec' ? 'choice-card is-active' : 'choice-card'}
+            type="button"
+            onClick={() =>
+              onChange({
+                background_color: '#f7f3ec',
+                card_color: '#ffffff',
+                text_primary: '#181510',
+                text_secondary: '#766d62'
+              })
+            }
+          >
+            Светлая
+          </button>
+          <button
+            className={theme.background_color !== '#f7f3ec' ? 'choice-card is-active' : 'choice-card'}
+            type="button"
+            onClick={() =>
+              onChange({
+                background_color: '#070809',
+                card_color: '#121416',
+                text_primary: '#f8f5ef',
+                text_secondary: '#aaa39a'
+              })
+            }
+          >
+            Тёмная
+          </button>
+        </div>
+
+        <h2>Основной цвет</h2>
+        <div className="swatches">
+          {primaryColors.map((color) => (
+            <button
+              className={theme.accent_color === color ? 'swatch is-active' : 'swatch'}
+              style={{ background: color }}
+              type="button"
+              key={color}
+              onClick={() => onChange({ accent_color: color })}
+              aria-label={color}
+            />
+          ))}
+        </div>
+
+        <h2>Цвет акцента</h2>
+        <div className="swatches">
+          {accentColors.map((color) => (
+            <button
+              className={theme.accent_secondary === color ? 'swatch is-active' : 'swatch'}
+              style={{ background: color }}
+              type="button"
+              key={color}
+              onClick={() => onChange({ accent_secondary: color })}
+              aria-label={color}
+            />
+          ))}
+        </div>
+
+        <h2>Фон карточек</h2>
+        <div className="choice-grid">
+          <button className={theme.card_color === '#ffffff' ? 'choice-card is-active' : 'choice-card'} type="button" onClick={() => onChange({ card_color: '#ffffff' })}>
+            Светлый
+          </button>
+          <button className={theme.card_color !== '#ffffff' ? 'choice-card is-active' : 'choice-card'} type="button" onClick={() => onChange({ card_color: '#121416' })}>
+            Тёмный
+          </button>
+        </div>
+
+        <label className="range-field">
+          <span>Скругление <b>{theme.card_radius}px</b></span>
+          <input type="range" min="0" max="24" value={Math.min(theme.card_radius, 24)} onChange={(event) => onChange({ card_radius: Number(event.target.value), button_radius: Math.max(8, Number(event.target.value) - 2) })} />
+        </label>
+
+        <button className="primary-wide" type="button">
+          Сохранить изменения
+        </button>
+      </section>
+    </main>
+  );
+}
+
+function BackupSettings({
+  restaurant,
+  categories,
+  tags,
+  products,
+  theme,
+  onImport
+}: {
+  restaurant: Restaurant;
+  categories: Category[];
+  tags: CatalogTag[];
+  products: Product[];
+  theme: ThemeSettings;
+  onImport: (payload: { restaurant?: Restaurant; categories?: Category[]; tags?: CatalogTag[]; products?: Product[]; design?: CatalogDesignExport; theme?: ThemeSettings }) => void;
+}) {
+  const exportCatalog = () => {
+    const blob = new Blob(
+      [
+        JSON.stringify(
+          {
+            restaurant,
+            categories,
+            tags,
+            products,
+            design: {
+              theme: theme.background_color === '#f7f3ec' ? 'light' : 'dark',
+              primaryColor: theme.accent_color,
+              accentColor: theme.accent_secondary,
+              cardStyle: theme.card_color === '#ffffff' ? 'light' : 'dark',
+              radius: theme.card_radius
+            }
+          },
+          null,
+          2
+        )
+      ],
+      { type: 'application/json' }
+    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'mangal-catalog.json';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <main className="settings-screen">
+      <section className="settings-form-card backup-card">
+        <h2>Экспорт каталога</h2>
+        <p>Сохраните резервную копию каталога в файл.</p>
+        <button className="primary-wide" type="button" onClick={exportCatalog}>
+          <Download /> Экспортировать каталог
+        </button>
+      </section>
+      <section className="settings-form-card backup-card">
+        <h2>Импорт каталога</h2>
+        <p>Загрузите JSON файл. Текущие данные будут заменены.</p>
+        <label className="ghost-wide import-file">
+          <CloudUpload /> Выбрать файл
+          <input
+            type="file"
+            accept="application/json"
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              onImport(JSON.parse(await file.text()));
+              event.target.value = '';
+            }}
+          />
+        </label>
+      </section>
+      <section className="settings-info">
+        <strong>Информация</strong>
+        <p>Формат: JSON. Рекомендуем делать бэкап перед импортом.</p>
+      </section>
+    </main>
+  );
+}
+
+function DeleteSettings({ onCancel, onDelete }: { onCancel: () => void; onDelete: () => void }) {
+  const [armed, setArmed] = useState(false);
+  return (
+    <main className="delete-screen">
+      <div className="delete-icon">
+        <Trash2 />
+      </div>
+      <h2>Удалить весь каталог?</h2>
+      <p>Будут удалены блюда, категории, метки и настройки. Это действие нельзя отменить.</p>
+      {armed && <strong>Нажмите ещё раз, чтобы подтвердить удаление.</strong>}
+      <div className="delete-actions">
+        <button
+          className="danger-wide"
+          type="button"
+          onClick={() => {
+            if (!armed) {
+              setArmed(true);
+              return;
+            }
+            onDelete();
+          }}
+        >
+          Удалить каталог
+        </button>
+        <button className="ghost-wide" type="button" onClick={onCancel}>
+          Отмена
+        </button>
+      </div>
+    </main>
   );
 }
 
@@ -933,6 +1402,7 @@ function AppContent() {
   const [showReminder, setShowReminder] = useState(false);
   const [localProducts, setLocalProducts] = useState<Product[]>(demoProducts);
   const [localCategories, setLocalCategories] = useState<Category[]>(demoCategories);
+  const [localTags, setLocalTags] = useState<CatalogTag[]>(defaultTags);
   const [localRestaurant, setLocalRestaurant] = useState<Restaurant>(demoRestaurant);
   const items = useCartStore((state) => state.items);
   const cartCount = selectCartCount(items);
@@ -964,6 +1434,15 @@ function AppContent() {
     if (screen === 'drinks') return 'Напитки';
     if (screen === 'checkout') return 'Оформление заказа';
     return undefined;
+  }, [screen]);
+
+  const settingsTitle = useMemo(() => {
+    if (screen === 'settings-profile') return 'Профиль ресторана';
+    if (screen === 'settings-categories') return 'Параметры и категории';
+    if (screen === 'settings-design') return 'Дизайн приложения';
+    if (screen === 'settings-backup') return 'Импорт и экспорт';
+    if (screen === 'settings-delete') return 'Удаление каталога';
+    return 'Настройки';
   }, [screen]);
 
   const openProduct = (product: Product) => {
@@ -1012,57 +1491,140 @@ function AppContent() {
     setScreen('checkout');
   };
 
+  const resetCatalog = () => {
+    setLocalProducts([]);
+    setLocalCategories([]);
+    setLocalTags([]);
+    setLocalRestaurant({ ...demoRestaurant, name: 'Мангал', subtitle: '', whatsapp: '', instagram_url: '', address: '' });
+    updateTheme({
+      background_type: 'color',
+      background_color: '#070809',
+      background_image_url: '',
+      card_color: '#121416',
+      card_radius: 16,
+      card_shadow: '0 22px 70px rgba(0, 0, 0, 0.32)',
+      text_primary: '#f8f5ef',
+      text_secondary: '#aaa39a',
+      accent_color: '#e8a23a',
+      accent_secondary: '#ffd082',
+      button_style: 'filled',
+      button_radius: 14,
+      header_style: 'centered'
+    });
+    setScreen('settings');
+  };
+
+  const renderSettings = () => (
+    <>
+      <SettingsHeader
+        title={settingsTitle}
+        onBack={() => {
+          if (screen === 'settings') {
+            setScreen('home');
+            return;
+          }
+          setScreen('settings');
+        }}
+      />
+      {screen === 'settings' && <SettingsHome onOpen={setScreen} />}
+      {screen === 'settings-profile' && (
+        <ProfileSettings restaurant={catalog.restaurant} onSave={(restaurant) => setLocalRestaurant(restaurant)} />
+      )}
+      {screen === 'settings-categories' && (
+        <CategoriesSettings
+          categories={catalog.categories}
+          tags={localTags}
+          onChangeCategories={setLocalCategories}
+          onChangeTags={setLocalTags}
+        />
+      )}
+      {screen === 'settings-design' && <DesignSettings theme={themeStore} onChange={updateTheme} />}
+      {screen === 'settings-backup' && (
+        <BackupSettings
+          restaurant={catalog.restaurant}
+          categories={catalog.categories}
+          tags={localTags}
+          products={catalog.products}
+          theme={themeStore}
+          onImport={(payload) => {
+            if (payload.products) setLocalProducts(payload.products);
+            if (payload.categories) setLocalCategories(payload.categories);
+            if (payload.tags) setLocalTags(payload.tags);
+            if (payload.restaurant) setLocalRestaurant(payload.restaurant);
+            if (payload.theme) updateTheme(payload.theme);
+            if (payload.design) {
+              updateTheme({
+                background_color: payload.design.theme === 'light' ? '#f7f3ec' : '#070809',
+                card_color: payload.design.cardStyle === 'light' ? '#ffffff' : '#121416',
+                accent_color: payload.design.primaryColor ?? themeStore.accent_color,
+                accent_secondary: payload.design.accentColor ?? themeStore.accent_secondary,
+                card_radius: payload.design.radius ?? themeStore.card_radius
+              });
+            }
+          }}
+        />
+      )}
+      {screen === 'settings-delete' && <DeleteSettings onCancel={() => setScreen('settings')} onDelete={resetCatalog} />}
+    </>
+  );
+
   return (
     <div className="app-shell" style={applyTheme(themeStore)}>
-      <TopBar
-        title={screen === 'product' ? undefined : title}
-        canBack={screen !== 'home'}
-        onBack={() => setScreen('home')}
-        onSearch={screen === 'home' ? () => setScreen('catalog') : undefined}
-        onCart={goCheckout}
-        onAdmin={() => setShowLogin(true)}
-      />
+      {screen.startsWith('settings') ? (
+        renderSettings()
+      ) : (
+        <>
+          <TopBar
+            title={screen === 'product' ? undefined : title}
+            canBack={screen !== 'home'}
+            onBack={() => setScreen('home')}
+            onSearch={screen === 'home' ? () => setScreen('catalog') : undefined}
+            onCart={goCheckout}
+            onAdmin={() => setShowLogin(true)}
+          />
 
-      {screen === 'home' && (
-        <HomeScreen
-          categories={catalog.categories}
-          products={catalog.products}
-          onOpenCatalog={(categoryId = 'all') => {
-            setCatalogCategory(categoryId);
-            setScreen('catalog');
-          }}
-          onOpenDrinks={() => setScreen('drinks')}
-          onOpenProduct={openProduct}
-          onEditProduct={editProduct}
-          onDeleteProduct={deleteProduct}
-          onToggleProduct={toggleProduct}
-        />
+          {screen === 'home' && (
+            <HomeScreen
+              categories={catalog.categories}
+              products={catalog.products}
+              onOpenCatalog={(categoryId = 'all') => {
+                setCatalogCategory(categoryId);
+                setScreen('catalog');
+              }}
+              onOpenDrinks={() => setScreen('drinks')}
+              onOpenProduct={openProduct}
+              onEditProduct={editProduct}
+              onDeleteProduct={deleteProduct}
+              onToggleProduct={toggleProduct}
+            />
+          )}
+          {screen === 'catalog' && (
+            <CatalogScreen
+              categories={catalog.categories}
+              products={catalog.products}
+              initialCategory={catalogCategory}
+              onOpenProduct={openProduct}
+              onEditProduct={editProduct}
+              onDeleteProduct={deleteProduct}
+              onToggleProduct={toggleProduct}
+            />
+          )}
+          {screen === 'drinks' && (
+            <DrinksScreen
+              products={catalog.products}
+              onOpenProduct={openProduct}
+              onEditProduct={editProduct}
+              onDeleteProduct={deleteProduct}
+              onToggleProduct={toggleProduct}
+            />
+          )}
+          {screen === 'product' && selectedProduct && <ProductScreen product={selectedProduct} products={catalog.products} />}
+          {screen === 'checkout' && <CheckoutScreen products={catalog.products} restaurant={catalog.restaurant} />}
+          <CartBar onCheckout={goCheckout} />
+        </>
       )}
-      {screen === 'catalog' && (
-        <CatalogScreen
-          categories={catalog.categories}
-          products={catalog.products}
-          initialCategory={catalogCategory}
-          onOpenProduct={openProduct}
-          onEditProduct={editProduct}
-          onDeleteProduct={deleteProduct}
-          onToggleProduct={toggleProduct}
-        />
-      )}
-      {screen === 'drinks' && (
-        <DrinksScreen
-          products={catalog.products}
-          onOpenProduct={openProduct}
-          onEditProduct={editProduct}
-          onDeleteProduct={deleteProduct}
-          onToggleProduct={toggleProduct}
-        />
-      )}
-      {screen === 'product' && selectedProduct && <ProductScreen product={selectedProduct} products={catalog.products} />}
-      {screen === 'checkout' && <CheckoutScreen products={catalog.products} restaurant={catalog.restaurant} />}
 
-      <CartBar onCheckout={goCheckout} />
-      <AdminPanel />
+      <AdminPanel onAdd={() => setAdminEditor('dish')} onSettings={() => setScreen('settings')} />
       <DesignEditor
         editingProduct={editingProduct}
         categories={catalog.categories}
@@ -1098,14 +1660,15 @@ function AppContent() {
             setScreen('checkout');
           }
           if (target === 'profile') {
-            setAdminEditor('settings');
+            setScreen('settings-profile');
           }
+          setAdminEditor(null);
         }}
       />
       {showLogin && (
         <LoginModal
           onClose={() => setShowLogin(false)}
-          onSuccess={() => setAdminEditor('settings')}
+          onSuccess={() => setScreen('settings')}
         />
       )}
       {showReminder && (

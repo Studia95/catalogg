@@ -40,6 +40,13 @@ export type Category = {
   kind: 'food' | 'drink' | 'space';
 };
 
+export type CatalogTag = {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+};
+
 export type Product = {
   id: string;
   title: string;
