@@ -1,13 +1,5 @@
 import { Plus, X } from 'lucide-react';
-
-function fileToDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
+import { imageFileToDataUrl } from '../../shared/images';
 
 function moveItem(items: string[], from: number, to: number) {
   const next = [...items];
@@ -30,7 +22,7 @@ export function PhotoUploader({
 
     const remaining = Math.max(0, 3 - images.length);
     const selected = Array.from(files).slice(0, remaining);
-    const urls = await Promise.all(selected.map(fileToDataUrl));
+    const urls = await Promise.all(selected.map((file) => imageFileToDataUrl(file)));
     onChange([...images, ...urls].slice(0, 3));
   };
 

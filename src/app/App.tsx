@@ -63,6 +63,7 @@ import {
   onAdminSessionChange,
   updateProductInSupabase
 } from '../shared/supabase';
+import { imageFileToDataUrl } from '../shared/images';
 
 const queryClient = new QueryClient();
 
@@ -104,14 +105,6 @@ const defaultTags: CatalogTag[] = [
 ];
 
 const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-
-const fileToDataUrl = (file: File) =>
-  new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 
 const iconMap = {
   pot: ChefHat,
@@ -1171,7 +1164,7 @@ function ProfileSettings({
       setError('Логотип должен быть в PNG.');
       return;
     }
-    const value = await fileToDataUrl(file);
+    const value = await imageFileToDataUrl(file, 'logo');
     setDraft((current) => ({ ...current, logo_url: value }));
     setError('');
   };
@@ -1345,7 +1338,7 @@ function CategoriesSettings({
                   onChange={async (event) => {
                     const file = event.target.files?.[0];
                     if (!file) return;
-                    const image = await fileToDataUrl(file);
+                    const image = await imageFileToDataUrl(file);
                     onChangeCategories(categories.map((item) => (item.id === category.id ? { ...item, image } : item)));
                     event.target.value = '';
                   }}
@@ -1409,7 +1402,7 @@ function CategoriesSettings({
                   onChange={async (event) => {
                     const file = event.target.files?.[0];
                     if (!file) return;
-                    const image_url = await fileToDataUrl(file);
+                    const image_url = await imageFileToDataUrl(file);
                     onChangeCabins(cabins.map((item) => (item.id === cabin.id ? { ...item, image_url } : item)));
                     event.target.value = '';
                   }}
@@ -1521,7 +1514,7 @@ function DesignSettings({ theme, onChange }: { theme: ThemeSettings; onChange: (
   const titleColors = ['#f8f5ef', '#ffffff', '#111827', '#181510', '#e8a23a', '#f97316'];
   const updateBackgroundImage = async (file?: File) => {
     if (!file) return;
-    const value = await fileToDataUrl(file);
+    const value = await imageFileToDataUrl(file);
     onChange({ background_image_url: value, background_type: 'image' });
   };
 
