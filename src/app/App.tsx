@@ -35,6 +35,7 @@ import {
   GripVertical,
   X
 } from 'lucide-react';
+import JSZip from 'jszip';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { cabins as demoCabins, categories as demoCategories, products as demoProducts, restaurant as demoRestaurant } from '../data/catalog';
 import type { Cabin, CatalogTag, Category, Product, Restaurant, ThemeSettings } from '../entities/models';
@@ -102,6 +103,20 @@ type CatalogDesignExport = {
   categoryTitleColor?: string;
   radius?: number;
 };
+type CatalogBackupPayload = {
+  restaurant?: Restaurant;
+  categories?: Category[];
+  cabins?: Cabin[];
+  tags?: CatalogTag[];
+  products?: Product[];
+  design?: CatalogDesignExport;
+  theme?: ThemeSettings;
+};
+type BackupImageField = {
+  owner: 'restaurant' | 'category' | 'cabin' | 'product' | 'theme';
+  id: string;
+  field: 'logo_url' | 'banner_url' | 'image' | 'image_url' | 'background_image_url';
+};
 
 const defaultTags: CatalogTag[] = [
   { id: 'hit', name: 'Хит', icon: '🔥', color: '#ef4444' },
@@ -114,6 +129,174 @@ const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.
 
 const getProductCategoryIds = (product: Product) =>
   product.category_ids?.length ? product.category_ids : [product.category_id];
+
+const createCatalogBackupPayload = ({
+  restaurant,
+  categories,
+  cabins,
+  tags,
+  products,
+  theme
+}: Required<Pick<CatalogBackupPayload, 'restaurant' | 'categories' | 'cabins' | 'tags' | 'products' | 'theme'>>): CatalogBackupPayload => ({
+  restaurant,
+  categories,
+  cabins,
+  tags,
+  products,
+  theme,
+  design: {
+    theme: theme.background_color === '#f7f3ec' ? 'light' : 'dark',
+    backgroundColor: theme.background_color,
+    primaryColor: theme.accent_color,
+    accentColor: theme.accent_secondary,
+    cardColor: theme.card_color,
+    productCardColor: theme.product_card_color,
+    productCardTextColor: theme.product_card_text_color,
+    settingsCardColor: theme.settings_card_color,
+    settingsCardTextColor: theme.settings_card_text_color,
+    cartPanelColor: theme.cart_panel_color,
+    cartPanelTextColor: theme.cart_panel_text_color,
+    cardStyle: theme.card_color === '#ffffff' ? 'light' : 'dark',
+    textColor: theme.text_primary,
+    mutedTextColor: theme.text_secondary,
+    productTitleColor: theme.product_title_color,
+    categoryTitleColor: theme.category_title_color,
+    radius: theme.card_radius
+  }
+});
+
+const getDataUrlParts = (value: string) => {
+  const match = value.match(/^data:([^;,]+)(?:;[^,]*)?;base64,(.+)$/);
+  if (!match) return null;
+  return { mime: match[1], data: match[2] };
+};
+
+const extensionForMime = (mime: string) => {
+  if (mime === 'image/jpeg') return 'jpg';
+  if (mime === 'image/png') return 'png';
+  if (mime === 'image/webp') return 'webp';
+  if (mime === 'image/svg+xml') return 'svg';
+  return 'bin';
+};
+
+const addBackupAsset = (
+  zip: JSZip,
+  field: BackupImageField,
+  value: string,
+  assetIndex: number
+) => {
+  const dataUrl = getDataUrlParts(value);
+  if (!dataUrl) return value;
+
+  const filename = `assets/${field.owner}-${field.id}-${field.field}-${assetIndex}.${extensionForMime(dataUrl.mime)}`;
+  zip.file(filename, dataUrl.data, { base64: true });
+  return filename;
+};
+
+const fileToDataUrl = async (file: JSZip.JSZipObject) => {
+  const blob = await file.async('blob');
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+};
+
+const restoreBackupAsset = async (zip: JSZip, value?: string) => {
+  if (!value || !value.startsWith('assets/')) return value;
+  const file = zip.file(value);
+  return file ? fileToDataUrl(file) : value;
+};
+
+const readCatalogBackupFile = async (file: File): Promise<CatalogBackupPayload> => {
+  if (file.name.toLowerCase().endsWith('.zip')) {
+    const zip = await JSZip.loadAsync(file);
+    const catalogFile = zip.file('catalog.json') ?? zip.file('mangal-catalog.json');
+    if (!catalogFile) {
+      throw new Error('В ZIP не найден catalog.json.');
+    }
+
+    const payload = JSON.parse(await catalogFile.async('string')) as CatalogBackupPayload;
+
+    if (payload.restaurant) {
+      payload.restaurant = {
+        ...payload.restaurant,
+        logo_url: (await restoreBackupAsset(zip, payload.restaurant.logo_url)) ?? '',
+        banner_url: (await restoreBackupAsset(zip, payload.restaurant.banner_url)) ?? ''
+      };
+    }
+    if (payload.categories) {
+      payload.categories = await Promise.all(
+        payload.categories.map(async (category) => ({
+          ...category,
+          image: (await restoreBackupAsset(zip, category.image)) ?? ''
+        }))
+      );
+    }
+    if (payload.cabins) {
+      payload.cabins = await Promise.all(
+        payload.cabins.map(async (cabin) => ({
+          ...cabin,
+          image_url: (await restoreBackupAsset(zip, cabin.image_url)) ?? ''
+        }))
+      );
+    }
+    if (payload.products) {
+      payload.products = await Promise.all(
+        payload.products.map(async (product) => ({
+          ...product,
+          image_url: (await restoreBackupAsset(zip, product.image_url)) ?? ''
+        }))
+      );
+    }
+    if (payload.theme) {
+      payload.theme = {
+        ...payload.theme,
+        background_image_url: (await restoreBackupAsset(zip, payload.theme.background_image_url)) ?? ''
+      };
+    }
+
+    return payload;
+  }
+
+  return JSON.parse(await file.text()) as CatalogBackupPayload;
+};
+
+const downloadCatalogZip = async (payload: CatalogBackupPayload) => {
+  const zip = new JSZip();
+  const catalog = structuredClone(payload);
+  let assetIndex = 0;
+
+  if (catalog.restaurant) {
+    catalog.restaurant.logo_url = addBackupAsset(zip, { owner: 'restaurant', id: catalog.restaurant.id, field: 'logo_url' }, catalog.restaurant.logo_url, assetIndex++);
+    catalog.restaurant.banner_url = addBackupAsset(zip, { owner: 'restaurant', id: catalog.restaurant.id, field: 'banner_url' }, catalog.restaurant.banner_url, assetIndex++);
+  }
+  catalog.categories = catalog.categories?.map((category) => ({
+    ...category,
+    image: addBackupAsset(zip, { owner: 'category', id: category.id, field: 'image' }, category.image, assetIndex++)
+  }));
+  catalog.cabins = catalog.cabins?.map((cabin) => ({
+    ...cabin,
+    image_url: addBackupAsset(zip, { owner: 'cabin', id: cabin.id, field: 'image_url' }, cabin.image_url, assetIndex++)
+  }));
+  catalog.products = catalog.products?.map((product) => ({
+    ...product,
+    image_url: addBackupAsset(zip, { owner: 'product', id: product.id, field: 'image_url' }, product.image_url, assetIndex++)
+  }));
+  if (catalog.theme) {
+    catalog.theme.background_image_url = addBackupAsset(zip, { owner: 'theme', id: catalog.theme.id, field: 'background_image_url' }, catalog.theme.background_image_url, assetIndex++);
+  }
+
+  zip.file('catalog.json', JSON.stringify(catalog, null, 2));
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `mangal-catalog-${new Date().toISOString().slice(0, 10)}.zip`;
+  link.click();
+  URL.revokeObjectURL(url);
+};
 
 const darkThemePreset: Partial<ThemeSettings> = {
   background_type: 'color',
@@ -310,6 +493,7 @@ function ProductTile({
   onEdit,
   onDelete,
   onToggle,
+  onStockChange,
   onAdd
 }: {
   product: Product;
@@ -318,6 +502,7 @@ function ProductTile({
   onEdit?: (product: Product) => void;
   onDelete?: (productId: string) => void;
   onToggle?: (productId: string, key: ProductFlag) => void;
+  onStockChange?: (productId: string, stockCount: number) => void;
   onAdd?: (product: Product) => void;
 }) {
   const add = useCartStore((state) => state.add);
@@ -342,6 +527,14 @@ function ProductTile({
           <div className="admin-card-tools" onClick={(event) => event.stopPropagation()}>
             <button type="button" aria-label="Редактировать" onClick={() => onEdit?.(product)}>
               <Edit3 />
+            </button>
+            <button
+              type="button"
+              aria-label="Минус один остаток"
+              disabled={product.stock_count <= 0}
+              onClick={() => onStockChange?.(product.id, Math.max(0, product.stock_count - 1))}
+            >
+              -1
             </button>
             <button
               className={product.is_popular ? 'is-on' : ''}
@@ -594,7 +787,8 @@ function HomeScreen({
   onOpenProduct,
   onEditProduct,
   onDeleteProduct,
-  onToggleProduct
+  onToggleProduct,
+  onStockChange
 }: {
   restaurant: Restaurant;
   categories: Category[];
@@ -605,6 +799,7 @@ function HomeScreen({
   onEditProduct: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
   onToggleProduct: (productId: string, key: ProductFlag) => void;
+  onStockChange: (productId: string, stockCount: number) => void;
 }) {
   const [active, setActive] = useState('chechen');
   const isAdmin = useAuthStore((state) => state.isAdmin);
@@ -673,6 +868,7 @@ function HomeScreen({
             onEdit={onEditProduct}
             onDelete={onDeleteProduct}
             onToggle={onToggleProduct}
+            onStockChange={onStockChange}
           />
         ))}
       </section>
@@ -703,6 +899,7 @@ function CatalogScreen({
   onEditProduct,
   onDeleteProduct,
   onToggleProduct,
+  onStockChange,
   flowAction
 }: {
   categories: Category[];
@@ -712,6 +909,7 @@ function CatalogScreen({
   onEditProduct: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
   onToggleProduct: (productId: string, key: ProductFlag) => void;
+  onStockChange: (productId: string, stockCount: number) => void;
   flowAction?: FlowAction;
 }) {
   const [active, setActive] = useState(initialCategory);
@@ -774,6 +972,7 @@ function CatalogScreen({
             onEdit={onEditProduct}
             onDelete={onDeleteProduct}
             onToggle={onToggleProduct}
+            onStockChange={onStockChange}
             onAdd={flowAction?.type === 'sauce' && active === 'sauces' ? flowAction.onProductAdd : undefined}
           />
         ))}
@@ -795,6 +994,7 @@ function DrinksScreen({
   onEditProduct,
   onDeleteProduct,
   onToggleProduct,
+  onStockChange,
   flowAction
 }: {
   categories: Category[];
@@ -804,6 +1004,7 @@ function DrinksScreen({
   onEditProduct: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
   onToggleProduct: (productId: string, key: ProductFlag) => void;
+  onStockChange: (productId: string, stockCount: number) => void;
   flowAction?: FlowAction;
 }) {
   const [active, setActive] = useState(initialCategory);
@@ -838,6 +1039,7 @@ function DrinksScreen({
             onEdit={onEditProduct}
             onDelete={onDeleteProduct}
             onToggle={onToggleProduct}
+            onStockChange={onStockChange}
             onAdd={flowAction?.type === 'drink' ? flowAction.onProductAdd : undefined}
           />
         ))}
@@ -938,7 +1140,7 @@ function ProductScreen({
   );
 }
 
-function CheckoutScreen({ restaurant, cabins }: { restaurant: Restaurant; cabins: Cabin[] }) {
+function CheckoutScreen({ restaurant, cabins, onSubmitOrder }: { restaurant: Restaurant; cabins: Cabin[]; onSubmitOrder: () => void }) {
   const { mode, cabinId, setOrder } = useOrderStore();
   const items = useCartStore((state) => state.items);
   const total = selectCartTotal(items);
@@ -1042,7 +1244,19 @@ function CheckoutScreen({ restaurant, cabins }: { restaurant: Restaurant; cabins
           <span>Итого</span>
           <strong>{formatPrice(total)}</strong>
         </div>
-        <a className={restaurant.whatsapp ? 'primary-wide checkout-summary__action' : 'primary-wide checkout-summary__action is-disabled'} href={whatsappHref} target="_blank" rel="noreferrer">
+        <a
+          className={restaurant.whatsapp ? 'primary-wide checkout-summary__action' : 'primary-wide checkout-summary__action is-disabled'}
+          href={whatsappHref}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(event) => {
+            if (!restaurant.whatsapp) {
+              event.preventDefault();
+              return;
+            }
+            onSubmitOrder();
+          }}
+        >
           Отправить заказ
         </a>
       </section>
@@ -1670,73 +1884,41 @@ function BackupSettings({
   tags: CatalogTag[];
   products: Product[];
   theme: ThemeSettings;
-  onImport: (payload: { restaurant?: Restaurant; categories?: Category[]; cabins?: Cabin[]; tags?: CatalogTag[]; products?: Product[]; design?: CatalogDesignExport; theme?: ThemeSettings }) => void;
+  onImport: (payload: CatalogBackupPayload) => void;
 }) {
-  const exportCatalog = () => {
-    const blob = new Blob(
-      [
-        JSON.stringify(
-          {
-            restaurant,
-            categories,
-            cabins,
-            tags,
-            products,
-            design: {
-              theme: theme.background_color === '#f7f3ec' ? 'light' : 'dark',
-              backgroundColor: theme.background_color,
-              primaryColor: theme.accent_color,
-              accentColor: theme.accent_secondary,
-              cardColor: theme.card_color,
-              productCardColor: theme.product_card_color,
-              productCardTextColor: theme.product_card_text_color,
-              settingsCardColor: theme.settings_card_color,
-              settingsCardTextColor: theme.settings_card_text_color,
-              cartPanelColor: theme.cart_panel_color,
-              cartPanelTextColor: theme.cart_panel_text_color,
-              cardStyle: theme.card_color === '#ffffff' ? 'light' : 'dark',
-              textColor: theme.text_primary,
-              mutedTextColor: theme.text_secondary,
-              productTitleColor: theme.product_title_color,
-              categoryTitleColor: theme.category_title_color,
-              radius: theme.card_radius
-            }
-          },
-          null,
-          2
-        )
-      ],
-      { type: 'application/json' }
-    );
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'mangal-catalog.json';
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const [error, setError] = useState('');
+  const exportCatalog = () =>
+    void downloadCatalogZip(createCatalogBackupPayload({ restaurant, categories, cabins, tags, products, theme })).catch(() => {
+      setError('Не удалось собрать ZIP-архив.');
+    });
 
   return (
     <main className="settings-screen">
       <section className="settings-form-card backup-card">
         <h2>Экспорт каталога</h2>
-        <p>Сохраните резервную копию каталога в файл.</p>
+        <p>Сохраните полную резервную копию: меню, блюда, фото, категории, метки, залы, дизайн и контакты.</p>
         <button className="primary-wide" type="button" onClick={exportCatalog}>
-          <Download /> Экспортировать каталог
+          <Download /> Экспортировать ZIP
         </button>
       </section>
       <section className="settings-form-card backup-card">
         <h2>Импорт каталога</h2>
-        <p>Загрузите JSON файл. Текущие данные будут заменены.</p>
+        <p>Загрузите ZIP-бэкап. JSON из старого экспорта тоже поддерживается.</p>
+        {error && <p className="settings-error">{error}</p>}
         <label className="ghost-wide import-file">
           <CloudUpload /> Выбрать файл
           <input
             type="file"
-            accept="application/json"
+            accept=".zip,application/zip,application/json"
             onChange={async (event) => {
               const file = event.target.files?.[0];
               if (!file) return;
-              onImport(JSON.parse(await file.text()));
+              setError('');
+              try {
+                onImport(await readCatalogBackupFile(file));
+              } catch {
+                setError('Не удалось прочитать файл импорта.');
+              }
               event.target.value = '';
             }}
           />
@@ -1744,7 +1926,7 @@ function BackupSettings({
       </section>
       <section className="settings-info">
         <strong>Информация</strong>
-        <p>Формат: JSON. Рекомендуем делать бэкап перед импортом.</p>
+        <p>Формат: ZIP с catalog.json и папкой assets для загруженных изображений. Рекомендуем делать бэкап перед импортом.</p>
       </section>
     </main>
   );
@@ -1790,7 +1972,6 @@ function DesignEditor({
   onSaveProduct,
   onCloseProduct,
   onUpdateRestaurant,
-  onImport,
   cartCount,
   onNavigate
 }: {
@@ -1801,9 +1982,8 @@ function DesignEditor({
   onSaveProduct: (product: Product) => void;
   onCloseProduct: () => void;
   onUpdateRestaurant: (patch: Partial<Restaurant>) => void;
-  onImport: (payload: { restaurant?: Restaurant; products?: Product[]; theme?: ThemeSettings }) => void;
   cartCount: number;
-  onNavigate: (target: 'home' | 'catalog' | 'drinks' | 'cabins' | 'profile') => void;
+  onNavigate: (target: 'home' | 'catalog' | 'drinks' | 'cabins' | 'profile' | 'backup') => void;
 }) {
   const editor = useAdminStore((state) => state.editor);
   const setEditor = useAdminStore((state) => state.setEditor);
@@ -1910,42 +2090,16 @@ function DesignEditor({
             </label>
             <div className="import-export">
               <button
-                className="ghost-wide"
+                className="primary-wide"
                 type="button"
                 onClick={() => {
-                  const blob = new Blob([JSON.stringify({ restaurant, products, theme }, null, 2)], {
-                    type: 'application/json'
-                  });
-                  const url = URL.createObjectURL(blob);
-                  const link = document.createElement('a');
-                  link.href = url;
-                  link.download = 'mangal-catalog-export.json';
-                  link.click();
-                  URL.revokeObjectURL(url);
+                  onNavigate('backup');
+                  onCloseProduct();
+                  setEditor(null);
                 }}
               >
-                Экспорт JSON
+                Открыть полный импорт и экспорт
               </button>
-              <label className="ghost-wide import-file">
-                Импорт JSON
-                <input
-                  type="file"
-                  accept="application/json"
-                  onChange={async (event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) {
-                      return;
-                    }
-                    const payload = JSON.parse(await file.text()) as {
-                      restaurant?: Restaurant;
-                      products?: Product[];
-                      theme?: ThemeSettings;
-                    };
-                    onImport(payload);
-                    event.target.value = '';
-                  }}
-                />
-              </label>
             </div>
           </div>
         ) : (
@@ -1985,6 +2139,7 @@ function AppContent() {
   const [localTags, setLocalTags] = useState<CatalogTag[]>(defaultTags);
   const [localRestaurant, setLocalRestaurant] = useState<Restaurant>(demoRestaurant);
   const items = useCartStore((state) => state.items);
+  const clearCart = useCartStore((state) => state.clear);
   const cartCount = selectCartCount(items);
   const persist = (action: Promise<void>) => {
     void action.catch((error) => {
@@ -2088,6 +2243,16 @@ function AppContent() {
     if (product) {
       persist(updateProductInSupabase(productId, { [key]: !product[key] } as Partial<Product>));
     }
+  };
+
+  const updateProductStock = (productId: string, stockCount: number) => {
+    setLocalProducts((current) =>
+      current.map((product) => (product.id === productId ? { ...product, stock_count: stockCount } : product))
+    );
+    if (selectedProduct?.id === productId) {
+      setSelectedProduct((current) => (current ? { ...current, stock_count: stockCount } : current));
+    }
+    persist(updateProductInSupabase(productId, { stock_count: stockCount }));
   };
 
   const saveRestaurant = (value: Restaurant) => {
@@ -2314,6 +2479,7 @@ function AppContent() {
               onEditProduct={editProduct}
               onDeleteProduct={deleteProduct}
               onToggleProduct={toggleProduct}
+              onStockChange={updateProductStock}
             />
           )}
           {screen === 'catalog' && (
@@ -2325,6 +2491,7 @@ function AppContent() {
               onEditProduct={editProduct}
               onDeleteProduct={deleteProduct}
               onToggleProduct={toggleProduct}
+              onStockChange={updateProductStock}
               flowAction={
                 orderFlow.step === 'sauce'
                   ? {
@@ -2346,6 +2513,7 @@ function AppContent() {
               onEditProduct={editProduct}
               onDeleteProduct={deleteProduct}
               onToggleProduct={toggleProduct}
+              onStockChange={updateProductStock}
               flowAction={
                 orderFlow.step === 'drink'
                   ? {
@@ -2375,7 +2543,16 @@ function AppContent() {
               }
             />
           )}
-          {screen === 'checkout' && <CheckoutScreen restaurant={catalog.restaurant} cabins={catalog.cabins} />}
+          {screen === 'checkout' && (
+            <CheckoutScreen
+              restaurant={catalog.restaurant}
+              cabins={catalog.cabins}
+              onSubmitOrder={() => {
+                clearCart();
+                setOrderFlow({ step: 'done' });
+              }}
+            />
+          )}
           <CartBar onCheckout={() => setIsCartOpen(true)} onContinue={continueFromCartBar} />
         </>
       )}
@@ -2389,24 +2566,6 @@ function AppContent() {
         onSaveProduct={saveProduct}
         onCloseProduct={() => setEditingProduct(null)}
         onUpdateRestaurant={updateRestaurant}
-        onImport={(payload) => {
-          if (payload.products) {
-            setLocalProducts(payload.products);
-          }
-          if (payload.restaurant) {
-            setLocalRestaurant(payload.restaurant);
-          }
-          if (payload.theme) {
-            updateTheme(payload.theme);
-          }
-          persist(
-            replaceCatalogInSupabase({
-              products: payload.products,
-              restaurant: payload.restaurant,
-              theme: payload.theme
-            })
-          );
-        }}
         cartCount={cartCount}
         onNavigate={(target) => {
           if (target === 'home') {
@@ -2425,6 +2584,9 @@ function AppContent() {
           }
           if (target === 'profile') {
             setScreen('settings-profile');
+          }
+          if (target === 'backup') {
+            setScreen('settings-backup');
           }
           setAdminEditor(null);
         }}
