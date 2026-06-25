@@ -460,7 +460,7 @@ function applyTheme(theme: ThemeSettings) {
 function Logo({ compact = false, logoUrl }: { compact?: boolean; logoUrl?: string }) {
   return (
     <div className={compact ? 'brand-logo brand-logo--compact' : 'brand-logo'}>
-      {logoUrl ? <img src={logoUrl} alt="" /> : <Flame />}
+      {logoUrl && <img src={logoUrl} alt="" />}
       <div>
         <strong>Мангал</strong>
         {!compact && <span>ресторан</span>}
@@ -1568,7 +1568,14 @@ function ProfileSettings({
               onChange={(event) => setDraft({ ...draft, name: event.target.value })}
             />
           </div>
-          <small>Нажмите на логотип, чтобы заменить PNG.</small>
+          <div className="profile-logo-actions">
+            <small>Нажмите на логотип, чтобы заменить PNG.</small>
+            {draft.logo_url && (
+              <button type="button" onClick={() => setDraft({ ...draft, logo_url: '' })}>
+                Удалить логотип
+              </button>
+            )}
+          </div>
         </div>
         <label>
           Описание

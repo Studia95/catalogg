@@ -2363,6 +2363,22 @@ a {
   height: 30px;
 }
 
+.profile-logo-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profile-logo-actions button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #ff6b6b;
+  font: inherit;
+  font-weight: 700;
+}
+
 .settings-form-card small,
 .settings-status {
   color: var(--accent-2);
