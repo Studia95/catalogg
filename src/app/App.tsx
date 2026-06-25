@@ -112,6 +112,9 @@ const defaultTags: CatalogTag[] = [
 
 const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
+const getProductCategoryIds = (product: Product) =>
+  product.category_ids?.length ? product.category_ids : [product.category_id];
+
 const iconMap = {
   pot: ChefHat,
   pizza: Pizza,
@@ -276,7 +279,10 @@ function ProductTile({
   const soldOut = product.stock_count <= 0;
 
   return (
-    <article className={`product-tile product-tile--${variant}${product.is_hidden ? ' is-hidden' : ''}`} onClick={() => onOpen(product)}>
+    <article
+      className={`product-tile product-tile--${variant}${product.is_hidden ? ' is-hidden' : ''}${soldOut ? ' is-sold-out' : ''}`}
+      onClick={() => onOpen(product)}
+    >
       <div className="product-tile__image">
         <SafeImage src={product.image_url} alt={product.title} loading="lazy" />
         {product.is_popular && (
@@ -285,6 +291,7 @@ function ProductTile({
           </span>
         )}
         {product.is_hidden && <span className="product-state product-state--hidden">Скрыто</span>}
+        {soldOut && <span className="product-state product-state--sold-out">Закончилось</span>}
         {isAdmin && (
           <div className="admin-card-tools" onClick={(event) => event.stopPropagation()}>
             <button type="button" aria-label="Редактировать" onClick={() => onEdit?.(product)}>
@@ -675,7 +682,7 @@ function CatalogScreen({
   const filtered = visibleProducts.filter((product) => {
     const categoryMatch =
       active === 'all' ||
-      product.category_id === active ||
+      getProductCategoryIds(product).includes(active) ||
       (active === 'hits' && product.is_hit) ||
       (active === 'sauces' && isSauceProduct(product));
     const queryMatch = [product.title, product.description, product.ingredients].join(' ').toLowerCase().includes(query.toLowerCase());
@@ -757,7 +764,7 @@ function DrinksScreen({
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const visibleProducts = isAdmin ? products : products.filter((product) => !product.is_hidden);
   const drinkCategories = categories.filter((category) => category.kind === 'drink');
-  const drinks = visibleProducts.filter((product) => product.drink_type && (active === 'all' || product.category_id === active));
+  const drinks = visibleProducts.filter((product) => product.drink_type && (active === 'all' || getProductCategoryIds(product).includes(active)));
 
   useEffect(() => {
     setActive(initialCategory);
@@ -801,10 +808,12 @@ function DrinksScreen({
 function ProductScreen({
   product,
   products,
+  onOpenProduct,
   flowAction
 }: {
   product: Product;
   products: Product[];
+  onOpenProduct: (product: Product) => void;
   flowAction?: FlowAction;
 }) {
   const add = useCartStore((state) => state.add);
@@ -849,10 +858,6 @@ function ProductScreen({
           <dd>{product.weight}</dd>
         </div>
         <div>
-          <dt>Острота</dt>
-          <dd>{product.spicy_level === 0 ? 'нет' : 'средняя'} {' '.repeat(1)}{'🔥'.repeat(product.spicy_level)}</dd>
-        </div>
-        <div>
           <dt>Подаётся</dt>
           <dd>{product.serving}</dd>
         </div>
@@ -871,7 +876,7 @@ function ProductScreen({
       <h3 className="subhead">Часто берут вместе</h3>
       <section className="pair-grid">
         {pairs.map((item) => (
-          <ProductTile key={item.id} product={item} onOpen={() => undefined} />
+          <ProductTile key={item.id} product={item} onOpen={onOpenProduct} />
         ))}
       </section>
 
@@ -1788,6 +1793,7 @@ function DesignEditor({
           <DishEditorPage
             product={editingProduct}
             categories={categories}
+            products={products}
             cartCount={cartCount}
             onBack={() => {
               onCloseProduct();
@@ -2333,6 +2339,7 @@ function AppContent() {
             <ProductScreen
               product={selectedProduct}
               products={catalog.products}
+              onOpenProduct={(product) => setSelectedProduct(product)}
               flowAction={
                 orderFlow.step === 'sauce' || orderFlow.step === 'drink'
                   ? {

@@ -71,6 +71,7 @@ export type Product = {
   is_hidden?: boolean;
   stock_count: number;
   category_id: string;
+  category_ids?: string[];
   drink_type?: string;
   pair_ids: string[];
 };

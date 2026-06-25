@@ -2,7 +2,7 @@
   position: relative;
   width: min(414px, 100%);
   margin: 0 auto;
-  padding: 0 16px 150px;
+  padding: 0 16px 96px;
   color: var(--text);
 }
 
@@ -324,7 +324,7 @@
 
 .dish-actions {
   position: sticky;
-  bottom: 72px;
+  bottom: 0;
   z-index: 5;
   display: grid;
   grid-template-columns: 112px minmax(0, 1fr);
@@ -353,35 +353,58 @@
   color: var(--primary-text, #1b1408);
 }
 
-.dish-admin-nav {
-  position: sticky;
-  bottom: 0;
-  z-index: 6;
+.dish-pair-picker {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
-  margin: 0 -16px;
-  padding: 8px 8px max(8px, env(safe-area-inset-bottom));
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 11, 12, 0.92);
-  backdrop-filter: blur(18px);
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+  padding-right: 2px;
 }
 
-.dish-admin-nav button {
+.dish-pair-option {
   display: grid;
-  min-height: 48px;
-  place-items: center;
-  border: 0;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 62px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 16px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  text-align: left;
+}
+
+.dish-pair-option img {
+  width: 48px;
+  height: 46px;
   border-radius: 12px;
-  background: transparent;
+  object-fit: cover;
+}
+
+.dish-pair-option span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text) !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dish-pair-option b {
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: rgba(255, 255, 255, 0.08);
   color: var(--muted);
   font-size: 11px;
 }
 
-.dish-admin-nav svg {
-  width: 17px;
-  height: 17px;
-  color: var(--accent-2);
+.dish-pair-option.is-active {
+  border-color: var(--accent);
+}
+
+.dish-pair-option.is-active b {
+  background: var(--accent-2);
+  color: #18120a;
 }
 
 .dish-skeleton {

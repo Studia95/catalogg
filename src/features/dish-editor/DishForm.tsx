@@ -3,7 +3,7 @@ import { CategorySelector } from './CategorySelector';
 import { PhotoUploader } from './PhotoUploader';
 import { QuantityInput } from './QuantityInput';
 import { TagsSelector } from './TagsSelector';
-import type { Category } from '../../entities/models';
+import type { Category, Product } from '../../entities/models';
 import type { Dish } from './types';
 
 const serveOptions = ['с луком', 'с соусом', 'с гарниром', 'без добавок'];
@@ -11,12 +11,14 @@ const serveOptions = ['с луком', 'с соусом', 'с гарниром',
 export function DishForm({
   dish,
   categories,
+  products,
   error,
   onChange,
   onSubmit
 }: {
   dish: Dish;
   categories: Category[];
+  products: Product[];
   error: string;
   onChange: (patch: Partial<Dish>) => void;
   onSubmit: () => void;
@@ -60,7 +62,7 @@ export function DishForm({
         </div>
       </section>
 
-      <CategorySelector categories={categories} value={dish.category} onChange={(category) => onChange({ category })} />
+      <CategorySelector categories={categories} value={dish.categories} onChange={(categories) => onChange({ categories })} />
       <TagsSelector tags={dish.tags} onChange={(tags) => onChange({ tags })} />
 
       <section className="dish-section">
@@ -98,14 +100,48 @@ export function DishForm({
       <section className="dish-section">
         <label>
           Подается с
-          <select value={dish.serveWith} onChange={(event) => onChange({ serveWith: event.target.value })}>
+          <input
+            list="serve-options"
+            maxLength={120}
+            value={dish.serveWith}
+            onChange={(event) => onChange({ serveWith: event.target.value.slice(0, 120) })}
+            placeholder="с луком и соусом"
+          />
+          <datalist id="serve-options">
             {serveOptions.map((option) => (
-              <option value={option} key={option}>
-                {option}
-              </option>
+              <option value={option} key={option} />
             ))}
-          </select>
+          </datalist>
         </label>
+      </section>
+
+      <section className="dish-section">
+        <h3>Часто покупают вместе</h3>
+        <div className="dish-pair-picker">
+          {products
+            .filter((product) => product.id !== dish.id)
+            .map((product) => {
+              const selected = dish.pairIds.includes(product.id);
+              return (
+                <button
+                  className={selected ? 'dish-pair-option is-active' : 'dish-pair-option'}
+                  type="button"
+                  key={product.id}
+                  onClick={() =>
+                    onChange({
+                      pairIds: selected
+                        ? dish.pairIds.filter((id) => id !== product.id)
+                        : [...dish.pairIds, product.id]
+                    })
+                  }
+                >
+                  <img src={product.image_url} alt="" />
+                  <span>{product.title}</span>
+                  <b>{selected ? 'Добавлено' : 'Добавить'}</b>
+                </button>
+              );
+            })}
+        </div>
       </section>
 
       <section className="dish-section">

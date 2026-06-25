@@ -4,7 +4,7 @@ export type Dish = {
   id: string;
   name: string;
   price: number;
-  category: string;
+  categories: string[];
   tags: string[];
   description: string;
   ingredients: string;
@@ -12,14 +12,17 @@ export type Dish = {
   dailyQuantity: number;
   serveWith: string;
   images: string[];
+  pairIds: string[];
 };
 
 export function productToDish(product: Product | null, fallbackCategory: string): Dish {
+  const categories = product?.category_ids?.length ? product.category_ids : product?.category_id ? [product.category_id] : [fallbackCategory];
+
   return {
     id: product?.id ?? `dish-${Date.now()}`,
     name: product?.title ?? '',
     price: product?.price ?? 0,
-    category: product?.category_id ?? fallbackCategory,
+    categories,
     tags: [
       ...(product?.is_hit ? ['Хит'] : []),
       ...(product?.is_popular ? ['Популярное'] : []),
@@ -30,7 +33,8 @@ export function productToDish(product: Product | null, fallbackCategory: string)
     weight: Number.parseInt(product?.weight ?? '0', 10) || 0,
     dailyQuantity: product?.stock_count ?? 10,
     serveWith: product?.serving ?? 'с луком',
-    images: product?.image_url ? [product.image_url] : []
+    images: product?.image_url ? [product.image_url] : [],
+    pairIds: product?.pair_ids ?? []
   };
 }
 
@@ -49,8 +53,9 @@ export function dishToProduct(dish: Dish, current: Product | null): Product {
     is_new: dish.tags.includes('Новинка'),
     is_hit: dish.tags.includes('Хит'),
     stock_count: dish.dailyQuantity,
-    category_id: dish.category,
+    category_id: dish.categories[0],
+    category_ids: dish.categories,
     drink_type: current?.drink_type,
-    pair_ids: current?.pair_ids ?? []
+    pair_ids: dish.pairIds
   };
 }

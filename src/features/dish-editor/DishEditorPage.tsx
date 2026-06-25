@@ -1,4 +1,4 @@
-import { ArrowLeft, Home, ShoppingCart, User } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, User } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Category, Product } from '../../entities/models';
 import { saveDishDraft } from './storage';
@@ -9,7 +9,7 @@ function validateDish(dish: Dish) {
   if (dish.images.length === 0) return 'Добавьте минимум одно фото.';
   if (!dish.name.trim()) return 'Введите название блюда.';
   if (dish.price < 0 || Number.isNaN(dish.price)) return 'Введите корректную цену.';
-  if (!dish.category) return 'Выберите категорию.';
+  if (dish.categories.length === 0) return 'Выберите минимум одну категорию.';
   if (dish.dailyQuantity < 0 || !Number.isInteger(dish.dailyQuantity)) return 'Количество должно быть целым числом.';
   return '';
 }
@@ -17,6 +17,7 @@ function validateDish(dish: Dish) {
 export function DishEditorPage({
   product,
   categories,
+  products,
   cartCount,
   onBack,
   onSave,
@@ -24,6 +25,7 @@ export function DishEditorPage({
 }: {
   product: Product | null;
   categories: Category[];
+  products: Product[];
   cartCount: number;
   onBack: () => void;
   onSave: (product: Product) => void;
@@ -87,7 +89,14 @@ export function DishEditorPage({
       )}
       {status === 'success' && <p className="dish-toast">Сохранено</p>}
 
-      <DishForm dish={dish} categories={foodCategories} error={error} onChange={updateDish} onSubmit={() => void save()} />
+      <DishForm
+        dish={dish}
+        categories={foodCategories}
+        products={products}
+        error={error}
+        onChange={updateDish}
+        onSubmit={() => void save()}
+      />
 
       <footer className="dish-actions">
         <button className="dish-cancel" type="button" onClick={onBack}>
@@ -97,21 +106,6 @@ export function DishEditorPage({
           Сохранить изменения
         </button>
       </footer>
-
-      <nav className="dish-admin-nav">
-        {[
-          ['home', 'Главная'],
-          ['catalog', 'Каталог'],
-          ['drinks', 'Напитки'],
-          ['cabins', 'Кабинки'],
-          ['profile', 'Профиль']
-        ].map(([target, label]) => (
-          <button type="button" key={target} onClick={() => onNavigate(target as 'home' | 'catalog' | 'drinks' | 'cabins' | 'profile')}>
-            <Home />
-            {label}
-          </button>
-        ))}
-      </nav>
     </div>
   );
 }

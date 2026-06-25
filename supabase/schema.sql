@@ -59,12 +59,16 @@ create table if not exists public.product (
   is_hidden boolean not null default false,
   stock_count integer not null default 0 check (stock_count >= 0),
   category_id text not null references public.category(id) on update cascade on delete restrict,
+  category_ids text[] not null default '{}',
   drink_type text,
   pair_ids text[] not null default '{}',
   sort_order integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.product add column if not exists category_ids text[] not null default '{}';
+update public.product set category_ids = array[category_id] where category_ids = '{}';
 
 create table if not exists public.product_tag (
   product_id text not null references public.product(id) on update cascade on delete cascade,
@@ -296,6 +300,7 @@ on conflict (id) do update set
   is_hidden = excluded.is_hidden,
   stock_count = excluded.stock_count,
   category_id = excluded.category_id,
+  category_ids = case when excluded.category_ids = '{}' then array[excluded.category_id] else excluded.category_ids end,
   drink_type = excluded.drink_type,
   pair_ids = excluded.pair_ids,
   sort_order = excluded.sort_order;

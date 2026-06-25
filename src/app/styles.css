@@ -412,6 +412,15 @@ a {
   opacity: 0.58;
 }
 
+.product-tile.is-sold-out .product-tile__image,
+.product-tile.is-sold-out .product-tile__body {
+  filter: grayscale(1);
+}
+
+.product-tile.is-sold-out .product-tile__body {
+  opacity: 0.72;
+}
+
 .product-tile__image {
   position: relative;
   height: 156px;
@@ -557,6 +566,19 @@ a {
   color: #fff;
   font-size: 11px;
   font-weight: 700;
+}
+
+.product-state--sold-out {
+  right: 8px;
+  bottom: 8px;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .search-field {

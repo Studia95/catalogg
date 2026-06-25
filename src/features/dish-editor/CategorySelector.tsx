@@ -17,21 +17,29 @@ export function CategorySelector({
   onChange
 }: {
   categories: Category[];
-  value: string;
-  onChange: (category: string) => void;
+  value: string[];
+  onChange: (categories: string[]) => void;
 }) {
+  const toggle = (categoryId: string) => {
+    if (value.includes(categoryId)) {
+      onChange(value.filter((id) => id !== categoryId));
+      return;
+    }
+    onChange([...value, categoryId]);
+  };
+
   return (
     <section className="dish-section">
-      <h3>Категория</h3>
+      <h3>Категории</h3>
       <div className="dish-category-chips">
         {categories.map((category) => {
           const Icon = categoryIcons[category.id as keyof typeof categoryIcons] ?? Soup;
           return (
             <button
-              className={value === category.id ? 'dish-chip is-active' : 'dish-chip'}
+              className={value.includes(category.id) ? 'dish-chip is-active' : 'dish-chip'}
               type="button"
               key={category.id}
-              onClick={() => onChange(category.id)}
+              onClick={() => toggle(category.id)}
             >
               <Icon />
               {category.name}
