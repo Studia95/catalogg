@@ -2414,7 +2414,7 @@ a {
 }
 
 .settings-list-item--category {
-  grid-template-columns: 24px 76px minmax(120px, 0.8fr) minmax(160px, 1.2fr) 42px 42px 42px;
+  grid-template-columns: 24px 76px minmax(120px, 0.8fr) minmax(128px, 0.8fr) minmax(160px, 1.2fr) 42px 42px 42px;
 }
 
 .settings-list-item--cabin {
@@ -2451,6 +2451,37 @@ a {
 
 .settings-thumb input {
   display: none;
+}
+
+.category-icon-picker {
+  display: flex;
+  min-width: 0;
+  gap: 5px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.category-icon-picker button {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--settings-card-text);
+}
+
+.category-icon-picker button.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #18120a;
+}
+
+.category-icon-picker svg {
+  width: 16px;
+  height: 16px;
 }
 
 .settings-list-item--tag {
@@ -2879,6 +2910,11 @@ a {
   .settings-list-item--category input[aria-label],
   .settings-list-item--cabin input[aria-label] {
     display: none;
+  }
+
+  .category-icon-picker {
+    grid-column: 1 / -1;
+    order: 3;
   }
 
   .settings-thumb {

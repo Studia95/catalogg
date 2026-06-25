@@ -355,6 +355,17 @@ const iconMap = {
   home: Home
 };
 
+const categoryIconOptions = [
+  { id: 'flame', label: 'Огонь', Icon: Flame },
+  { id: 'pot', label: 'Кухня', Icon: ChefHat },
+  { id: 'pizza', label: 'Пицца', Icon: Pizza },
+  { id: 'burger', label: 'Бургер', Icon: Beef },
+  { id: 'bottle', label: 'Бутылка', Icon: ShoppingBag },
+  { id: 'glass', label: 'Напиток', Icon: Coffee },
+  { id: 'tea', label: 'Чай', Icon: Coffee },
+  { id: 'home', label: 'Зал', Icon: Home }
+] as const;
+
 function applyTheme(theme: ThemeSettings) {
   return {
     '--bg': theme.background_color,
@@ -1631,6 +1642,22 @@ function CategoriesSettings({
                   onChangeCategories(categories.map((item) => (item.id === category.id ? { ...item, name: event.target.value } : item)))
                 }
               />
+              <div className="category-icon-picker" aria-label={`Иконка категории ${category.name}`}>
+                {categoryIconOptions.map(({ id, label, Icon }) => (
+                  <button
+                    className={category.icon === id ? 'is-active' : ''}
+                    type="button"
+                    key={id}
+                    title={label}
+                    aria-label={label}
+                    onClick={() =>
+                      onChangeCategories(categories.map((item) => (item.id === category.id ? { ...item, icon: id } : item)))
+                    }
+                  >
+                    <Icon />
+                  </button>
+                ))}
+              </div>
               <input
                 value={category.image}
                 aria-label={`Фото категории ${category.name}`}
