@@ -13,7 +13,7 @@ export default defineConfig(function (_a) {
             react(),
             VitePWA({
                 registerType: 'autoUpdate',
-                injectRegister: 'auto',
+                injectRegister: false,
                 includeAssets: ['favicon.svg', 'robots.txt', 'icons/*.svg', 'placeholders/*.svg'],
                 manifest: {
                     name: 'Restaurant Catalog Template',
@@ -38,6 +38,8 @@ export default defineConfig(function (_a) {
                     ]
                 },
                 workbox: {
+                    skipWaiting: true,
+                    clientsClaim: true,
                     cleanupOutdatedCaches: true,
                     navigateFallback: null,
                     navigateFallbackDenylist: [/^\/api\//],
