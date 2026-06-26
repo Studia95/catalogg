@@ -18,9 +18,12 @@ create table if not exists public.restaurant (
   whatsapp text not null default '',
   instagram_url text not null default '',
   address text not null default '',
+  "mapLink" text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.restaurant add column if not exists "mapLink" text not null default '';
 
 create table if not exists public.category (
   id text primary key,
@@ -225,7 +228,7 @@ create policy "admin write theme_settings" on public.theme_settings for all
 using (exists (select 1 from public.admin_user admin where admin.user_id = auth.uid()))
 with check (exists (select 1 from public.admin_user admin where admin.user_id = auth.uid()));
 
-insert into public.restaurant (id, name, subtitle, logo_url, banner_url, whatsapp, instagram_url, address)
+insert into public.restaurant (id, name, subtitle, logo_url, banner_url, whatsapp, instagram_url, address, "mapLink")
 values (
   'mangal',
   'Мангал',
@@ -234,7 +237,8 @@ values (
   'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=900&q=78&restaurant',
   '79990000000',
   'https://instagram.com/',
-  'ул. Центральная, 12'
+  'ул. Центральная, 12',
+  'https://yandex.ru/maps/?ll=45.6986,43.3178&z=16&pt=45.6986,43.3178,pm2rdm'
 )
 on conflict (id) do update set
   name = excluded.name,
@@ -243,7 +247,8 @@ on conflict (id) do update set
   banner_url = excluded.banner_url,
   whatsapp = excluded.whatsapp,
   instagram_url = excluded.instagram_url,
-  address = excluded.address;
+  address = excluded.address,
+  "mapLink" = excluded."mapLink";
 
 insert into public.category (id, name, image, icon, kind, sort_order)
 values

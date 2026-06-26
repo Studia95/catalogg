@@ -38,6 +38,7 @@ export type Restaurant = {
   whatsapp: string;
   instagram_url: string;
   address: string;
+  mapLink: string;
 };
 
 export type Category = {

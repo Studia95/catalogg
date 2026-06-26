@@ -25,6 +25,7 @@ import {
   IceCreamBowl,
   Instagram,
   LogOut,
+  MapPin,
   MessageCircle,
   Milk,
   Minus,
@@ -1270,6 +1271,13 @@ function CheckoutScreen({ restaurant, cabins, onSubmitOrder }: { restaurant: Res
   const whatsappHref = restaurant.whatsapp
     ? `https://wa.me/${restaurant.whatsapp.replace(/\D/g, '')}?text=${whatsappText}`
     : '#';
+  const openRestaurantMap = () => {
+    if (!restaurant.mapLink) {
+      alert('Карта не указана');
+      return;
+    }
+    window.open(restaurant.mapLink, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <main className="screen checkout-screen">
@@ -1315,8 +1323,18 @@ function CheckoutScreen({ restaurant, cabins, onSubmitOrder }: { restaurant: Res
 
       {mode === 'takeaway' && (
         <section className="takeaway-note">
-          <Package />
-          <strong>Вы заберёте заказ самостоятельно</strong>
+          <div className="takeaway-note__message">
+            <Package />
+            <strong>Вы заберёте заказ самостоятельно</strong>
+          </div>
+          <div className="restaurant-address">
+            <span>Адрес ресторана</span>
+            <strong>{restaurant.address || 'Адрес не указан'}</strong>
+            <button className="map-link-button" type="button" onClick={openRestaurantMap}>
+              <MapPin />
+              <span>Показать на карте</span>
+            </button>
+          </div>
         </section>
       )}
 
@@ -1644,6 +1662,15 @@ function ProfileSettings({
         <label>
           Адрес
           <input value={draft.address} onChange={(event) => setDraft({ ...draft, address: event.target.value })} />
+        </label>
+        <label>
+          Ссылка на карту
+          <input
+            type="url"
+            value={draft.mapLink ?? ''}
+            placeholder="https://yandex.ru/maps/..."
+            onChange={(event) => setDraft({ ...draft, mapLink: event.target.value })}
+          />
         </label>
         {error && <p className={error === 'Сохранено' ? 'settings-status' : 'settings-error'}>{error}</p>}
         <button className="primary-wide" type="submit">
@@ -2307,6 +2334,10 @@ function DesignEditor({
               Адрес
               <input value={restaurant.address} onChange={(event) => onUpdateRestaurant({ address: event.target.value })} />
             </label>
+            <label>
+              Ссылка на карту
+              <input value={restaurant.mapLink ?? ''} onChange={(event) => onUpdateRestaurant({ mapLink: event.target.value })} placeholder="https://yandex.ru/maps/..." />
+            </label>
             <div className="import-export">
               <button
                 className="primary-wide"
@@ -2637,7 +2668,7 @@ function AppContent() {
     setLocalCategories([]);
     setLocalCabins([]);
     setLocalTags([]);
-    const emptyRestaurant = { ...demoRestaurant, name: 'Мангал', subtitle: '', whatsapp: '', instagram_url: '', address: '' };
+    const emptyRestaurant = { ...demoRestaurant, name: 'Мангал', subtitle: '', whatsapp: '', instagram_url: '', address: '', mapLink: '' };
     setLocalRestaurant(emptyRestaurant);
     saveTheme({
       ...darkThemePreset,

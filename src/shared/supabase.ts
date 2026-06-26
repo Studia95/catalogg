@@ -15,6 +15,12 @@ const config: SupabaseConfig = {
 export const supabase: SupabaseClient | null =
   config.url && config.anonKey ? createClient(config.url, config.anonKey) : null;
 
+const normalizeRestaurant = (value?: Restaurant | null): Restaurant => ({
+  ...restaurant,
+  ...(value ?? {}),
+  mapLink: value?.mapLink ?? ''
+});
+
 export async function signInAdmin(email: string, password: string) {
   if (!supabase) {
     return email.trim().toLowerCase() === 'admin' && password.trim() === '1234';
@@ -77,7 +83,7 @@ export async function loadCatalog() {
   ]);
 
   return {
-    restaurant: restaurantResult.data ?? restaurant,
+    restaurant: normalizeRestaurant(restaurantResult.data),
     categories: categoriesResult.data ?? categories,
     products: productsResult.data ?? products,
     cabins: cabinsResult.data ?? cabins,
@@ -114,7 +120,7 @@ export async function deleteProductFromSupabase(productId: string) {
 
 export async function saveRestaurantToSupabase(value: Restaurant) {
   if (!supabase) return;
-  await throwOnError(supabase.from('restaurant').upsert(value, { onConflict: 'id' }));
+  await throwOnError(supabase.from('restaurant').upsert(normalizeRestaurant(value), { onConflict: 'id' }));
 }
 
 export async function saveThemeToSupabase(value: ThemeSettings) {

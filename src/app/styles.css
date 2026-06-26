@@ -1420,10 +1420,9 @@ a {
 }
 
 .takeaway-note {
-  display: flex;
+  display: grid;
   min-height: 110px;
-  align-items: center;
-  gap: 14px;
+  gap: 16px;
   border: 1px solid rgba(245, 166, 35, 0.32);
   border-radius: 20px;
   padding: 18px;
@@ -1431,7 +1430,13 @@ a {
   color: var(--text);
 }
 
-.takeaway-note svg {
+.takeaway-note__message {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.takeaway-note__message svg {
   width: 34px;
   height: 34px;
   color: #f5a623;
@@ -1439,6 +1444,47 @@ a {
 
 .takeaway-note strong {
   font-size: 18px;
+}
+
+.restaurant-address {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 14px;
+}
+
+.restaurant-address > span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.restaurant-address > strong {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.map-link-button {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #f5a623;
+  border-radius: var(--button-radius);
+  background: transparent;
+  color: #f5a623;
+  font: inherit;
+  font-weight: 800;
+}
+
+.map-link-button svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+
+.map-link-button span {
+  color: inherit;
 }
 
 .checkout-summary {

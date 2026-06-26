@@ -11,7 +11,8 @@ export const restaurant: Restaurant = {
   banner_url: image('photo-1555396273-367ea4eb4db5', 'restaurant'),
   whatsapp: '79990000000',
   instagram_url: 'https://instagram.com/',
-  address: 'ул. Центральная, 12'
+  address: 'ул. Центральная, 12',
+  mapLink: 'https://yandex.ru/maps/?ll=45.6986,43.3178&z=16&pt=45.6986,43.3178,pm2rdm'
 };
 
 export const themeSettings: ThemeSettings = {
