@@ -1,0 +1,554 @@
+-- Universal Catalog Platform schema.
+-- Apply to a new Supabase project or after a planned migration from supabase/schema.sql.
+-- Security model: every catalog-owned table has catalog_id; writes are gated by catalog_members.
+
+create extension if not exists pgcrypto;
+
+create type public.catalog_role as enum ('owner', 'admin', 'editor', 'viewer');
+create type public.catalog_status as enum ('draft', 'published', 'archived');
+create type public.product_status as enum ('draft', 'active', 'hidden', 'sold_out', 'archived');
+create type public.order_status as enum ('new', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled');
+create type public.booking_status as enum ('new', 'confirmed', 'completed', 'cancelled');
+
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text,
+  full_name text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.templates (
+  id uuid primary key default gen_random_uuid(),
+  key text not null unique,
+  name text not null,
+  business_type text not null default 'restaurant',
+  description text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.template_versions (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references public.templates(id) on delete cascade,
+  version integer not null check (version > 0),
+  status text not null default 'published' check (status in ('draft', 'published', 'deprecated')),
+  entry_key text not null,
+  schema_version integer not null default 1,
+  defaults jsonb not null default '{}'::jsonb,
+  migration_notes text not null default '',
+  published_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (template_id, version)
+);
+
+create table if not exists public.template_presets (
+  id uuid primary key default gen_random_uuid(),
+  template_version_id uuid not null references public.template_versions(id) on delete cascade,
+  name text not null,
+  settings jsonb not null default '{}'::jsonb,
+  theme jsonb not null default '{}'::jsonb,
+  sections jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.catalogs (
+  id uuid primary key default gen_random_uuid(),
+  template_version_id uuid not null references public.template_versions(id) on delete restrict,
+  slug text not null unique,
+  name text not null,
+  description text not null default '',
+  status public.catalog_status not null default 'published',
+  logo_url text not null default '',
+  banner_url text not null default '',
+  address text not null default '',
+  map_url text not null default '',
+  whatsapp text not null default '',
+  instagram_url text not null default '',
+  currency text not null default 'RUB',
+  language text not null default 'ru',
+  timezone text not null default 'Europe/Moscow',
+  order_settings jsonb not null default '{}'::jsonb,
+  booking_settings jsonb not null default '{}'::jsonb,
+  seo jsonb not null default '{}'::jsonb,
+  pwa jsonb not null default '{}'::jsonb,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.catalog_members (
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  role public.catalog_role not null,
+  created_at timestamptz not null default now(),
+  primary key (catalog_id, user_id)
+);
+
+create table if not exists public.catalog_theme_settings (
+  catalog_id uuid primary key references public.catalogs(id) on delete cascade,
+  settings jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.catalog_sections (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  key text not null,
+  title text not null default '',
+  enabled boolean not null default true,
+  sort_order integer not null default 0,
+  settings jsonb not null default '{}'::jsonb,
+  unique (catalog_id, key)
+);
+
+create table if not exists public.categories (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  parent_id uuid references public.categories(id) on delete set null,
+  name text not null,
+  slug text not null,
+  description text not null default '',
+  image_url text not null default '',
+  icon text not null default '',
+  is_hidden boolean not null default false,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (catalog_id, slug)
+);
+
+create table if not exists public.tags (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  name text not null,
+  slug text not null,
+  icon text not null default '',
+  color text not null default '#f59e0b',
+  sort_order integer not null default 0,
+  unique (catalog_id, slug)
+);
+
+create table if not exists public.products (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  category_id uuid references public.categories(id) on delete set null,
+  title text not null,
+  slug text not null,
+  sku text not null default '',
+  status public.product_status not null default 'draft',
+  price integer not null default 0 check (price >= 0),
+  old_price integer check (old_price is null or old_price >= 0),
+  cost_price integer check (cost_price is null or cost_price >= 0),
+  description text not null default '',
+  ingredients text not null default '',
+  weight text not null default '',
+  serving text not null default '',
+  stock_count integer not null default 0 check (stock_count >= 0),
+  is_unlimited boolean not null default false,
+  is_popular boolean not null default false,
+  is_new boolean not null default false,
+  is_promo boolean not null default false,
+  seo jsonb not null default '{}'::jsonb,
+  custom_fields jsonb not null default '{}'::jsonb,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (catalog_id, slug)
+);
+
+create table if not exists public.product_images (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  product_id uuid not null references public.products(id) on delete cascade,
+  url text not null,
+  alt text not null default '',
+  sort_order integer not null default 0
+);
+
+create table if not exists public.product_tags (
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  product_id uuid not null references public.products(id) on delete cascade,
+  tag_id uuid not null references public.tags(id) on delete cascade,
+  primary key (product_id, tag_id)
+);
+
+create table if not exists public.product_option_groups (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  product_id uuid not null references public.products(id) on delete cascade,
+  name text not null,
+  required boolean not null default false,
+  min_selected integer not null default 0 check (min_selected >= 0),
+  max_selected integer not null default 1 check (max_selected >= 1),
+  sort_order integer not null default 0
+);
+
+create table if not exists public.product_options (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  group_id uuid not null references public.product_option_groups(id) on delete cascade,
+  name text not null,
+  price_delta integer not null default 0,
+  is_default boolean not null default false,
+  sort_order integer not null default 0
+);
+
+create table if not exists public.orders (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  status public.order_status not null default 'new',
+  customer_name text not null default '',
+  customer_phone text not null default '',
+  comment text not null default '',
+  table_label text not null default '',
+  subtotal integer not null default 0 check (subtotal >= 0),
+  discount integer not null default 0 check (discount >= 0),
+  delivery_fee integer not null default 0 check (delivery_fee >= 0),
+  total integer not null default 0 check (total >= 0),
+  admin_comment text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.order_items (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  order_id uuid not null references public.orders(id) on delete cascade,
+  product_id uuid references public.products(id) on delete set null,
+  title text not null,
+  quantity integer not null check (quantity > 0),
+  unit_price integer not null check (unit_price >= 0),
+  options jsonb not null default '[]'::jsonb,
+  line_total integer not null check (line_total >= 0)
+);
+
+create table if not exists public.bookable_resources (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  title text not null,
+  capacity integer not null default 1 check (capacity > 0),
+  image_url text not null default '',
+  is_active boolean not null default true,
+  sort_order integer not null default 0
+);
+
+create table if not exists public.bookings (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  resource_id uuid not null references public.bookable_resources(id) on delete cascade,
+  status public.booking_status not null default 'new',
+  customer_name text not null,
+  customer_phone text not null,
+  guests integer not null default 1 check (guests > 0),
+  starts_at timestamptz not null,
+  ends_at timestamptz not null,
+  comment text not null default '',
+  created_at timestamptz not null default now(),
+  check (ends_at > starts_at)
+);
+
+create table if not exists public.content_blocks (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  key text not null,
+  content jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  unique (catalog_id, key)
+);
+
+create table if not exists public.catalog_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid not null references public.catalogs(id) on delete cascade,
+  reason text not null,
+  payload jsonb not null,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  catalog_id uuid references public.catalogs(id) on delete cascade,
+  actor_id uuid references auth.users(id) on delete set null,
+  action text not null,
+  entity_table text not null default '',
+  entity_id uuid,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists catalogs_template_version_id_idx on public.catalogs(template_version_id);
+create index if not exists catalog_members_user_id_idx on public.catalog_members(user_id);
+create index if not exists categories_catalog_id_sort_idx on public.categories(catalog_id, sort_order);
+create index if not exists products_catalog_id_status_sort_idx on public.products(catalog_id, status, sort_order);
+create index if not exists orders_catalog_id_status_created_idx on public.orders(catalog_id, status, created_at desc);
+create index if not exists bookings_catalog_resource_time_idx on public.bookings(catalog_id, resource_id, starts_at, ends_at);
+create index if not exists audit_logs_catalog_created_idx on public.audit_logs(catalog_id, created_at desc);
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create or replace function public.is_catalog_member(target_catalog_id uuid, allowed_roles public.catalog_role[])
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.catalog_members member
+    where member.catalog_id = target_catalog_id
+      and member.user_id = auth.uid()
+      and member.role = any(allowed_roles)
+  );
+$$;
+
+create or replace function public.is_catalog_published(target_catalog_id uuid)
+returns boolean
+language sql
+stable
+as $$
+  select exists (
+    select 1
+    from public.catalogs catalog
+    where catalog.id = target_catalog_id
+      and catalog.status = 'published'
+  );
+$$;
+
+create trigger catalogs_updated_at before update on public.catalogs
+for each row execute function public.set_updated_at();
+create trigger categories_updated_at before update on public.categories
+for each row execute function public.set_updated_at();
+create trigger products_updated_at before update on public.products
+for each row execute function public.set_updated_at();
+create trigger orders_updated_at before update on public.orders
+for each row execute function public.set_updated_at();
+
+alter table public.profiles enable row level security;
+alter table public.templates enable row level security;
+alter table public.template_versions enable row level security;
+alter table public.template_presets enable row level security;
+alter table public.catalogs enable row level security;
+alter table public.catalog_members enable row level security;
+alter table public.catalog_theme_settings enable row level security;
+alter table public.catalog_sections enable row level security;
+alter table public.categories enable row level security;
+alter table public.tags enable row level security;
+alter table public.products enable row level security;
+alter table public.product_images enable row level security;
+alter table public.product_tags enable row level security;
+alter table public.product_option_groups enable row level security;
+alter table public.product_options enable row level security;
+alter table public.orders enable row level security;
+alter table public.order_items enable row level security;
+alter table public.bookable_resources enable row level security;
+alter table public.bookings enable row level security;
+alter table public.content_blocks enable row level security;
+alter table public.catalog_snapshots enable row level security;
+alter table public.audit_logs enable row level security;
+
+create policy "profiles read own" on public.profiles for select using (auth.uid() = id);
+create policy "profiles update own" on public.profiles for update using (auth.uid() = id) with check (auth.uid() = id);
+
+create policy "templates public read" on public.templates for select using (true);
+create policy "template versions public read published" on public.template_versions for select using (status in ('published', 'deprecated'));
+create policy "template presets public read" on public.template_presets for select using (true);
+
+create policy "catalogs public read published" on public.catalogs for select using (status = 'published' or public.is_catalog_member(id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "catalogs owner admin update" on public.catalogs for update using (public.is_catalog_member(id, array['owner','admin']::public.catalog_role[])) with check (public.is_catalog_member(id, array['owner','admin']::public.catalog_role[]));
+create policy "catalogs owner delete" on public.catalogs for delete using (public.is_catalog_member(id, array['owner']::public.catalog_role[]));
+
+create policy "members read same catalog" on public.catalog_members for select using (public.is_catalog_member(catalog_id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "members owner manage" on public.catalog_members for all using (public.is_catalog_member(catalog_id, array['owner']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner']::public.catalog_role[]));
+
+create policy "theme public read published" on public.catalog_theme_settings for select using (public.is_catalog_published(catalog_id) or public.is_catalog_member(catalog_id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "theme admin write" on public.catalog_theme_settings for all using (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[]));
+
+create policy "sections public read published" on public.catalog_sections for select using (public.is_catalog_published(catalog_id) or public.is_catalog_member(catalog_id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "sections admin write" on public.catalog_sections for all using (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[]));
+
+create policy "categories public read published" on public.categories for select using ((not is_hidden and public.is_catalog_published(catalog_id)) or public.is_catalog_member(catalog_id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "categories editor write" on public.categories for all using (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[]));
+
+create policy "tags public read published" on public.tags for select using (public.is_catalog_published(catalog_id) or public.is_catalog_member(catalog_id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "tags editor write" on public.tags for all using (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[]));
+
+create policy "products public read active" on public.products for select using ((status in ('active','sold_out') and public.is_catalog_published(catalog_id)) or public.is_catalog_member(catalog_id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "products editor write" on public.products for all using (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[]));
+
+create policy "product images public read active" on public.product_images for select using (public.is_catalog_published(catalog_id) or public.is_catalog_member(catalog_id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "product images editor write" on public.product_images for all using (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[]));
+
+create policy "product tags public read" on public.product_tags for select using (public.is_catalog_published(catalog_id) or public.is_catalog_member(catalog_id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "product tags editor write" on public.product_tags for all using (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[]));
+
+create policy "option groups public read" on public.product_option_groups for select using (public.is_catalog_published(catalog_id) or public.is_catalog_member(catalog_id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "option groups editor write" on public.product_option_groups for all using (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[]));
+create policy "options public read" on public.product_options for select using (public.is_catalog_published(catalog_id) or public.is_catalog_member(catalog_id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "options editor write" on public.product_options for all using (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[]));
+
+create policy "orders admin read" on public.orders for select using (public.is_catalog_member(catalog_id, array['owner','admin','viewer']::public.catalog_role[]));
+create policy "orders admin update" on public.orders for update using (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[]));
+create policy "order items admin read" on public.order_items for select using (public.is_catalog_member(catalog_id, array['owner','admin','viewer']::public.catalog_role[]));
+
+create policy "resources public read active" on public.bookable_resources for select using ((is_active and public.is_catalog_published(catalog_id)) or public.is_catalog_member(catalog_id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "resources admin write" on public.bookable_resources for all using (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[]));
+create policy "bookings admin read" on public.bookings for select using (public.is_catalog_member(catalog_id, array['owner','admin','viewer']::public.catalog_role[]));
+create policy "bookings admin write" on public.bookings for all using (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[]));
+
+create policy "content public read published" on public.content_blocks for select using (public.is_catalog_published(catalog_id) or public.is_catalog_member(catalog_id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "content editor write" on public.content_blocks for all using (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[])) with check (public.is_catalog_member(catalog_id, array['owner','admin','editor']::public.catalog_role[]));
+
+create policy "snapshots owner admin read" on public.catalog_snapshots for select using (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[]));
+create policy "snapshots owner admin insert" on public.catalog_snapshots for insert with check (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[]));
+create policy "audit members read" on public.audit_logs for select using (catalog_id is null or public.is_catalog_member(catalog_id, array['owner','admin','viewer']::public.catalog_role[]));
+
+create or replace function public.create_public_order(
+  target_catalog_id uuid,
+  customer_name text,
+  customer_phone text,
+  comment text,
+  table_label text,
+  items jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  created_order_id uuid;
+  item jsonb;
+  product_record record;
+  item_quantity integer;
+  line_total integer;
+  computed_subtotal integer := 0;
+begin
+  if not public.is_catalog_published(target_catalog_id) then
+    raise exception 'Catalog is not published';
+  end if;
+
+  if jsonb_typeof(items) <> 'array' or jsonb_array_length(items) = 0 then
+    raise exception 'Order items are required';
+  end if;
+
+  insert into public.orders (catalog_id, customer_name, customer_phone, comment, table_label)
+  values (
+    target_catalog_id,
+    coalesce(nullif(trim(customer_name), ''), 'Guest'),
+    coalesce(nullif(trim(customer_phone), ''), ''),
+    coalesce(comment, ''),
+    coalesce(table_label, '')
+  )
+  returning id into created_order_id;
+
+  for item in select * from jsonb_array_elements(items)
+  loop
+    item_quantity := greatest(1, coalesce((item->>'quantity')::integer, 1));
+
+    select id, title, price, stock_count, is_unlimited
+      into product_record
+      from public.products
+      where id = (item->>'product_id')::uuid
+        and catalog_id = target_catalog_id
+        and status = 'active'
+      for update;
+
+    if product_record.id is null then
+      raise exception 'Product is not available';
+    end if;
+
+    if not product_record.is_unlimited and product_record.stock_count < item_quantity then
+      raise exception 'Product stock is not enough';
+    end if;
+
+    line_total := product_record.price * item_quantity;
+    computed_subtotal := computed_subtotal + line_total;
+
+    insert into public.order_items (
+      catalog_id, order_id, product_id, title, quantity, unit_price, options, line_total
+    )
+    values (
+      target_catalog_id,
+      created_order_id,
+      product_record.id,
+      product_record.title,
+      item_quantity,
+      product_record.price,
+      coalesce(item->'options', '[]'::jsonb),
+      line_total
+    );
+
+    if not product_record.is_unlimited then
+      update public.products
+      set stock_count = stock_count - item_quantity,
+          status = case when stock_count - item_quantity <= 0 then 'sold_out'::public.product_status else status end
+      where id = product_record.id;
+    end if;
+  end loop;
+
+  update public.orders
+  set subtotal = computed_subtotal,
+      total = computed_subtotal
+  where id = created_order_id;
+
+  return created_order_id;
+end;
+$$;
+
+insert into public.templates (key, name, business_type, description)
+values
+  ('restaurant-modern', 'Restaurant Modern', 'restaurant', 'Modern restaurant and cafe catalog template.'),
+  ('barbershop-dark', 'Barbershop Dark', 'barbershop', 'Dark service catalog template for barbershops and salons.'),
+  ('menswear-premium', 'Menswear Premium', 'fashion', 'Premium catalog template for menswear retail.')
+on conflict (key) do update set
+  name = excluded.name,
+  business_type = excluded.business_type,
+  description = excluded.description;
+
+insert into public.template_versions (template_id, version, status, entry_key, schema_version, published_at)
+select id, 1, 'published', key || '@1', 1, now()
+from public.templates
+where key in ('restaurant-modern', 'barbershop-dark', 'menswear-premium')
+on conflict (template_id, version) do nothing;
+
+insert into public.template_versions (template_id, version, status, entry_key, schema_version, published_at)
+select id, 2, 'published', key || '@2', 1, now()
+from public.templates
+where key = 'restaurant-modern'
+on conflict (template_id, version) do nothing;
+
+insert into storage.buckets (id, name, public)
+values
+  ('catalog-assets', 'catalog-assets', true),
+  ('catalog-private', 'catalog-private', false)
+on conflict (id) do nothing;
+
+create policy "catalog assets public read" on storage.objects
+for select using (bucket_id = 'catalog-assets');
+
+create policy "catalog assets members write own catalog path" on storage.objects
+for all using (
+  bucket_id = 'catalog-assets'
+  and public.is_catalog_member((storage.foldername(name))[1]::uuid, array['owner','admin','editor']::public.catalog_role[])
+) with check (
+  bucket_id = 'catalog-assets'
+  and public.is_catalog_member((storage.foldername(name))[1]::uuid, array['owner','admin','editor']::public.catalog_role[])
+);
+
+create policy "catalog private members manage own catalog path" on storage.objects
+for all using (
+  bucket_id = 'catalog-private'
+  and public.is_catalog_member((storage.foldername(name))[1]::uuid, array['owner','admin']::public.catalog_role[])
+) with check (
+  bucket_id = 'catalog-private'
+  and public.is_catalog_member((storage.foldername(name))[1]::uuid, array['owner','admin']::public.catalog_role[])
+);
