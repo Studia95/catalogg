@@ -93,8 +93,15 @@ const businessTypeLabels: Record<string, string> = {
 
 const formatMoney = (value: number) => `${new Intl.NumberFormat('ru-RU').format(value)} ₽`;
 
+const getCurrentPlatformPath = () => {
+  if (window.location.hash.startsWith('#/')) {
+    return window.location.hash.slice(1);
+  }
+  return window.location.pathname.replace(import.meta.env.BASE_URL, '/');
+};
+
 const readRouteFromLocation = (): PlatformRoute => {
-  const path = window.location.pathname.replace(import.meta.env.BASE_URL, '/');
+  const path = getCurrentPlatformPath();
   if (path.includes('/admin/catalogs')) return 'catalogs';
   if (path.includes('/admin/templates')) return 'templates';
   if (path.includes('/admin/import-export')) return 'import-export';
@@ -107,7 +114,8 @@ const readRouteFromLocation = (): PlatformRoute => {
 
 const routeToPath = (route: PlatformRoute) => {
   const segment = route === 'dashboard' ? 'dashboard' : route;
-  return new URL(`admin/${segment}`, new URL(import.meta.env.BASE_URL, window.location.origin)).pathname;
+  const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
+  return `${base}#/admin/${segment}`;
 };
 
 function useDebouncedValue<T>(value: T, delay = 350) {
@@ -955,8 +963,13 @@ export function PlatformAdminApp() {
 
   useEffect(() => {
     const onPopState = () => setRoute(readRouteFromLocation());
+    const onHashChange = () => setRoute(readRouteFromLocation());
     window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
+    window.addEventListener('hashchange', onHashChange);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      window.removeEventListener('hashchange', onHashChange);
+    };
   }, []);
 
   const content = useMemo(() => {

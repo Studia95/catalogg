@@ -56,9 +56,15 @@ const restoreGitHubPagesRedirect = () => {
 
 restoreGitHubPagesRedirect();
 
-const isPlatformAdminRoute = window.location.pathname
-  .replace(import.meta.env.BASE_URL, '/')
-  .startsWith('/admin/');
+const getCurrentAppRoute = () => {
+  const hashRoute = window.location.hash.startsWith('#/')
+    ? window.location.hash.slice(1)
+    : '';
+  if (hashRoute) return hashRoute;
+  return window.location.pathname.replace(import.meta.env.BASE_URL, '/');
+};
+
+const isPlatformAdminRoute = getCurrentAppRoute().startsWith('/admin/');
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
