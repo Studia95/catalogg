@@ -912,7 +912,7 @@ function HomeScreen({
   const [active, setActive] = useState('chechen');
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const visibleProducts = isAdmin ? products : products.filter((product) => !product.is_hidden);
-  const featuredCategories = categories.filter((category) => ['fastfood', 'chechen', 'pizza', 'lemonades', 'fridge', 'cabins'].includes(category.id));
+  const featuredCategories = categories;
   const popular = visibleProducts.filter((product) => product.is_popular).slice(0, 6);
   const whatsapp = restaurant.whatsapp.replace(/[^\d]/g, '');
   const openRestaurantMap = () => {
@@ -1585,6 +1585,10 @@ function ProfileSettings({
   const [draft, setDraft] = useState(restaurant);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    setDraft(restaurant);
+  }, [restaurant]);
+
   const updateLogo = async (file?: File) => {
     if (!file) return;
     if (file.type !== 'image/png') {
@@ -1757,18 +1761,20 @@ function CategoriesSettings({
         <small>Фото категории лучше загружать широким: 16:9 или около 1.72:1, например 1200 x 700 px.</small>
         <InlineEditor
           placeholder="Новая категория"
-          onAdd={(name) =>
+          onAdd={(name) => {
+            const id = makeId('category');
             onChangeCategories([
               ...categories,
               {
-                id: makeId('category'),
+                id,
+                slug: id,
                 name,
                 icon: 'flame',
                 kind: 'food',
                 image: demoCategories[0]?.image ?? ''
               }
-            ])
-          }
+            ]);
+          }}
         />
         <div className="settings-list">
           {categories.map((category, index) => (
@@ -2422,6 +2428,7 @@ function AppContent() {
   const persist = (action: Promise<void>) => {
     void action.catch((error) => {
       console.error('Supabase save failed', error);
+      toast.error('Не удалось сохранить изменения в Supabase');
     });
   };
 

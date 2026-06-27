@@ -43,6 +43,7 @@ export type Restaurant = {
 
 export type Category = {
   id: string;
+  slug?: string;
   name: string;
   image: string;
   icon: string;

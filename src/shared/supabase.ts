@@ -98,6 +98,7 @@ const mapPlatformRestaurant = (value: PlatformCatalogRow): Restaurant => ({
 
 const mapPlatformCategory = (value: PlatformCategoryRow): Category => ({
   id: value.id,
+  slug: value.slug,
   name: value.name,
   image: value.image_url ?? '',
   icon: value.icon ?? '',
@@ -313,6 +314,13 @@ async function throwOnError<T>(request: PromiseLike<{ data: T | null; error: unk
 
 const postgrestList = (values: string[]) => `(${values.map((value) => `"${value.replace(/"/g, '""')}"`).join(',')})`;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const createSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9а-яё]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 63) || crypto.randomUUID();
 
 const productToPlatformRow = (product: Product) => ({
   catalog_id: activePlatformCatalogId,
@@ -451,17 +459,23 @@ export async function saveThemeToSupabase(value: ThemeSettings) {
 export async function replaceCategoriesInSupabase(values: Category[]) {
   if (!supabase) return;
   if (activePlatformCatalogId) {
+    const slugs = values.map((value) => value.slug || createSlug(value.name || value.id));
     const rows = values.map((value, index) => ({
       ...(uuidPattern.test(value.id) ? { id: value.id } : {}),
       catalog_id: activePlatformCatalogId,
       name: value.name,
-      slug: value.id.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || crypto.randomUUID(),
+      slug: value.slug || createSlug(value.name || value.id),
       image_url: value.image,
       icon: value.icon,
       sort_order: index
     }));
     if (rows.length > 0) {
-      await throwOnError(supabase.from('categories').upsert(rows, { onConflict: 'id' }));
+      await throwOnError(supabase.from('categories').upsert(rows, { onConflict: 'catalog_id,slug' }));
+      await throwOnError(
+        supabase.from('categories').delete().eq('catalog_id', activePlatformCatalogId).not('slug', 'in', postgrestList(slugs))
+      );
+    } else {
+      await throwOnError(supabase.from('categories').delete().eq('catalog_id', activePlatformCatalogId));
     }
     return;
   }
