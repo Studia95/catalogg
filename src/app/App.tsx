@@ -1457,7 +1457,15 @@ function UpsellReminder({
   );
 }
 
-function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+function LoginModal({
+  catalogSlug,
+  onClose,
+  onSuccess
+}: {
+  catalogSlug: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
   const login = useAuthStore((state) => state.login);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -1467,7 +1475,7 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: ()
     const formData = new FormData(event.currentTarget);
     setIsLoading(true);
     setError('');
-    const success = await login(String(formData.get('email')), String(formData.get('password')));
+    const success = await login(String(formData.get('email')), String(formData.get('password')), catalogSlug);
     setIsLoading(false);
     if (success) {
       onSuccess();
@@ -2379,8 +2387,17 @@ function DesignEditor({
   );
 }
 
+const getCurrentCatalogSlug = () => {
+  const route = window.location.hash.startsWith('#/')
+    ? window.location.hash.slice(2)
+    : window.location.pathname.replace(import.meta.env.BASE_URL, '').replace(/^\/+/, '');
+  const firstSegment = route.split('/').filter(Boolean)[0];
+  return firstSegment && firstSegment !== 'admin' ? firstSegment : 'mangal';
+};
+
 function AppContent() {
-  const { data, isLoading } = useQuery({ queryKey: ['catalog'], queryFn: loadCatalog });
+  const catalogSlug = useMemo(() => getCurrentCatalogSlug(), []);
+  const { data, isLoading } = useQuery({ queryKey: ['catalog', catalogSlug], queryFn: () => loadCatalog(catalogSlug) });
   const themeStore = useThemeStore((state) => state.theme);
   const updateTheme = useThemeStore((state) => state.updateTheme);
   const setAdmin = useAuthStore((state) => state.setAdmin);
@@ -2409,9 +2426,9 @@ function AppContent() {
   };
 
   useEffect(() => {
-    void hasAdminSession().then(setAdmin);
-    return onAdminSessionChange(setAdmin);
-  }, [setAdmin]);
+    void hasAdminSession(catalogSlug).then(setAdmin);
+    return onAdminSessionChange(setAdmin, catalogSlug);
+  }, [catalogSlug, setAdmin]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -2939,6 +2956,7 @@ function AppContent() {
       />
       {showLogin && (
         <LoginModal
+          catalogSlug={catalogSlug}
           onClose={() => setShowLogin(false)}
           onSuccess={() => setScreen('settings')}
         />

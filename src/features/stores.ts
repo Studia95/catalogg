@@ -15,7 +15,7 @@ type CartStore = {
 type AuthStore = {
   isAdmin: boolean;
   setAdmin: (isAdmin: boolean) => void;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string, catalogSlug?: string) => Promise<boolean>;
   logout: () => Promise<void>;
 };
 
@@ -95,9 +95,9 @@ export const useCartStore = create<CartStore>()(
 export const useAuthStore = create<AuthStore>((set) => ({
   isAdmin: false,
   setAdmin: (isAdmin) => set({ isAdmin }),
-  login: async (email, password) => {
+  login: async (email, password, catalogSlug) => {
     const { signInAdmin } = await import('../shared/supabase');
-    const success = await signInAdmin(email, password);
+    const success = await signInAdmin(email, password, catalogSlug);
     if (success) {
       set({ isAdmin: true });
     }
