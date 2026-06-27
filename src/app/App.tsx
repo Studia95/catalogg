@@ -377,8 +377,8 @@ const darkThemePreset: Partial<ThemeSettings> = {
   text_secondary: '#aaa39a',
   product_title_color: '#f8f5ef',
   category_title_color: '#f8f5ef',
-  accent_color: '#6C5CE7',
-  accent_secondary: '#8f7cff',
+  accent_color: '#e8a23a',
+  accent_secondary: '#ffd082',
   card_shadow: '0 18px 46px rgba(0, 0, 0, 0.28)'
 };
 
@@ -494,7 +494,7 @@ function applyTheme(theme: ThemeSettings) {
     '--category-title': theme.category_title_color ?? theme.text_primary ?? '#f8f5ef',
     '--accent': theme.accent_color,
     '--accent-2': theme.accent_secondary,
-    '--primary': theme.accent_color ?? '#6C5CE7',
+    '--primary': theme.accent_color ?? '#e8a23a',
     '--button-radius': `${theme.button_radius}px`,
     '--primary-bg':
       theme.button_style === 'filled'
@@ -2081,8 +2081,8 @@ function ColorSetting({
 }
 
 function DesignSettings({ theme, onChange }: { theme: ThemeSettings; onChange: (patch: Partial<ThemeSettings>) => void }) {
-  const primaryColors = ['#6C5CE7', '#e8a23a', '#3b82f6', '#16a34a', '#ef4444', '#111827'];
-  const accentColors = ['#8f7cff', '#ffd082', '#f59e0b', '#f97316', '#06b6d4', '#84cc16'];
+  const primaryColors = ['#e8a23a', '#3b82f6', '#16a34a', '#ef4444', '#a855f7', '#111827'];
+  const accentColors = ['#ffd082', '#f59e0b', '#f97316', '#ec4899', '#06b6d4', '#84cc16'];
   const backgroundColors = ['#070809', '#101419', '#f7f3ec', '#f8fafc', '#fff7ed', '#f1f5f9'];
   const cardColors = ['#121416', '#1f2937', '#ffffff', '#fffaf0', '#f8fafc', '#0f172a'];
   const textColors = ['#f8f5ef', '#ffffff', '#181510', '#111827', '#292524', '#0f172a'];
@@ -2883,8 +2883,8 @@ function AppContent() {
     saveTheme({
       ...darkThemePreset,
       card_radius: 16,
-      accent_color: '#6C5CE7',
-      accent_secondary: '#8f7cff',
+      accent_color: '#e8a23a',
+      accent_secondary: '#ffd082',
       button_style: 'filled',
       button_radius: 14,
       header_style: 'centered'
