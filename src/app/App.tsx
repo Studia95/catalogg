@@ -172,6 +172,20 @@ const isProductInCategory = (product: Product, categoryId: string) =>
 const getOrderFlowCategories = (categories: Category[]) =>
   categories.filter((category) => category.kind !== 'space' && category.showInOrderFlow === true);
 
+const createCategoryDraft = (name = 'Новая категория'): Category => {
+  const id = makeId('category');
+  return {
+    id,
+    slug: id,
+    name,
+    icon: 'flame',
+    kind: 'food',
+    showOnHome: true,
+    showInOrderFlow: false,
+    image: demoCategories[0]?.image ?? ''
+  };
+};
+
 const makeLoadingRestaurant = (catalogSlug: string): Restaurant => ({
   ...demoRestaurant,
   id: catalogSlug,
@@ -1603,7 +1617,7 @@ function LoginModal({
   );
 }
 
-function AdminPanel({ onAdd, onSettings }: { onAdd: () => void; onSettings: () => void }) {
+function AdminPanel({ active, onAdd, onSettings }: { active?: 'add' | 'settings'; onAdd: () => void; onSettings: () => void }) {
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const logout = useAuthStore((state) => state.logout);
 
@@ -1613,10 +1627,10 @@ function AdminPanel({ onAdd, onSettings }: { onAdd: () => void; onSettings: () =
 
   return (
     <nav className="admin-panel">
-      <button type="button" onClick={onAdd}>
+      <button className={active === 'add' ? 'is-active' : ''} type="button" onClick={onAdd}>
         <Plus /> Добавить
       </button>
-      <button type="button" onClick={onSettings}>
+      <button className={active === 'settings' ? 'is-active' : ''} type="button" onClick={onSettings}>
         <Settings /> Настройки
       </button>
       <button type="button" onClick={logout} aria-label="Выйти">
@@ -1626,14 +1640,28 @@ function AdminPanel({ onAdd, onSettings }: { onAdd: () => void; onSettings: () =
   );
 }
 
-function SettingsHeader({ title, onBack }: { title: string; onBack: () => void }) {
+function SettingsHeader({
+  title,
+  onBack,
+  onAction
+}: {
+  title: string;
+  onBack: () => void;
+  onAction?: () => void;
+}) {
   return (
     <header className="settings-header">
       <button className="icon-button" type="button" onClick={onBack} aria-label="Назад">
         <ArrowLeft />
       </button>
       <h1>{title}</h1>
-      <span />
+      {onAction ? (
+        <button className="icon-button" type="button" onClick={onAction} aria-label="Добавить категорию">
+          <Plus />
+        </button>
+      ) : (
+        <span />
+      )}
     </header>
   );
 }
@@ -1846,20 +1874,20 @@ function CategoriesSettings({
     onChangeCategories(next);
   };
   const addCategory = (name = 'Новая категория') => {
-    const id = makeId('category');
-    onChangeCategories([
-      ...categories,
-      {
-        id,
-        slug: id,
-        name,
-        icon: 'flame',
-        kind: 'food',
-        showOnHome: true,
-        showInOrderFlow: false,
-        image: demoCategories[0]?.image ?? ''
-      }
-    ]);
+    onChangeCategories([...categories, createCategoryDraft(name)]);
+  };
+  const setDisplayType = (categoryId: string, displayType: 'main' | 'secondary') => {
+    onChangeCategories(
+      categories.map((item) =>
+        item.id === categoryId
+          ? {
+              ...item,
+              showOnHome: displayType === 'main',
+              showInOrderFlow: displayType === 'secondary'
+            }
+          : item
+      )
+    );
   };
 
   return (
@@ -1909,57 +1937,25 @@ function CategoriesSettings({
                   </button>
                 ))}
               </div>
-              <label className="category-home-toggle">
-                <input
-                  type="checkbox"
-                  checked={category.showOnHome !== false}
-                  onChange={(event) =>
-                    onChangeCategories(
-                      categories.map((item) =>
-                        item.id === category.id ? { ...item, showOnHome: event.target.checked } : item
-                      )
-                    )
-                  }
-                />
-                <span>На главной</span>
-              </label>
-              <label className="category-home-toggle">
-                <input
-                  type="checkbox"
-                  checked={category.showInOrderFlow === true}
-                  onChange={(event) =>
-                    onChangeCategories(
-                      categories.map((item) =>
-                        item.id === category.id ? { ...item, showInOrderFlow: event.target.checked } : item
-                      )
-                    )
-                  }
-                />
+              <div className="category-display-options">
+                <label className="category-home-toggle">
+                  <input
+                    type="radio"
+                    name={`display-type-${category.id}`}
+                    checked={category.showInOrderFlow !== true}
+                    onChange={() => setDisplayType(category.id, 'main')}
+                  />
+                  <span>На главной</span>
+                </label>
+                <label className="category-home-toggle">
+                  <input
+                    type="radio"
+                    name={`display-type-${category.id}`}
+                    checked={category.showInOrderFlow === true}
+                    onChange={() => setDisplayType(category.id, 'secondary')}
+                  />
                   <span>После далее</span>
-              </label>
-              <div className="category-kind-picker" aria-label={`Тип категории ${category.name}`}>
-                {[
-                  ['food', ChefHat, 'Еда'],
-                  ['drink', CupSoda, 'Напитки'],
-                  ['space', Utensils, 'Кабинки']
-                ].map(([kind, Icon, label]) => (
-                  <button
-                    className={category.kind === kind ? 'is-active' : ''}
-                    type="button"
-                    key={kind as string}
-                    title={label as string}
-                    aria-label={label as string}
-                    onClick={() =>
-                      onChangeCategories(
-                        categories.map((item) =>
-                          item.id === category.id ? { ...item, kind: kind as Category['kind'] } : item
-                        )
-                      )
-                    }
-                  >
-                    <Icon />
-                  </button>
-                ))}
+                </label>
               </div>
               <div className="category-url-row">
                 <Link2 />
@@ -2964,6 +2960,7 @@ function AppContent() {
           }
           setScreen('settings');
         }}
+        onAction={screen === 'settings-categories' ? () => saveCategories([...catalog.categories, createCategoryDraft()]) : undefined}
       />
       {screen === 'settings' && <SettingsHome onOpen={setScreen} />}
       {screen === 'settings-profile' && (
@@ -3155,7 +3152,11 @@ function AppContent() {
         </>
       )}
 
-      <AdminPanel onAdd={() => setAdminEditor('dish')} onSettings={() => setScreen('settings')} />
+      <AdminPanel
+        active={screen.startsWith('settings') ? 'settings' : undefined}
+        onAdd={() => setAdminEditor('dish')}
+        onSettings={() => setScreen('settings')}
+      />
       <DesignEditor
         editingProduct={editingProduct}
         categories={catalog.categories}
