@@ -2,8 +2,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
-  Archive,
-  Ban,
   BookOpen,
   CheckCircle2,
   ChevronLeft,
@@ -12,7 +10,6 @@ import {
   CreditCard,
   Database,
   Eye,
-  FileDown,
   Filter,
   Home,
   KeyRound,
@@ -20,7 +17,6 @@ import {
   LayoutTemplate,
   LogOut,
   MoreHorizontal,
-  Pencil,
   Plus,
   Search,
   Settings,
@@ -301,7 +297,6 @@ function PublicationBadge({ status }: { status: PlatformClient['catalogStatus'] 
 
 function ClientActions({ client }: { client: PlatformClient }) {
   const publicUrl = getCatalogPublicUrl(client.catalogSlug);
-  const adminUrl = getCatalogAdminUrl(client.catalogSlug);
 
   return (
     <div className="client-actions">
@@ -309,29 +304,18 @@ function ClientActions({ client }: { client: PlatformClient }) {
         <Eye />
         Открыть
       </button>
-      <button type="button" onClick={() => window.open(adminUrl, '_blank', 'noopener,noreferrer')}>
-        <ShieldAlert />
-        Админка
+      <button
+        type="button"
+        onClick={() => {
+          void copyText(publicUrl).then(() => toast.success('Ссылка скопирована'));
+        }}
+        aria-label="Копировать ссылку"
+      >
+        <Copy />
+        Копировать
       </button>
-      <button type="button">
-        <Pencil />
-        Редактировать
-      </button>
-      <button type="button">
-        <KeyRound />
-        Сбросить пароль
-      </button>
-      <button type="button">
-        <Ban />
-        {client.status === 'active' ? 'Деактивировать' : 'Активировать'}
-      </button>
-      <button type="button">
-        <FileDown />
-        Экспорт
-      </button>
-      <button className="is-danger" type="button">
-        <Archive />
-        Архив
+      <button type="button" aria-label="Ещё">
+        <MoreHorizontal />
       </button>
     </div>
   );
@@ -341,6 +325,15 @@ function ClientTable({ clients }: { clients: PlatformClient[] }) {
   return (
     <div className="clients-table-wrap">
       <table className="clients-table">
+        <colgroup>
+          <col className="clients-table__client" />
+          <col className="clients-table__contacts" />
+          <col className="clients-table__template" />
+          <col className="clients-table__catalog" />
+          <col className="clients-table__status" />
+          <col className="clients-table__link" />
+          <col className="clients-table__actions" />
+        </colgroup>
         <thead>
           <tr>
             <th>Клиент</th>
@@ -413,6 +406,35 @@ function ClientTable({ clients }: { clients: PlatformClient[] }) {
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function ClientTableSkeleton() {
+  return (
+    <div className="clients-table-wrap clients-table-wrap--skeleton" aria-label="Загрузка клиентов">
+      {Array.from({ length: 4 }, (_, index) => (
+        <div className="client-skeleton-row" key={index}>
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ClientEmptyState({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="platform-empty-state">
+      <Users />
+      <h2>У вас пока нет клиентов</h2>
+      <p>Создайте первый каталог и выдайте владельцу доступ.</p>
+      <button type="button" onClick={onCreate}>
+        <Plus />
+        Создать первый каталог
+      </button>
     </div>
   );
 }
@@ -896,7 +918,7 @@ function ClientsPage({ onCreate }: { onCreate: () => void }) {
           setPage(1);
         }}
       />
-      {clientsQuery.isLoading && <div className="platform-state">Загружаем клиентов...</div>}
+      {clientsQuery.isLoading && <ClientTableSkeleton />}
       {clientsQuery.isError && (
         <div className="platform-state">
           Не удалось загрузить клиентов.
@@ -905,7 +927,7 @@ function ClientsPage({ onCreate }: { onCreate: () => void }) {
           </button>
         </div>
       )}
-      {!clientsQuery.isLoading && clients.length === 0 && <div className="platform-state">Клиентов пока нет.</div>}
+      {!clientsQuery.isLoading && clients.length === 0 && <ClientEmptyState onCreate={onCreate} />}
       {clients.length > 0 && (
         <>
           <ClientTable clients={clients} />
