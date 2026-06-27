@@ -109,6 +109,41 @@ a {
   color: #111111;
 }
 
+.app-shell--category-settings {
+  --bg: #fbfaf8;
+  --card: #ffffff;
+  --text: #111111;
+  --muted: #6d6660;
+  --accent: #ff8a00;
+  --accent-2: #ff8a00;
+  --settings-card: #ffffff;
+  --settings-card-text: #111111;
+  --button-radius: 12px;
+  max-width: 980px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(251, 250, 248, 0.98)),
+    #fbfaf8;
+  color: #111111;
+}
+
+.app-shell--category-settings .settings-header {
+  grid-template-columns: 48px minmax(0, 1fr) 48px;
+  margin-bottom: 22px;
+}
+
+.app-shell--category-settings .settings-header h1 {
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.app-shell--category-settings .settings-header .icon-button {
+  width: 48px;
+  height: 48px;
+  border: 0;
+  background: transparent;
+  color: #111111;
+}
+
 .top-bar {
   display: grid;
   grid-template-columns: 120px minmax(0, 1fr) 120px;
@@ -1874,8 +1909,9 @@ a {
   overflow: auto;
   border-radius: 28px;
   padding: 26px 20px 22px;
-  background: var(--card);
-  color: var(--text);
+  background: #ffffff;
+  color: #17120f;
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.28);
 }
 
 .flow-modal__close {
@@ -1906,7 +1942,7 @@ a {
 
 .flow-modal > p {
   margin: 0;
-  color: var(--muted);
+  color: #6d6660;
   text-align: center;
   font-size: 17px;
   line-height: 1.35;
@@ -1937,7 +1973,7 @@ a {
   padding: 18px;
   border: 1px solid rgba(232, 162, 58, 0.36);
   border-radius: 999px;
-  color: var(--accent-2);
+  color: #ffad3d;
 }
 
 .modal-switch {
@@ -2039,55 +2075,87 @@ a {
 
 .flow-products {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  max-height: min(48dvh, 540px);
+  overflow-y: auto;
+  padding: 2px 2px 8px;
 }
 
 .flow-product-card {
+  position: relative;
   display: grid;
-  grid-template-columns: 74px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  min-height: 86px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text);
+  grid-template-rows: 112px auto auto 36px;
+  gap: 6px;
+  min-height: 228px;
+  border: 1px solid #ece8e1;
+  border-radius: 12px;
+  padding: 10px;
+  background: #ffffff;
+  color: #111111;
   text-align: left;
+  box-shadow: 0 10px 28px rgba(20, 18, 16, 0.07);
 }
 
 .flow-product-card.is-selected {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, rgba(255, 255, 255, 0.04));
+  border-color: #ffad3d;
+  background: #fff6e6;
 }
 
 .flow-product-card img,
 .flow-product-card .image-fallback {
-  width: 74px;
-  height: 68px;
-  border-radius: 12px;
+  width: 100%;
+  height: 112px;
+  border-radius: 10px;
   object-fit: cover;
-}
-
-.flow-product-card span {
-  display: grid;
-  min-width: 0;
-  gap: 5px;
 }
 
 .flow-product-card strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1.15;
 }
 
 .flow-product-card small {
-  color: var(--accent-2);
-  font-size: 15px;
+  color: #ff8a00;
+  font-size: 16px;
   font-weight: 800;
+}
+
+.flow-product-card__stepper {
+  display: flex;
+  align-items: center;
+  justify-content: end;
+  gap: 8px;
+}
+
+.flow-product-card__stepper button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #ffad3d;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #ff8a00;
+}
+
+.flow-product-card.is-selected .flow-product-card__stepper button:last-child {
+  background: #ff9d00;
+  color: #ffffff;
+}
+
+.flow-product-card__stepper svg {
+  width: 18px;
+  height: 18px;
+}
+
+.flow-product-card__stepper span {
+  min-width: 18px;
+  text-align: center;
+  font-weight: 900;
 }
 
 .flow-selected {
@@ -2708,6 +2776,248 @@ a {
   grid-template-columns: 24px 76px minmax(120px, 0.8fr) minmax(128px, 0.8fr) 126px 126px 112px minmax(160px, 1.2fr) 42px 42px 42px;
 }
 
+.category-settings-screen {
+  gap: 16px;
+}
+
+.category-settings-card {
+  gap: 18px;
+  border-color: #ece8e1;
+  border-radius: 16px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.category-settings-tip {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  border-radius: 14px;
+  padding: 18px 22px;
+  background: #fff1e5;
+  color: #ff8400;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.category-settings-tip svg {
+  width: 24px;
+  height: 24px;
+  margin-top: 3px;
+}
+
+.app-shell--category-settings .settings-list {
+  gap: 14px;
+}
+
+.app-shell--category-settings .settings-list-item--category {
+  grid-template-columns: 28px 138px minmax(220px, 1fr) 180px 44px 44px;
+  grid-template-areas:
+    "grip thumb name icons up delete"
+    "grip thumb toggles kind down delete"
+    "grip thumb url upload clear delete";
+  gap: 14px;
+  align-items: center;
+  border: 1px solid #ece8e1;
+  border-radius: 16px;
+  padding: 20px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(20, 18, 16, 0.05);
+}
+
+.app-shell--category-settings .settings-list-item--category > svg {
+  grid-area: grip;
+  width: 26px;
+  height: 26px;
+  color: #8b8b8b;
+}
+
+.app-shell--category-settings .settings-list-item--category .settings-thumb {
+  grid-area: thumb;
+  width: 138px;
+  height: 128px;
+  border: 0;
+  border-radius: 12px;
+}
+
+.app-shell--category-settings .settings-list-item--category > input:not([aria-label]) {
+  grid-area: name;
+  min-height: 58px;
+  border-color: #dedede;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #111111;
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.app-shell--category-settings .category-icon-picker {
+  grid-area: icons;
+  justify-content: end;
+  gap: 16px;
+  overflow: visible;
+  padding: 0;
+}
+
+.app-shell--category-settings .category-icon-picker button,
+.category-kind-picker button {
+  flex: 0 0 58px;
+  width: 58px;
+  height: 58px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #111111;
+}
+
+.app-shell--category-settings .category-icon-picker button.is-active,
+.category-kind-picker button.is-active {
+  background: #fff1e5;
+  color: #ff8400;
+}
+
+.app-shell--category-settings .category-icon-picker svg,
+.category-kind-picker svg {
+  width: 30px;
+  height: 30px;
+  stroke-width: 2;
+}
+
+.app-shell--category-settings .category-home-toggle {
+  min-height: 34px;
+  justify-content: start;
+  border: 0;
+  padding: 0;
+  color: #6d6660;
+  font-size: 16px;
+}
+
+.app-shell--category-settings .category-home-toggle:nth-of-type(1) {
+  grid-area: toggles;
+}
+
+.app-shell--category-settings .category-home-toggle:nth-of-type(2) {
+  grid-area: toggles;
+  margin-left: 180px;
+}
+
+.app-shell--category-settings .category-home-toggle input {
+  width: 26px;
+  height: 26px;
+}
+
+.category-kind-picker {
+  grid-area: kind;
+  display: flex;
+  justify-content: end;
+  gap: 16px;
+}
+
+.category-url-row {
+  grid-area: url;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  border: 1px solid #dedede;
+  border-radius: 10px;
+  padding: 0 12px;
+  color: #6d6660;
+}
+
+.category-url-row svg {
+  width: 24px;
+  height: 24px;
+}
+
+.category-url-row input {
+  min-height: 48px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #111111;
+}
+
+.category-upload-button,
+.category-clear-button {
+  display: inline-flex;
+  grid-area: upload;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #dedede;
+  border-radius: 10px;
+  padding: 0 16px;
+  background: #ffffff;
+  color: #111111;
+  font-weight: 800;
+}
+
+.category-upload-button input {
+  display: none;
+}
+
+.category-upload-button svg,
+.category-clear-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+.category-clear-button {
+  grid-area: clear;
+}
+
+.app-shell--category-settings .settings-list-item--category > button:nth-last-of-type(3) {
+  grid-area: up;
+  border: 0;
+  background: transparent;
+  color: #ff8400;
+  font-size: 42px;
+  line-height: 1;
+}
+
+.app-shell--category-settings .settings-list-item--category > button:nth-last-of-type(2) {
+  grid-area: down;
+  border: 0;
+  background: transparent;
+  color: #8f8f8f;
+  font-size: 42px;
+  line-height: 1;
+}
+
+.app-shell--category-settings .settings-list-item--category > .danger-icon {
+  grid-area: delete;
+  align-self: end;
+  border-color: #dedede;
+  background: #ffffff;
+  color: #111111;
+}
+
+.category-add-wide {
+  display: inline-flex;
+  min-height: 58px;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 0;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #ff9d00, #ff7900);
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.category-add-wide svg {
+  width: 28px;
+  height: 28px;
+}
+
 .settings-list-item--cabin {
   grid-template-columns: 76px minmax(110px, 0.8fr) minmax(110px, 0.7fr) minmax(160px, 1.2fr) 42px;
 }
@@ -3152,6 +3462,16 @@ a {
     grid-column: 3 / -1;
     order: 12;
   }
+
+  .app-shell--category-settings .settings-list-item--category {
+    grid-template-columns: 28px 138px minmax(220px, 1fr) 180px 44px 44px;
+  }
+
+  .app-shell--category-settings .settings-list-item--category input[aria-label] {
+    display: block;
+    grid-column: auto;
+    order: initial;
+  }
 }
 
 @media (max-width: 720px) {
@@ -3246,6 +3566,32 @@ a {
   .flow-product-card .image-fallback {
     width: 62px;
     height: 60px;
+  }
+
+  .flow-products {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-height: min(50dvh, 520px);
+  }
+
+  .flow-product-card {
+    grid-template-columns: none;
+    grid-template-rows: 104px auto auto 34px;
+    min-height: 218px;
+    padding: 8px;
+  }
+
+  .flow-product-card img,
+  .flow-product-card .image-fallback {
+    width: 100%;
+    height: 104px;
+  }
+
+  .flow-product-card strong {
+    font-size: 14px;
+  }
+
+  .flow-product-card small {
+    font-size: 14px;
   }
 
   .category-card {
@@ -3462,6 +3808,97 @@ a {
   .settings-thumb {
     width: 64px;
     height: 52px;
+  }
+
+  .app-shell--category-settings {
+    padding: 18px 12px 112px;
+  }
+
+  .app-shell--category-settings .settings-header h1 {
+    font-size: 27px;
+  }
+
+  .category-settings-tip {
+    grid-template-columns: 24px minmax(0, 1fr);
+    padding: 14px 16px;
+    font-size: 15px;
+  }
+
+  .app-shell--category-settings .settings-list-item--category {
+    grid-template-columns: 22px 96px minmax(0, 1fr) 42px;
+    grid-template-areas:
+      "grip thumb name up"
+      "grip thumb toggles down"
+      "grip thumb icons icons"
+      "url url url url"
+      "upload upload clear delete";
+    gap: 10px;
+    border-radius: 14px;
+    padding: 12px;
+  }
+
+  .app-shell--category-settings .settings-list-item--category .settings-thumb {
+    width: 96px;
+    height: 96px;
+  }
+
+  .app-shell--category-settings .settings-list-item--category > input:not([aria-label]) {
+    min-height: 50px;
+    font-size: 17px;
+  }
+
+  .app-shell--category-settings .settings-list-item--category input[aria-label] {
+    display: block;
+  }
+
+  .app-shell--category-settings .category-home-toggle {
+    font-size: 13px;
+  }
+
+  .app-shell--category-settings .category-home-toggle:nth-of-type(2) {
+    margin-left: 122px;
+  }
+
+  .app-shell--category-settings .category-home-toggle input {
+    width: 22px;
+    height: 22px;
+  }
+
+  .app-shell--category-settings .category-icon-picker,
+  .category-kind-picker {
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .app-shell--category-settings .category-icon-picker button,
+  .category-kind-picker button {
+    flex-basis: 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .app-shell--category-settings .category-icon-picker svg,
+  .category-kind-picker svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .category-url-row {
+    min-height: 48px;
+  }
+
+  .category-upload-button,
+  .category-clear-button {
+    min-height: 48px;
+    padding: 0 10px;
+    font-size: 14px;
+  }
+
+  .app-shell--category-settings .settings-list-item--category > button:nth-last-of-type(3),
+  .app-shell--category-settings .settings-list-item--category > button:nth-last-of-type(2) {
+    min-width: 38px;
+    height: 38px;
+    font-size: 30px;
   }
 
   .admin-panel {

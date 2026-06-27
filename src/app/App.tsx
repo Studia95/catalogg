@@ -51,6 +51,8 @@ import {
   Users,
   Wheat,
   GripVertical,
+  Info,
+  Link2,
   RefreshCcw,
   X
 } from 'lucide-react';
@@ -80,6 +82,7 @@ import {
   saveProductToSupabase,
   saveRestaurantToSupabase,
   saveThemeToSupabase,
+  supabase,
   hasAdminSession,
   onAdminSessionChange,
   updateProductInSupabase
@@ -1484,10 +1487,11 @@ function UpsellReminder({
   onDismiss: () => void;
 }) {
   const add = useCartStore((state) => state.add);
+  const decrement = useCartStore((state) => state.decrement);
   const isDrinks = category.kind === 'drink';
   const suggestions = products
     .filter((product) => isProductInCategory(product, category.id))
-    .slice(0, 4);
+    .slice(0, 12);
   const selectedProduct = suggestions.find((product) => product.id === selectedId);
 
   const chooseProduct = (product: Product) => {
@@ -1507,18 +1511,27 @@ function UpsellReminder({
         <p>Можно добавить к заказу одну из позиций перед оформлением.</p>
         <div className="flow-products">
           {suggestions.map((product) => (
-            <button
+            <article
               className={selectedId === product.id ? 'flow-product-card is-selected' : 'flow-product-card'}
               key={product.id}
-              type="button"
-              onClick={() => chooseProduct(product)}
             >
               <SafeImage src={product.image_url} alt={product.title} />
-              <span>
-                <strong>{product.title}</strong>
-                <small>{formatPrice(product.price)}</small>
-              </span>
-            </button>
+              <strong>{product.title}</strong>
+              <small>{formatPrice(product.price)}</small>
+              <div className="flow-product-card__stepper">
+                {selectedId === product.id && (
+                  <>
+                    <button type="button" onClick={() => decrement(product.id)} aria-label={`Уменьшить ${product.title}`}>
+                      <Minus />
+                    </button>
+                    <span>1</span>
+                  </>
+                )}
+                <button type="button" onClick={() => chooseProduct(product)} aria-label={`Добавить ${product.title}`}>
+                  <Plus />
+                </button>
+              </div>
+            </article>
           ))}
         </div>
         {suggestions.length === 0 && (
@@ -1832,33 +1845,30 @@ function CategoriesSettings({
     [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
     onChangeCategories(next);
   };
+  const addCategory = (name = 'Новая категория') => {
+    const id = makeId('category');
+    onChangeCategories([
+      ...categories,
+      {
+        id,
+        slug: id,
+        name,
+        icon: 'flame',
+        kind: 'food',
+        showOnHome: true,
+        showInOrderFlow: false,
+        image: demoCategories[0]?.image ?? ''
+      }
+    ]);
+  };
 
   return (
-    <main className="settings-screen">
-      <section className="settings-form-card">
-        <div className="settings-section-head">
-          <h2>Категории</h2>
+    <main className="settings-screen category-settings-screen">
+      <section className="settings-form-card category-settings-card">
+        <div className="category-settings-tip">
+          <Info />
+          <span>Фото категории лучше загружать широким: 16:9 или около 1.72:1, например 1200 x 700 px.</span>
         </div>
-        <small>Фото категории лучше загружать широким: 16:9 или около 1.72:1, например 1200 x 700 px.</small>
-        <InlineEditor
-          placeholder="Новая категория"
-          onAdd={(name) => {
-            const id = makeId('category');
-            onChangeCategories([
-              ...categories,
-              {
-                id,
-                slug: id,
-                name,
-                icon: 'flame',
-                kind: 'food',
-                showOnHome: true,
-                showInOrderFlow: false,
-                image: demoCategories[0]?.image ?? ''
-              }
-            ]);
-          }}
-        />
         <div className="settings-list">
           {categories.map((category, index) => (
             <article className="settings-list-item settings-list-item--category" key={category.id}>
@@ -1884,7 +1894,7 @@ function CategoriesSettings({
                 }
               />
               <div className="category-icon-picker" aria-label={`Иконка категории ${category.name}`}>
-                {categoryIconOptions.map(({ id, label, Icon }) => (
+                {categoryIconOptions.slice(0, 3).map(({ id, label, Icon }) => (
                   <button
                     className={category.icon === id ? 'is-active' : ''}
                     type="button"
@@ -1925,31 +1935,62 @@ function CategoriesSettings({
                     )
                   }
                 />
-                <span>После далее</span>
+                  <span>После далее</span>
               </label>
-              <select
-                value={category.kind}
-                aria-label={`Тип категории ${category.name}`}
-                onChange={(event) =>
-                  onChangeCategories(
-                    categories.map((item) =>
-                      item.id === category.id ? { ...item, kind: event.target.value as Category['kind'] } : item
-                    )
-                  )
-                }
-              >
-                <option value="food">Еда</option>
-                <option value="drink">Напитки</option>
-                <option value="space">Кабинки</option>
-              </select>
-              <input
-                value={category.image}
-                aria-label={`Фото категории ${category.name}`}
-                placeholder="Ссылка на фото"
-                onChange={(event) =>
-                  onChangeCategories(categories.map((item) => (item.id === category.id ? { ...item, image: event.target.value } : item)))
-                }
-              />
+              <div className="category-kind-picker" aria-label={`Тип категории ${category.name}`}>
+                {[
+                  ['food', ChefHat, 'Еда'],
+                  ['drink', CupSoda, 'Напитки'],
+                  ['space', Utensils, 'Кабинки']
+                ].map(([kind, Icon, label]) => (
+                  <button
+                    className={category.kind === kind ? 'is-active' : ''}
+                    type="button"
+                    key={kind as string}
+                    title={label as string}
+                    aria-label={label as string}
+                    onClick={() =>
+                      onChangeCategories(
+                        categories.map((item) =>
+                          item.id === category.id ? { ...item, kind: kind as Category['kind'] } : item
+                        )
+                      )
+                    }
+                  >
+                    <Icon />
+                  </button>
+                ))}
+              </div>
+              <div className="category-url-row">
+                <Link2 />
+                <input
+                  value={category.image}
+                  aria-label={`Фото категории ${category.name}`}
+                  placeholder="Ссылка на фото"
+                  onChange={(event) =>
+                    onChangeCategories(categories.map((item) => (item.id === category.id ? { ...item, image: event.target.value } : item)))
+                  }
+                />
+              </div>
+              <label className="category-upload-button" aria-label={`Загрузить фото ${category.name}`}>
+                <CloudUpload />
+                <span>Загрузить</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    const image = await imageFileToDataUrl(file);
+                    onChangeCategories(categories.map((item) => (item.id === category.id ? { ...item, image } : item)));
+                    event.target.value = '';
+                  }}
+                />
+              </label>
+              <button className="category-clear-button" type="button" onClick={() => onChangeCategories(categories.map((item) => (item.id === category.id ? { ...item, image: '' } : item)))} aria-label="Очистить фото">
+                <Trash2 />
+                <span>Очистить</span>
+              </button>
               <button type="button" onClick={() => move(index, -1)} aria-label="Выше">
                 ↑
               </button>
@@ -1962,6 +2003,10 @@ function CategoriesSettings({
             </article>
           ))}
         </div>
+        <button className="category-add-wide" type="button" onClick={() => addCategory()}>
+          <Plus />
+          Добавить категорию
+        </button>
       </section>
 
       <section className="settings-form-card">
@@ -2529,7 +2574,14 @@ const getCurrentCatalogSlug = () => {
 
 function AppContent() {
   const catalogSlug = useMemo(() => getCurrentCatalogSlug(), []);
-  const { data, isLoading } = useQuery({ queryKey: ['catalog', catalogSlug], queryFn: () => loadCatalog(catalogSlug) });
+  const catalogQueryKey = useMemo(() => ['catalog', catalogSlug] as const, [catalogSlug]);
+  const { data, isLoading } = useQuery({
+    queryKey: catalogQueryKey,
+    queryFn: () => loadCatalog(catalogSlug),
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true
+  });
   const themeStore = useThemeStore((state) => state.theme);
   const updateTheme = useThemeStore((state) => state.updateTheme);
   const setAdmin = useAuthStore((state) => state.setAdmin);
@@ -2563,6 +2615,24 @@ function AppContent() {
     void hasAdminSession(catalogSlug).then(setAdmin);
     return onAdminSessionChange(setAdmin, catalogSlug);
   }, [catalogSlug, setAdmin]);
+
+  useEffect(() => {
+    const client = supabase;
+    if (!client) return undefined;
+
+    const refreshCatalog = () => {
+      void queryClient.invalidateQueries({ queryKey: catalogQueryKey });
+    };
+    const channel = client.channel(`catalog-refresh-${catalogSlug}`);
+    ['category', 'categories', 'product', 'products', 'restaurant', 'catalogs', 'catalog_tag', 'tags', 'theme_settings', 'catalog_theme_settings'].forEach((table) => {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table }, refreshCatalog);
+    });
+    channel.subscribe();
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [catalogQueryKey, catalogSlug]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -2982,7 +3052,16 @@ function AppContent() {
   );
 
   return (
-    <div className={screen === 'settings-stock' ? 'app-shell app-shell--stock' : 'app-shell'} style={applyTheme(themeStore)}>
+    <div
+      className={
+        screen === 'settings-stock'
+          ? 'app-shell app-shell--stock'
+          : screen === 'settings-categories'
+            ? 'app-shell app-shell--category-settings'
+            : 'app-shell'
+      }
+      style={applyTheme(themeStore)}
+    >
       <Toaster richColors position="top-center" />
       {screen.startsWith('settings') ? (
         renderSettings()
