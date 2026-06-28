@@ -551,8 +551,14 @@ export async function replaceCategoriesInSupabase(values: Category[], options: {
   if (!supabase) return values;
   if (activePlatformCatalogId) {
     const slugs = values.map((value) => value.slug || createSlug(value.name || value.id));
+    const existingRows = slugs.length > 0
+      ? (((await throwOnError(
+          supabase.from('categories').select('id, slug').eq('catalog_id', activePlatformCatalogId).in('slug', slugs)
+        )) ?? []) as Array<{ id: string; slug: string }>)
+      : [];
+    const existingIdsBySlug = new Map(existingRows.map((row) => [row.slug, row.id]));
     const rows = values.map((value, index) => ({
-      ...(uuidPattern.test(value.id) ? { id: value.id } : {}),
+      id: uuidPattern.test(value.id) ? value.id : existingIdsBySlug.get(value.slug || createSlug(value.name || value.id)) ?? crypto.randomUUID(),
       catalog_id: activePlatformCatalogId,
       name: value.name,
       slug: value.slug || createSlug(value.name || value.id),
@@ -598,8 +604,14 @@ export async function replaceTagsInSupabase(values: CatalogTag[], options: { rem
   if (!supabase) return values;
   if (activePlatformCatalogId) {
     const slugs = values.map((value) => value.slug || createSlug(value.name || value.id));
+    const existingRows = slugs.length > 0
+      ? (((await throwOnError(
+          supabase.from('tags').select('id, slug').eq('catalog_id', activePlatformCatalogId).in('slug', slugs)
+        )) ?? []) as Array<{ id: string; slug: string }>)
+      : [];
+    const existingIdsBySlug = new Map(existingRows.map((row) => [row.slug, row.id]));
     const rows = values.map((value, index) => ({
-      ...(uuidPattern.test(value.id) ? { id: value.id } : {}),
+      id: uuidPattern.test(value.id) ? value.id : existingIdsBySlug.get(value.slug || createSlug(value.name || value.id)) ?? crypto.randomUUID(),
       catalog_id: activePlatformCatalogId,
       name: value.name,
       slug: value.slug || createSlug(value.name || value.id),
