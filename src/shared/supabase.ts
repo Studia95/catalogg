@@ -639,11 +639,17 @@ export async function replaceTagsInSupabase(values: CatalogTag[], options: { rem
     });
   }
   const ids = values.map((value) => value.id);
+  const now = new Date().toISOString();
   await throwOnError(
     supabase
       .from('catalog_tag')
       .upsert(
-        values.map(({ slug: _slug, ...value }, index) => ({ ...value, sort_order: index })),
+        values.map(({ slug: _slug, ...value }, index) => ({
+          ...value,
+          sort_order: index,
+          created_at: value.created_at ?? now,
+          updated_at: now
+        })),
         { onConflict: 'id' }
       )
   );

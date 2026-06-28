@@ -60,6 +60,8 @@ export type CatalogTag = {
   name: string;
   icon: string;
   color: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type Product = {
