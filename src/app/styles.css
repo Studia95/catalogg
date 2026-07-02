@@ -9,6 +9,431 @@
   text-rendering: optimizeLegibility;
 }
 
+.app-shell--restaurant-admin {
+  --bg: #f4f7fb;
+  --text: #111827;
+  --muted: #667085;
+  --accent: #5b3df4;
+  --accent-2: #12b76a;
+  max-width: 520px;
+  padding: 0;
+  background: #f4f7fb;
+  color: #111827;
+}
+
+.restaurant-admin {
+  min-height: 100vh;
+  padding: 18px 16px 96px;
+  background: #f4f7fb;
+  color: #111827;
+}
+
+.restaurant-admin__hero,
+.admin-today-card,
+.admin-section-card,
+.admin-order-card,
+.admin-empty-orders {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+}
+
+.restaurant-admin__hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+}
+
+.restaurant-admin__hero span,
+.admin-today-card span,
+.admin-section-card p,
+.admin-order-card small,
+.admin-order-card i,
+.admin-order-meta small,
+.admin-empty-orders span {
+  color: #667085;
+}
+
+.restaurant-admin__hero h1 {
+  margin: 6px 0;
+  font-size: 30px;
+  line-height: 1.05;
+}
+
+.restaurant-admin__hero p {
+  margin: 0;
+  color: #667085;
+}
+
+.restaurant-admin__logo {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #eef2ff;
+  color: #5b3df4;
+}
+
+.restaurant-admin__logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.restaurant-admin__content {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.admin-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-kpi-grid article {
+  min-height: 94px;
+  padding: 16px;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.admin-kpi-grid strong {
+  display: block;
+  font-size: 28px;
+}
+
+.admin-kpi-grid span {
+  display: block;
+  margin-top: 6px;
+  color: #667085;
+  font-weight: 800;
+}
+
+.admin-today-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+}
+
+.admin-today-card strong {
+  display: block;
+  margin: 5px 0;
+  font-size: 28px;
+}
+
+.admin-today-card button,
+.admin-quick-actions button,
+.delivery-settings-card > button,
+.admin-order-actions button {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 14px;
+  padding: 0 14px;
+  background: #111827;
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.admin-today-card svg,
+.admin-quick-actions svg,
+.restaurant-admin-nav svg,
+.admin-detail-header svg {
+  width: 20px;
+  height: 20px;
+}
+
+.admin-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-quick-actions button {
+  min-height: 62px;
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.admin-section-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.admin-section-card h2 {
+  margin: 0;
+  font-size: 21px;
+}
+
+.admin-section-card p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.admin-menu-preview {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-menu-preview article {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.admin-menu-preview img,
+.admin-menu-preview .image-fallback {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  object-fit: cover;
+}
+
+.admin-menu-preview strong,
+.admin-menu-preview small {
+  display: block;
+}
+
+.admin-menu-preview small {
+  margin-top: 4px;
+  color: #667085;
+}
+
+.admin-order-filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.admin-order-filters button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  border: 1px solid #d8e0ec;
+  border-radius: 999px;
+  padding: 0 14px;
+  background: #ffffff;
+  color: #475467;
+  font-weight: 900;
+}
+
+.admin-order-filters button.is-active {
+  border-color: #5b3df4;
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.admin-order-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-order-card {
+  display: flex;
+  min-height: 82px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  color: #111827;
+  text-align: left;
+}
+
+.admin-order-card strong,
+.admin-order-card small,
+.admin-order-card b,
+.admin-order-card i {
+  display: block;
+}
+
+.admin-order-card i {
+  margin-top: 5px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.admin-order-card.status-new {
+  border-color: rgba(18, 183, 106, 0.42);
+}
+
+.admin-order-card.status-cancelled {
+  opacity: 0.72;
+}
+
+.admin-empty-orders {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 34px 18px;
+  text-align: center;
+}
+
+.restaurant-admin-nav {
+  position: fixed;
+  right: max(16px, calc((100vw - 520px) / 2 + 16px));
+  bottom: 14px;
+  left: max(16px, calc((100vw - 520px) / 2 + 16px));
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(12px);
+}
+
+.restaurant-admin-nav button {
+  display: grid;
+  min-width: 0;
+  min-height: 54px;
+  place-items: center;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.restaurant-admin-nav button.is-active {
+  background: #111827;
+  color: #ffffff;
+}
+
+.admin-detail-header {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.admin-detail-header button {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 0;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #111827;
+}
+
+.admin-detail-header span,
+.admin-detail-header h1 {
+  display: block;
+  margin: 0;
+}
+
+.admin-detail-header span {
+  color: #667085;
+  font-weight: 800;
+}
+
+.admin-order-meta {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-order-comment {
+  padding: 12px;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.admin-order-items {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-order-items div,
+.admin-order-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-order-total {
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.admin-order-actions {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 0 0;
+  background: linear-gradient(180deg, rgba(244, 247, 251, 0), #f4f7fb 28%);
+}
+
+.admin-order-actions button:last-child {
+  background: #12b76a;
+}
+
+.admin-order-actions button:only-child {
+  grid-column: 1 / -1;
+}
+
+.delivery-settings-card label {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  color: #344054;
+  font-weight: 800;
+}
+
+.delivery-settings-card input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
+.delivery-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.delivery-settings-grid label {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.delivery-settings-grid input {
+  min-height: 42px;
+  border: 1px solid #d8e0ec;
+  border-radius: 12px;
+  padding: 0 10px;
+  color: #111827;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -57,7 +57,7 @@ import {
   X
 } from 'lucide-react';
 import JSZip from 'jszip';
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 import { cabins as demoCabins, categories as demoCategories, products as demoProducts, restaurant as demoRestaurant } from '../data/catalog';
@@ -89,13 +89,25 @@ import {
   onAdminSessionChange,
   updateProductInSupabase
 } from '../shared/supabase';
+import {
+  createRestaurantOrderFromCart,
+  getCatalogIdBySlug,
+  getRestaurantDeliverySettings,
+  getRestaurantOrders,
+  saveRestaurantDeliverySettings,
+  updateRestaurantOrderStatus,
+  type RestaurantDeliverySettings,
+  type RestaurantOrder,
+  type RestaurantOrderStatus
+} from '../shared/api/restaurantOrdersApi';
 import { imageFileToDataUrl } from '../shared/images';
 
 const queryClient = new QueryClient();
 
 const formatPrice = (value: number) => `${new Intl.NumberFormat('ru-RU').format(value)} ₽`;
 type SettingsScreen = 'settings' | 'settings-profile' | 'settings-categories' | 'settings-design' | 'settings-stock' | 'settings-backup' | 'settings-delete';
-type Screen = 'home' | 'catalog' | 'drinks' | 'product' | 'checkout' | SettingsScreen;
+type RestaurantAdminScreen = 'admin-home';
+type Screen = 'home' | 'catalog' | 'drinks' | 'product' | 'checkout' | RestaurantAdminScreen | SettingsScreen;
 type ProductFlag = 'is_popular' | 'is_hidden';
 type CategoryEditorMode = 'list' | 'edit' | 'add';
 type SettingsCatalogTab = 'tags' | 'cabins' | 'categories';
@@ -1419,7 +1431,17 @@ function ProductScreen({
   );
 }
 
-function CheckoutScreen({ restaurant, cabins, onSubmitOrder }: { restaurant: Restaurant; cabins: Cabin[]; onSubmitOrder: () => void }) {
+function CheckoutScreen({
+  catalogSlug,
+  restaurant,
+  cabins,
+  onSubmitOrder
+}: {
+  catalogSlug: string;
+  restaurant: Restaurant;
+  cabins: Cabin[];
+  onSubmitOrder: () => void;
+}) {
   const { mode, cabinId, setOrder } = useOrderStore();
   const items = useCartStore((state) => state.items);
   const total = selectCartTotal(items);
@@ -1565,8 +1587,21 @@ function CheckoutScreen({ restaurant, cabins, onSubmitOrder }: { restaurant: Res
               return;
             }
             event.preventDefault();
-            window.open(whatsappHref, '_blank', 'noopener,noreferrer');
-            window.setTimeout(onSubmitOrder, 500);
+            void createRestaurantOrderFromCart({
+              slug: catalogSlug,
+              items,
+              fulfillmentType: mode,
+              cabinLabel: mode === 'hall' ? selectedCabin?.title ?? '' : '',
+              comment: mode === 'hall' && selectedCabin ? `Кабинка: ${selectedCabin.title}` : ''
+            })
+              .catch((error) => {
+                console.error('Order creation failed', error);
+                toast.error('Не удалось создать заказ в системе, отправляем в WhatsApp');
+              })
+              .finally(() => {
+                window.open(whatsappHref, '_blank', 'noopener,noreferrer');
+                window.setTimeout(onSubmitOrder, 500);
+              });
           }}
         >
           Отправить заказ
@@ -1791,6 +1826,347 @@ function SettingsHome({ onOpen }: { onOpen: (screen: SettingsScreen) => void }) 
         </button>
       ))}
     </main>
+  );
+}
+
+const adminOrderStatusLabels: Record<RestaurantOrderStatus, string> = {
+  new: 'Новый',
+  accepted: 'Принят',
+  confirmed: 'Принят',
+  preparing: 'Готовится',
+  ready: 'Готов',
+  waiting_driver: 'Ждет водителя',
+  driver_assigned: 'Водитель назначен',
+  on_the_way: 'В пути',
+  delivered: 'Доставлен',
+  completed: 'Выполнен',
+  cancelled: 'Отменен'
+};
+
+const adminOrderStatusFilters: Array<{ status: 'all' | RestaurantOrderStatus; label: string }> = [
+  { status: 'all', label: 'Все' },
+  { status: 'new', label: 'Новые' },
+  { status: 'preparing', label: 'Готовятся' },
+  { status: 'on_the_way', label: 'В пути' },
+  { status: 'completed', label: 'Выполненные' },
+  { status: 'cancelled', label: 'Отмененные' }
+];
+
+const fulfillmentLabels: Record<string, string> = {
+  hall: 'В зале',
+  takeaway: 'На вынос',
+  delivery: 'Доставка'
+};
+
+const defaultAdminDeliverySettings: RestaurantDeliverySettings = {
+  enable_orders: false,
+  enable_delivery: false,
+  enable_pickup: true,
+  enable_hall_orders: true,
+  use_own_courier: false,
+  use_platform_drivers: false,
+  own_courier_wait_minutes: 5,
+  fallback_to_platform_drivers: true,
+  qr_required: false,
+  minimum_order_amount: 0,
+  free_delivery_from: 0,
+  default_preparation_minutes: 25,
+  delivery_radius_km: 5,
+  delivery_hours_start: '',
+  delivery_hours_end: '',
+  out_of_hours_mode: 'warn'
+};
+
+function RestaurantAdminShell({
+  restaurant,
+  categories,
+  products,
+  orders,
+  deliverySettings,
+  onOpenScreen,
+  onAddDish,
+  onOrderStatus,
+  onSaveDeliverySettings
+}: {
+  restaurant: Restaurant;
+  categories: Category[];
+  products: Product[];
+  orders: RestaurantOrder[];
+  deliverySettings: RestaurantDeliverySettings | null;
+  onOpenScreen: (screen: SettingsScreen) => void;
+  onAddDish: () => void;
+  onOrderStatus: (order: RestaurantOrder, status: RestaurantOrderStatus, reason?: string) => void;
+  onSaveDeliverySettings: (settings: RestaurantDeliverySettings) => void;
+}) {
+  const [tab, setTab] = useState<'home' | 'dishes' | 'orders' | 'settings'>('home');
+  const [filter, setFilter] = useState<'all' | RestaurantOrderStatus>('all');
+  const [selectedOrder, setSelectedOrder] = useState<RestaurantOrder | null>(null);
+  const today = new Date().toDateString();
+  const todayOrders = orders.filter((order) => new Date(order.createdAt).toDateString() === today);
+  const todayRevenue = todayOrders
+    .filter((order) => !['cancelled'].includes(order.status))
+    .reduce((total, order) => total + order.total, 0);
+  const filteredOrders = filter === 'all' ? orders : orders.filter((order) => order.status === filter);
+  const activeOrders = orders.filter((order) => !['completed', 'delivered', 'cancelled'].includes(order.status));
+
+  if (selectedOrder) {
+    return (
+      <OrderDetailsScreen
+        order={selectedOrder}
+        onBack={() => setSelectedOrder(null)}
+        onStatus={(status, reason) => {
+          onOrderStatus(selectedOrder, status, reason);
+          setSelectedOrder((current) => (current ? { ...current, status } : current));
+        }}
+      />
+    );
+  }
+
+  return (
+    <main className="restaurant-admin">
+      <section className="restaurant-admin__hero">
+        <div>
+          <span>Панель ресторана</span>
+          <h1>{restaurant.name || 'Ресторан'}</h1>
+          <p>{restaurant.subtitle || 'Управляйте меню, заказами и доставкой'}</p>
+        </div>
+        <div className="restaurant-admin__logo">
+          {restaurant.logo_url ? <img src={restaurant.logo_url} alt="" /> : <Store />}
+        </div>
+      </section>
+
+      {tab === 'home' && (
+        <section className="restaurant-admin__content">
+          <div className="admin-kpi-grid">
+            <article><strong>{products.length}</strong><span>Блюд</span></article>
+            <article><strong>{categories.length}</strong><span>Категорий</span></article>
+            <article><strong>{todayOrders.length}</strong><span>Заказов сегодня</span></article>
+            <article><strong>4.8</strong><span>Рейтинг</span></article>
+          </div>
+          <section className="admin-today-card">
+            <div>
+              <span>Сегодня</span>
+              <strong>{formatPrice(todayRevenue)}</strong>
+              <small>{activeOrders.length} активных заказов</small>
+            </div>
+            <button type="button" onClick={() => setTab('orders')}>
+              <ClipboardList />
+              Заказы
+            </button>
+          </section>
+          <section className="admin-quick-actions">
+            <button type="button" onClick={onAddDish}><Plus />Добавить блюдо</button>
+            <button type="button" onClick={() => onOpenScreen('settings-stock')}><Package />Остатки</button>
+            <button type="button" onClick={() => setTab('orders')}><ClipboardList />Заказы</button>
+            <button type="button" onClick={() => onOpenScreen('settings-profile')}><Settings />Настройки</button>
+          </section>
+        </section>
+      )}
+
+      {tab === 'dishes' && (
+        <section className="restaurant-admin__content">
+          <section className="admin-section-card">
+            <h2>Блюда и каталог</h2>
+            <p>Существующее ядро каталога сохранено. Эти кнопки открывают текущие рабочие экраны.</p>
+            <div className="admin-quick-actions">
+              <button type="button" onClick={onAddDish}><Plus />Добавить блюдо</button>
+              <button type="button" onClick={() => onOpenScreen('settings-categories')}><Tags />Категории</button>
+              <button type="button" onClick={() => onOpenScreen('settings-stock')}><RefreshCcw />Остатки</button>
+              <button type="button" onClick={() => onOpenScreen('settings-design')}><Paintbrush />Дизайн</button>
+            </div>
+          </section>
+          <div className="admin-menu-preview">
+            {products.slice(0, 8).map((product) => (
+              <article key={product.id}>
+                <SafeImage src={product.image_url} alt={product.title} />
+                <div>
+                  <strong>{product.title}</strong>
+                  <small>{formatPrice(product.price)} · остаток {getCurrentStock(product)}</small>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {tab === 'orders' && (
+        <section className="restaurant-admin__content">
+          <div className="admin-order-filters">
+            {adminOrderStatusFilters.map((item) => (
+              <button
+                className={filter === item.status ? 'is-active' : ''}
+                type="button"
+                key={item.status}
+                onClick={() => setFilter(item.status)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="admin-order-list">
+            {filteredOrders.length === 0 && (
+              <section className="admin-empty-orders">
+                <ClipboardList />
+                <strong>Заказов пока нет</strong>
+                <span>Новые заказы появятся здесь автоматически.</span>
+              </section>
+            )}
+            {filteredOrders.map((order) => (
+              <button className={`admin-order-card status-${order.status}`} type="button" key={order.id} onClick={() => setSelectedOrder(order)}>
+                <span>
+                  <strong>#{order.orderNumber}</strong>
+                  <small>{fulfillmentLabels[order.fulfillmentType]} · {order.items.length} поз.</small>
+                </span>
+                <span>
+                  <b>{formatPrice(order.total)}</b>
+                  <i>{adminOrderStatusLabels[order.status]}</i>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {tab === 'settings' && (
+        <section className="restaurant-admin__content">
+          <section className="admin-section-card">
+            <h2>Настройки ресторана</h2>
+            <div className="admin-quick-actions">
+              <button type="button" onClick={() => onOpenScreen('settings-profile')}><Store />Профиль</button>
+              <button type="button" onClick={() => onOpenScreen('settings-design')}><Paintbrush />Дизайн</button>
+              <button type="button" onClick={() => onOpenScreen('settings-categories')}><Tags />Категории</button>
+              <button type="button" onClick={() => onOpenScreen('settings-backup')}><CloudUpload />Импорт</button>
+            </div>
+          </section>
+          <DeliverySettingsCard settings={deliverySettings ?? defaultAdminDeliverySettings} onSave={onSaveDeliverySettings} />
+        </section>
+      )}
+
+      <nav className="restaurant-admin-nav" aria-label="Админка ресторана">
+        <button className={tab === 'home' ? 'is-active' : ''} type="button" onClick={() => setTab('home')}><Home />Главная</button>
+        <button className={tab === 'dishes' ? 'is-active' : ''} type="button" onClick={() => setTab('dishes')}><Utensils />Блюда</button>
+        <button className={tab === 'orders' ? 'is-active' : ''} type="button" onClick={() => setTab('orders')}><ClipboardList />Заказы</button>
+        <button className={tab === 'settings' ? 'is-active' : ''} type="button" onClick={() => setTab('settings')}><Settings />Настройки</button>
+      </nav>
+    </main>
+  );
+}
+
+function OrderDetailsScreen({
+  order,
+  onBack,
+  onStatus
+}: {
+  order: RestaurantOrder;
+  onBack: () => void;
+  onStatus: (status: RestaurantOrderStatus, reason?: string) => void;
+}) {
+  return (
+    <main className="restaurant-admin restaurant-admin--detail">
+      <header className="admin-detail-header">
+        <button type="button" onClick={onBack} aria-label="Назад"><ArrowLeft /></button>
+        <div>
+          <span>Заказ #{order.orderNumber}</span>
+          <h1>{adminOrderStatusLabels[order.status]}</h1>
+        </div>
+      </header>
+      <section className="admin-section-card">
+        <div className="admin-order-meta">
+          <span>{fulfillmentLabels[order.fulfillmentType]}</span>
+          <strong>{order.fulfillmentType === 'delivery' ? order.deliveryAddress : order.cabinLabel || 'Без адреса'}</strong>
+          <small>{new Date(order.createdAt).toLocaleString('ru-RU')}</small>
+        </div>
+        {order.comment && <p className="admin-order-comment">{order.comment}</p>}
+      </section>
+      <section className="admin-section-card">
+        <h2>Состав заказа</h2>
+        <div className="admin-order-items">
+          {order.items.map((item) => (
+            <div key={item.id}>
+              <span>{item.title} x {item.quantity}</span>
+              <strong>{formatPrice(item.lineTotal)}</strong>
+            </div>
+          ))}
+        </div>
+        <div className="admin-order-total">
+          <span>Итого</span>
+          <strong>{formatPrice(order.total)}</strong>
+        </div>
+      </section>
+      {(order.verificationCode || order.qrToken) && (
+        <section className="admin-section-card">
+          <h2>Подтверждение доставки</h2>
+          <p>Код клиента: <strong>{order.verificationCode ?? 'QR включен'}</strong></p>
+        </section>
+      )}
+      <footer className="admin-order-actions">
+        {order.status === 'new' && (
+          <>
+            <button type="button" onClick={() => onStatus('cancelled', 'restaurant_rejected')}>Отклонить</button>
+            <button type="button" onClick={() => onStatus('accepted')}>Принять заказ</button>
+          </>
+        )}
+        {['accepted', 'confirmed'].includes(order.status) && (
+          <button type="button" onClick={() => onStatus('preparing')}>Готовится</button>
+        )}
+        {order.status === 'preparing' && (
+          <button type="button" onClick={() => onStatus(order.fulfillmentType === 'delivery' ? 'waiting_driver' : 'ready')}>Готово</button>
+        )}
+        {order.status === 'ready' && order.fulfillmentType !== 'delivery' && (
+          <button type="button" onClick={() => onStatus('completed')}>Завершить</button>
+        )}
+        {order.status === 'waiting_driver' && (
+          <button type="button" onClick={() => onStatus('on_the_way')}>Передано водителю</button>
+        )}
+        {order.status === 'on_the_way' && (
+          <button type="button" onClick={() => onStatus('delivered')}>Доставлен</button>
+        )}
+      </footer>
+    </main>
+  );
+}
+
+function DeliverySettingsCard({
+  settings,
+  onSave
+}: {
+  settings: RestaurantDeliverySettings;
+  onSave: (settings: RestaurantDeliverySettings) => void;
+}) {
+  const [draft, setDraft] = useState(settings);
+
+  useEffect(() => {
+    setDraft(settings);
+  }, [settings]);
+
+  const setBoolean = (key: keyof RestaurantDeliverySettings, value: boolean) => {
+    setDraft((current) => ({ ...current, [key]: value }));
+  };
+
+  const setNumber = (key: keyof RestaurantDeliverySettings, value: string) => {
+    setDraft((current) => ({ ...current, [key]: Math.max(0, Number(value) || 0) }));
+  };
+
+  return (
+    <section className="admin-section-card delivery-settings-card">
+      <h2>Доставка и заказы</h2>
+      <label><input type="checkbox" checked={draft.enable_orders} onChange={(event) => setBoolean('enable_orders', event.target.checked)} />Принимать заказы</label>
+      <label><input type="checkbox" checked={draft.enable_hall_orders} onChange={(event) => setBoolean('enable_hall_orders', event.target.checked)} />Заказы в зале</label>
+      <label><input type="checkbox" checked={draft.enable_pickup} onChange={(event) => setBoolean('enable_pickup', event.target.checked)} />Самовывоз</label>
+      <label><input type="checkbox" checked={draft.enable_delivery} onChange={(event) => setBoolean('enable_delivery', event.target.checked)} />Доставка</label>
+      <label><input type="checkbox" checked={draft.use_own_courier} onChange={(event) => setBoolean('use_own_courier', event.target.checked)} />Свой курьер</label>
+      <label><input type="checkbox" checked={draft.use_platform_drivers} onChange={(event) => setBoolean('use_platform_drivers', event.target.checked)} />Водители платформы</label>
+      <label><input type="checkbox" checked={draft.fallback_to_platform_drivers} onChange={(event) => setBoolean('fallback_to_platform_drivers', event.target.checked)} />Передавать платформе после таймера</label>
+      <label><input type="checkbox" checked={draft.qr_required} onChange={(event) => setBoolean('qr_required', event.target.checked)} />Требовать QR подтверждение доставки</label>
+      <div className="delivery-settings-grid">
+        <label>Мин. заказ<input value={draft.minimum_order_amount} inputMode="numeric" onChange={(event) => setNumber('minimum_order_amount', event.target.value)} /></label>
+        <label>Бесплатно от<input value={draft.free_delivery_from} inputMode="numeric" onChange={(event) => setNumber('free_delivery_from', event.target.value)} /></label>
+        <label>Готовка, мин<input value={draft.default_preparation_minutes} inputMode="numeric" onChange={(event) => setNumber('default_preparation_minutes', event.target.value)} /></label>
+        <label>Радиус, км<input value={draft.delivery_radius_km} inputMode="decimal" onChange={(event) => setNumber('delivery_radius_km', event.target.value)} /></label>
+        <label>Ожидание курьера<input value={draft.own_courier_wait_minutes} inputMode="numeric" onChange={(event) => setNumber('own_courier_wait_minutes', event.target.value)} /></label>
+      </div>
+      <button type="button" onClick={() => onSave(draft)}>Сохранить доставку</button>
+    </section>
   );
 }
 
@@ -3203,6 +3579,7 @@ function AppContent({ catalogSlug }: { catalogSlug: string }) {
   });
   const themeStore = useThemeStore((state) => state.theme);
   const updateTheme = useThemeStore((state) => state.updateTheme);
+  const isAdmin = useAuthStore((state) => state.isAdmin);
   const setAdmin = useAuthStore((state) => state.setAdmin);
   const setAdminEditor = useAdminStore((state) => state.setEditor);
   const [screen, setScreen] = useState<Screen>('home');
@@ -3222,6 +3599,8 @@ function AppContent({ catalogSlug }: { catalogSlug: string }) {
   const [localCabins, setLocalCabins] = useState<Cabin[]>(demoCabins);
   const [localTags, setLocalTags] = useState<CatalogTag[]>(defaultTags);
   const [localRestaurant, setLocalRestaurant] = useState<Restaurant>(() => makeLoadingRestaurant(catalogSlug));
+  const [restaurantOrders, setRestaurantOrders] = useState<RestaurantOrder[]>([]);
+  const [deliverySettings, setDeliverySettings] = useState<RestaurantDeliverySettings | null>(null);
   const [, setStockTargets] = useState<StockTargets>(() => loadStockTargets());
   const items = useCartStore((state) => state.items);
   const clearCart = useCartStore((state) => state.clear);
@@ -3236,10 +3615,57 @@ function AppContent({ catalogSlug }: { catalogSlug: string }) {
     });
   };
 
+  const refreshRestaurantOrders = useCallback(() => {
+    if (!isAdmin) return;
+    void getRestaurantOrders(catalogSlug)
+      .then(setRestaurantOrders)
+      .catch((error) => {
+        console.error('Orders load failed', error);
+        toast.error('Не удалось загрузить заказы');
+      });
+  }, [catalogSlug, isAdmin]);
+
+  const refreshDeliverySettings = useCallback(() => {
+    if (!isAdmin) return;
+    void getRestaurantDeliverySettings(catalogSlug)
+      .then(setDeliverySettings)
+      .catch((error) => {
+        console.error('Delivery settings load failed', error);
+      });
+  }, [catalogSlug, isAdmin]);
+
   useEffect(() => {
     void hasAdminSession(catalogSlug).then(setAdmin);
     return onAdminSessionChange(setAdmin, catalogSlug);
   }, [catalogSlug, setAdmin]);
+
+  useEffect(() => {
+    refreshRestaurantOrders();
+    refreshDeliverySettings();
+  }, [refreshDeliverySettings, refreshRestaurantOrders]);
+
+  useEffect(() => {
+    const client = supabase;
+    if (!client || !isAdmin) return undefined;
+    let channel: ReturnType<typeof client.channel> | null = null;
+    let disposed = false;
+
+    void getCatalogIdBySlug(catalogSlug).then((catalogId) => {
+      if (!catalogId || disposed) return;
+      channel = client
+        .channel(`restaurant-admin-orders-${catalogId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `catalog_id=eq.${catalogId}` }, refreshRestaurantOrders)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `catalog_id=eq.${catalogId}` }, refreshRestaurantOrders)
+        .subscribe();
+    });
+
+    return () => {
+      disposed = true;
+      if (channel) {
+        void client.removeChannel(channel);
+      }
+    };
+  }, [catalogSlug, isAdmin, refreshRestaurantOrders]);
 
   useEffect(() => {
     const client = supabase;
@@ -3501,6 +3927,21 @@ function AppContent({ catalogSlug }: { catalogSlug: string }) {
     persist(saveThemeToSupabase(next));
   };
 
+  const saveDeliverySettings = (settings: RestaurantDeliverySettings) => {
+    setDeliverySettings(settings);
+    persist(saveRestaurantDeliverySettings(catalogSlug, settings), () => {
+      toast.success('Настройки доставки сохранены');
+      refreshDeliverySettings();
+    });
+  };
+
+  const changeOrderStatus = (order: RestaurantOrder, status: RestaurantOrderStatus, reason = '') => {
+    setRestaurantOrders((current) =>
+      current.map((item) => (item.id === order.id ? { ...item, status } : item))
+    );
+    persist(updateRestaurantOrderStatus(order, status, reason), refreshRestaurantOrders);
+  };
+
   const finishOrderFlow = () => {
     setOrderFlow((current) => ({ ...current, step: 'done', categoryId: undefined }));
     setScreen('checkout');
@@ -3741,10 +4182,26 @@ function AppContent({ catalogSlug }: { catalogSlug: string }) {
     </>
   );
 
+  const renderRestaurantAdmin = () => (
+    <RestaurantAdminShell
+      restaurant={catalog.restaurant}
+      categories={catalog.categories}
+      products={catalog.products}
+      orders={restaurantOrders}
+      deliverySettings={deliverySettings}
+      onOpenScreen={setScreen}
+      onAddDish={() => setAdminEditor('dish')}
+      onOrderStatus={changeOrderStatus}
+      onSaveDeliverySettings={saveDeliverySettings}
+    />
+  );
+
   return (
     <div
       className={
-        screen === 'settings-stock'
+        screen === 'admin-home'
+          ? 'app-shell app-shell--restaurant-admin'
+          : screen === 'settings-stock'
           ? 'app-shell app-shell--settings app-shell--stock'
           : screen === 'settings-categories'
             ? 'app-shell app-shell--settings app-shell--category-settings'
@@ -3758,7 +4215,9 @@ function AppContent({ catalogSlug }: { catalogSlug: string }) {
       }}
     >
       <Toaster richColors position="top-center" />
-      {screen.startsWith('settings') ? (
+      {screen === 'admin-home' ? (
+        renderRestaurantAdmin()
+      ) : screen.startsWith('settings') ? (
         renderSettings()
       ) : (
         <>
@@ -3830,6 +4289,7 @@ function AppContent({ catalogSlug }: { catalogSlug: string }) {
           )}
           {screen === 'checkout' && (
             <CheckoutScreen
+              catalogSlug={catalogSlug}
               restaurant={catalog.restaurant}
               cabins={catalog.cabins}
               onSubmitOrder={() => {
@@ -3853,7 +4313,7 @@ function AppContent({ catalogSlug }: { catalogSlug: string }) {
       <AdminPanel
         active={screen.startsWith('settings') ? 'settings' : undefined}
         onAdd={() => setAdminEditor('dish')}
-        onSettings={() => setScreen('settings')}
+        onSettings={() => setScreen('admin-home')}
       />
       <DesignEditor
         editingProduct={editingProduct}
@@ -3892,7 +4352,7 @@ function AppContent({ catalogSlug }: { catalogSlug: string }) {
         <LoginModal
           catalogSlug={catalogSlug}
           onClose={() => setShowLogin(false)}
-          onSuccess={() => setScreen('settings')}
+          onSuccess={() => setScreen('admin-home')}
         />
       )}
       {orderFlow.step !== 'done' && activeFlowCategory && screen !== 'catalog' && screen !== 'drinks' && (

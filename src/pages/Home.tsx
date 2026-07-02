@@ -32,9 +32,9 @@ export function Home() {
         </div>
 
         <div style={styles.actions}>
-          <button style={styles.primaryButton} type="button">Войти</button>
-          <button style={styles.secondaryButton} type="button">Регистрация</button>
-          <button style={styles.ghostButton} type="button">Пропустить</button>
+          <Link style={styles.primaryButton} to="/admin">Войти</Link>
+          <Link style={styles.secondaryButton} to="/admin/clients/new">Регистрация</Link>
+          <Link style={styles.ghostButton} to="/mangal">Пропустить</Link>
         </div>
       </section>
     </main>
@@ -128,7 +128,10 @@ const styles = {
     gap: 10
   },
   primaryButton: {
+    display: 'inline-flex',
     minHeight: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
     border: 0,
     borderRadius: 8,
     background: '#111827',
@@ -136,7 +139,10 @@ const styles = {
     fontWeight: 800
   },
   secondaryButton: {
+    display: 'inline-flex',
     minHeight: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
     border: '1px solid #cfd6e2',
     borderRadius: 8,
     background: '#ffffff',
@@ -144,7 +150,10 @@ const styles = {
     fontWeight: 800
   },
   ghostButton: {
+    display: 'inline-flex',
     minHeight: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
     border: '1px solid transparent',
     borderRadius: 8,
     background: 'transparent',
