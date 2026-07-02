@@ -71,10 +71,15 @@ create table if not exists public.catalogs (
   booking_settings jsonb not null default '{}'::jsonb,
   seo jsonb not null default '{}'::jsonb,
   pwa jsonb not null default '{}'::jsonb,
+  is_template boolean not null default false,
+  template_name text,
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.catalogs add column if not exists is_template boolean not null default false;
+alter table public.catalogs add column if not exists template_name text;
 
 create table if not exists public.catalog_members (
   catalog_id uuid not null references public.catalogs(id) on delete cascade,
@@ -282,6 +287,7 @@ create table if not exists public.audit_logs (
 );
 
 create index if not exists catalogs_template_version_id_idx on public.catalogs(template_version_id);
+create index if not exists catalogs_is_template_idx on public.catalogs(is_template, created_at desc);
 create index if not exists catalog_members_user_id_idx on public.catalog_members(user_id);
 create index if not exists categories_catalog_id_sort_idx on public.categories(catalog_id, sort_order);
 create index if not exists products_catalog_id_status_sort_idx on public.products(catalog_id, status, sort_order);
@@ -367,7 +373,10 @@ create policy "templates public read" on public.templates for select using (true
 create policy "template versions public read published" on public.template_versions for select using (status in ('published', 'deprecated'));
 create policy "template presets public read" on public.template_presets for select using (true);
 
-create policy "catalogs public read published" on public.catalogs for select using (status = 'published' or public.is_catalog_member(id, array['owner','admin','editor','viewer']::public.catalog_role[]));
+create policy "catalogs public read published" on public.catalogs for select using (
+  (status = 'published' and is_template = false)
+  or public.is_catalog_member(id, array['owner','admin','editor','viewer']::public.catalog_role[])
+);
 create policy "catalogs owner admin update" on public.catalogs for update using (public.is_catalog_member(id, array['owner','admin']::public.catalog_role[])) with check (public.is_catalog_member(id, array['owner','admin']::public.catalog_role[]));
 create policy "catalogs owner delete" on public.catalogs for delete using (public.is_catalog_member(id, array['owner']::public.catalog_role[]));
 

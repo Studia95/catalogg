@@ -1,5 +1,5 @@
 import { supabase } from '../supabase';
-import type { PlatformTemplateOption } from './platformTypes';
+import type { CreateRestaurantTemplatePayload, PlatformTemplateOption } from './platformTypes';
 
 const fallbackTemplates: PlatformTemplateOption[] = [
   {
@@ -24,8 +24,46 @@ type TemplateVersionRow = {
   } | null;
 };
 
+type TemplateCatalogRow = {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  template_name?: string | null;
+  template_versions?: {
+    version?: number;
+    templates?: {
+      key?: string;
+      name?: string;
+      business_type?: string;
+      description?: string;
+    } | null;
+  } | null;
+};
+
+const mapTemplateCatalog = (row: TemplateCatalogRow): PlatformTemplateOption => ({
+  templateVersionId: row.id,
+  templateKey: row.template_name ?? row.slug,
+  templateName: row.name,
+  businessType: row.template_versions?.templates?.business_type ?? 'restaurant',
+  version: row.template_versions?.version ?? 1,
+  description: row.description || row.template_versions?.templates?.description || 'Настраиваемый ресторанный шаблон',
+  templateCatalogSlug: row.slug,
+  isCatalogTemplate: true
+});
+
 export async function getTemplateOptions(): Promise<PlatformTemplateOption[]> {
   if (!supabase) return fallbackTemplates;
+
+  const catalogTemplates = await supabase
+    .from('catalogs')
+    .select('id, slug, name, description, template_name, template_versions(version, templates(key, name, business_type, description))')
+    .eq('is_template', true)
+    .order('created_at', { ascending: false });
+
+  if (!catalogTemplates.error && catalogTemplates.data?.length) {
+    return (catalogTemplates.data as TemplateCatalogRow[]).map(mapTemplateCatalog);
+  }
 
   const { data, error } = await supabase
     .from('template_versions')
@@ -49,4 +87,18 @@ export async function getTemplateOptions(): Promise<PlatformTemplateOption[]> {
     .sort((first, second) => second.version - first.version);
 
   return restaurantTemplates.slice(0, 1);
+}
+
+export async function createRestaurantTemplate(payload: CreateRestaurantTemplatePayload): Promise<{ catalogId: string }> {
+  if (!supabase) return { catalogId: crypto.randomUUID() };
+
+  const { data, error } = await supabase.rpc('create_restaurant_template', {
+    template_display_name: payload.name,
+    template_slug: payload.slug,
+    template_key: payload.templateName || payload.slug,
+    created_by_user_id: null
+  });
+
+  if (error) throw error;
+  return { catalogId: String(data) };
 }

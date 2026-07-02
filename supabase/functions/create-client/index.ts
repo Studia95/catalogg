@@ -54,219 +54,9 @@ const assertPayload = (payload: CreateClientPayload) => {
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) throw new Error('Email is invalid.');
   if (!isStrongPassword(payload.password)) throw new Error('Password is too weak.');
-  if (!payload.templateVersionId) throw new Error('Template version is required.');
+  if (!payload.templateVersionId) throw new Error('Template is required.');
   if (!payload.adminConsentConfirmed) throw new Error('Client consent confirmation is required.');
 };
-
-const image = (id: string, query: string) =>
-  `https://images.unsplash.com/${id}?auto=format&fit=crop&w=900&q=78&${query}`;
-
-const seedCategories = [
-  { slug: 'chechen', name: 'Чеченские блюда', imageUrl: image('photo-1547592166-23ac45744acd', 'soup'), icon: 'pot' },
-  { slug: 'pizza', name: 'Пиццы', imageUrl: image('photo-1604382354936-07c5d9983bd3', 'pizza'), icon: 'pizza' },
-  { slug: 'fastfood', name: 'Фастфуд', imageUrl: image('photo-1568901346375-23c9450c58cd', 'burger'), icon: 'burger' },
-  { slug: 'grill', name: 'Мясо', imageUrl: image('photo-1558030006-450675393462', 'kebab'), icon: 'flame' },
-  { slug: 'fridge', name: 'Напитки из холодильника', imageUrl: image('photo-1622483767028-3f66f32aef97', 'soda'), icon: 'bottle' },
-  { slug: 'lemonades', name: 'Лимонады в графине', imageUrl: image('photo-1621263764928-df1444c5e859', 'lemonade'), icon: 'glass' },
-  { slug: 'tea', name: 'Чай', imageUrl: image('photo-1544787219-7f47ccb76574', 'tea'), icon: 'tea' },
-  { slug: 'cabins', name: 'Кабинки', imageUrl: image('photo-1517248135467-4c7edcad34c4', 'restaurant'), icon: 'home' }
-];
-
-const seedProducts = [
-  {
-    slug: 'lamb-skewer',
-    title: 'Шашлык из баранины',
-    price: 690,
-    description: 'Сочный шашлык из баранины с пряными специями и луком.',
-    imageUrl: image('photo-1555939594-58d7cb561ad1', 'skewers'),
-    ingredients: 'Баранина, специи, лук, соль, перец',
-    weight: '250 г',
-    serving: 'с луком и соусом',
-    stockCount: 12,
-    categorySlug: 'grill',
-    isPopular: true,
-    isNew: false,
-    isPromo: true
-  },
-  {
-    slug: 'zhizhig-galnash',
-    title: 'Жижиг-галнаш',
-    price: 380,
-    description: 'Традиционный чеченский суп с галушками из теста.',
-    imageUrl: image('photo-1547592166-23ac45744acd', 'soup'),
-    ingredients: 'Говядина, галушки, бульон, зелень',
-    weight: '420 г',
-    serving: 'с чесночным соусом',
-    stockCount: 8,
-    categorySlug: 'chechen',
-    isPopular: true,
-    isNew: false,
-    isPromo: false
-  },
-  {
-    slug: 'four-seasons',
-    title: 'Четыре сезона',
-    price: 550,
-    description: 'Пицца с ветчиной, грибами, оливками и артишоками.',
-    imageUrl: image('photo-1604382354936-07c5d9983bd3', 'pizza'),
-    ingredients: 'Тесто, сыр, томаты, ветчина, грибы, оливки',
-    weight: '520 г',
-    serving: 'с томатным соусом',
-    stockCount: 9,
-    categorySlug: 'pizza',
-    isPopular: true,
-    isNew: false,
-    isPromo: false
-  },
-  {
-    slug: 'shawarma-combo',
-    title: 'Комбо шаурма',
-    price: 400,
-    description: 'Шаурма с сочным мясом, овощами и картофелем.',
-    imageUrl: image('photo-1529006557810-274b9b2fc783', 'wrap'),
-    ingredients: 'Курица, лаваш, овощи, картофель, соус',
-    weight: '360 г',
-    serving: 'с картофелем',
-    stockCount: 16,
-    categorySlug: 'fastfood',
-    isPopular: true,
-    isNew: true,
-    isPromo: false
-  },
-  {
-    slug: 'bone-steak',
-    title: 'Стейк на косточке',
-    price: 1390,
-    description: 'Сочный стейк из говядины на кости.',
-    imageUrl: image('photo-1544025162-d76694265947', 'steak'),
-    ingredients: 'Говядина, соль, перец, розмарин',
-    weight: '430 г',
-    serving: 'с перечным соусом',
-    stockCount: 5,
-    categorySlug: 'grill',
-    isPopular: false,
-    isNew: false,
-    isPromo: true
-  },
-  {
-    slug: 'coca-cola',
-    title: 'Coca-Cola',
-    price: 120,
-    description: 'Классический освежающий вкус.',
-    imageUrl: image('photo-1629203851122-3726ecdf080e', 'cola'),
-    ingredients: 'Газированный напиток',
-    weight: '330 мл',
-    serving: 'охлажденная',
-    stockCount: 20,
-    categorySlug: 'fridge',
-    isPopular: false,
-    isNew: false,
-    isPromo: false
-  },
-  {
-    slug: 'chechen-tea',
-    title: 'Чеченский чай',
-    price: 200,
-    description: 'Душистый зеленый чай с чабрецом и горными травами.',
-    imageUrl: image('photo-1544787219-7f47ccb76574', 'tea'),
-    ingredients: 'Зеленый чай, чабрец, травы',
-    weight: '450 мл',
-    serving: 'в чайнике',
-    stockCount: 30,
-    categorySlug: 'tea',
-    isPopular: true,
-    isNew: false,
-    isPromo: false
-  },
-  {
-    slug: 'strawberry-lemonade',
-    title: 'Клубничный лимонад',
-    price: 220,
-    description: 'Освежающий лимонад с клубникой и мятой.',
-    imageUrl: image('photo-1513558161293-cdaf765ed2fd', 'strawberry lemonade'),
-    ingredients: 'Клубника, лимон, мята, содовая',
-    weight: '450 мл',
-    serving: 'со льдом',
-    stockCount: 10,
-    categorySlug: 'lemonades',
-    isPopular: true,
-    isNew: true,
-    isPromo: false
-  }
-];
-
-const seedCabins = [
-  { title: 'Кабинка №1', capacity: 4, imageUrl: image('photo-1514933651103-005eec06c04b', 'private dining') },
-  { title: 'Кабинка №2', capacity: 4, imageUrl: image('photo-1559329007-40df8a9345d8', 'restaurant booth') },
-  { title: 'Большая кабинка', capacity: 10, imageUrl: image('photo-1544148103-0773bf10d330', 'large restaurant table') }
-];
-
-async function seedRestaurantCatalog(adminClient: ReturnType<typeof createClient>, catalogId: string) {
-  const { data: categories, error: categoriesError } = await adminClient
-    .from('categories')
-    .insert(
-      seedCategories.map((category, index) => ({
-        catalog_id: catalogId,
-        slug: category.slug,
-        name: category.name,
-        image_url: category.imageUrl,
-        icon: category.icon,
-        sort_order: index * 10
-      }))
-    )
-    .select('id, slug');
-  if (categoriesError || !categories) throw categoriesError ?? new Error('Could not seed categories.');
-
-  const categoryIds = new Map<string, string>();
-  (categories as Array<{ id: string; slug: string }>).forEach((category) => {
-    categoryIds.set(category.slug, category.id);
-  });
-
-  for (const [index, product] of seedProducts.entries()) {
-    const { data: createdProduct, error: productError } = await adminClient
-      .from('products')
-      .insert({
-        catalog_id: catalogId,
-        category_id: categoryIds.get(product.categorySlug) ?? null,
-        slug: product.slug,
-        title: product.title,
-        status: 'active',
-        price: product.price,
-        description: product.description,
-        ingredients: product.ingredients,
-        weight: product.weight,
-        serving: product.serving,
-        stock_count: product.stockCount,
-        is_popular: product.isPopular,
-        is_new: product.isNew,
-        is_promo: product.isPromo,
-        sort_order: index * 10
-      })
-      .select('id')
-      .single();
-    if (productError || !createdProduct) throw productError ?? new Error('Could not seed product.');
-
-    const { error: imageError } = await adminClient.from('product_images').insert({
-      catalog_id: catalogId,
-      product_id: createdProduct.id,
-      url: product.imageUrl,
-      alt: product.title,
-      sort_order: 0
-    });
-    if (imageError) throw imageError;
-  }
-
-  const { error: cabinsError } = await adminClient.from('bookable_resources').insert(
-    seedCabins.map((cabin, index) => ({
-      catalog_id: catalogId,
-      title: cabin.title,
-      capacity: cabin.capacity,
-      image_url: cabin.imageUrl,
-      sort_order: index * 10
-    }))
-  );
-  if (cabinsError) throw cabinsError;
-}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -311,28 +101,25 @@ Deno.serve(async (request) => {
     const [
       { data: existingClientByEmail, error: existingClientError },
       { data: existingCatalogBySlug, error: existingCatalogError },
-      { data: templateVersion, error: templateVersionError }
+      { data: templateCatalog, error: templateCatalogError }
     ] =
       await Promise.all([
         adminClient.from('clients').select('id').eq('email', payload.email).maybeSingle(),
         adminClient.from('catalogs').select('id').eq('slug', payload.slug).maybeSingle(),
         adminClient
-          .from('template_versions')
-          .select('id, status, templates(key)')
+          .from('catalogs')
+          .select('id, template_version_id, is_template')
           .eq('id', payload.templateVersionId)
-          .eq('status', 'published')
+          .eq('is_template', true)
           .maybeSingle()
       ]);
 
     if (existingClientError) throw existingClientError;
     if (existingCatalogError) throw existingCatalogError;
-    if (templateVersionError) throw templateVersionError;
+    if (templateCatalogError) throw templateCatalogError;
     if (existingClientByEmail) throw new Error('Email already exists.');
     if (existingCatalogBySlug) throw new Error('Slug already exists.');
-    if (!templateVersion) throw new Error('Template version is not available.');
-    if ((templateVersion.templates as { key?: string } | null)?.key !== 'restaurant-modern') {
-      throw new Error('Only the restaurant-modern template is available for new clients.');
-    }
+    if (!templateCatalog) throw new Error('Template catalog is not available.');
 
     const { data: createdUser, error: createUserError } = await adminClient.auth.admin.createUser({
       email: payload.email,
@@ -366,19 +153,24 @@ Deno.serve(async (request) => {
       });
       if (profileError) throw profileError;
 
-      const { data: catalog, error: catalogError } = await adminClient
+      const { data: createdCatalogId, error: catalogError } = await adminClient.rpc('create_restaurant_from_template', {
+        template_id: payload.templateVersionId,
+        new_restaurant_name: payload.name,
+        new_restaurant_slug: payload.slug,
+        new_template_version_id: (templateCatalog as { template_version_id?: string }).template_version_id ?? null,
+        created_by_user_id: userData.user.id
+      });
+      if (catalogError || !createdCatalogId) throw catalogError ?? new Error('Could not create catalog from template.');
+      catalogId = String(createdCatalogId);
+
+      const nextCatalogStatus = payload.status === 'inactive' || payload.status === 'blocked' ? 'draft' : 'published';
+      const { data: catalog, error: catalogFetchError } = await adminClient
         .from('catalogs')
-        .insert({
-          template_version_id: payload.templateVersionId,
-          slug: payload.slug,
-          name: payload.name,
-          status: payload.status === 'inactive' || payload.status === 'blocked' ? 'draft' : 'published',
-          created_by: userData.user.id
-        })
+        .update({ status: nextCatalogStatus })
+        .eq('id', catalogId)
         .select('id, slug')
         .single();
-      if (catalogError || !catalog) throw catalogError ?? new Error('Could not create catalog.');
-      catalogId = catalog.id;
+      if (catalogFetchError || !catalog) throw catalogFetchError ?? new Error('Could not load created catalog.');
 
       const { error: memberError } = await adminClient.from('catalog_members').insert({
         catalog_id: catalog.id,
@@ -386,22 +178,6 @@ Deno.serve(async (request) => {
         role: 'owner'
       });
       if (memberError) throw memberError;
-
-      const { error: themeError } = await adminClient.from('catalog_theme_settings').insert({
-        catalog_id: catalog.id,
-        settings: {}
-      });
-      if (themeError) throw themeError;
-
-      const { error: sectionsError } = await adminClient.from('catalog_sections').insert([
-        { catalog_id: catalog.id, key: 'hero', title: 'Главная', sort_order: 10 },
-        { catalog_id: catalog.id, key: 'categories', title: 'Категории', sort_order: 20 },
-        { catalog_id: catalog.id, key: 'products', title: 'Все позиции', sort_order: 30 },
-        { catalog_id: catalog.id, key: 'contacts', title: 'Контакты', sort_order: 40 }
-      ]);
-      if (sectionsError) throw sectionsError;
-
-      await seedRestaurantCatalog(adminClient, catalog.id);
 
       const { data: client, error: clientError } = await adminClient
         .from('clients')

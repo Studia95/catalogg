@@ -8,6 +8,14 @@ export type PlatformTemplateOption = {
   businessType: string;
   version: number;
   description: string;
+  templateCatalogSlug?: string;
+  isCatalogTemplate?: boolean;
+};
+
+export type CreateRestaurantTemplatePayload = {
+  name: string;
+  slug: string;
+  templateName?: string;
 };
 
 export type PlatformClient = {

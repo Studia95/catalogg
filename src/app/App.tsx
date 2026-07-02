@@ -58,6 +58,7 @@ import {
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 import { cabins as demoCabins, categories as demoCategories, products as demoProducts, restaurant as demoRestaurant } from '../data/catalog';
 import type { Cabin, CatalogTag, Category, Product, Restaurant, ThemeSettings } from '../entities/models';
@@ -3191,16 +3192,7 @@ function DesignEditor({
   );
 }
 
-const getCurrentCatalogSlug = () => {
-  const route = window.location.hash.startsWith('#/')
-    ? window.location.hash.slice(2)
-    : window.location.pathname.replace(import.meta.env.BASE_URL, '').replace(/^\/+/, '');
-  const firstSegment = route.split('/').filter(Boolean)[0];
-  return firstSegment && firstSegment !== 'admin' ? firstSegment : 'mangal';
-};
-
-function AppContent() {
-  const catalogSlug = useMemo(() => getCurrentCatalogSlug(), []);
+function AppContent({ catalogSlug }: { catalogSlug: string }) {
   const catalogQueryKey = useMemo(() => ['catalog', catalogSlug] as const, [catalogSlug]);
   const { data, isLoading } = useQuery({
     queryKey: catalogQueryKey,
@@ -3931,9 +3923,15 @@ function AppContent() {
 }
 
 export function App() {
+  const { slug } = useParams();
+
+  if (!slug) {
+    return null;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
-      <AppContent />
+      <AppContent catalogSlug={slug} />
     </QueryClientProvider>
   );
 }

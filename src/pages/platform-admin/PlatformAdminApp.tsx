@@ -31,7 +31,7 @@ import { Toaster, toast } from 'sonner';
 import { createClient, getClients, getPlatformStats, updateClient } from '../../shared/api/clientsApi';
 import { getPlatformAdminAccess, signInPlatformAdmin, signOutPlatformAdmin } from '../../shared/api/platformAdminApi';
 import type { PlatformClient, PlatformStats, PlatformTemplateOption } from '../../shared/api/platformTypes';
-import { getTemplateOptions } from '../../shared/api/templatesApi';
+import { createRestaurantTemplate, getTemplateOptions } from '../../shared/api/templatesApi';
 import { copyText, getCatalogAdminUrl, getCatalogPublicUrl } from '../../shared/platformUrls';
 import {
   createClientSchema,
@@ -1286,6 +1286,106 @@ function ClientsPage({
   );
 }
 
+function TemplatesPage({ templates }: { templates: PlatformTemplateOption[] }) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!slug && name) {
+      setSlug(createSlug(name));
+    }
+  }, [name, slug]);
+
+  const onCreateTemplate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!name.trim() || !slug.trim()) {
+      toast.error('Укажите название и slug шаблона');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await createRestaurantTemplate({
+        name: name.trim(),
+        slug: slug.trim().toLowerCase(),
+        templateName: slug.trim().toLowerCase()
+      });
+      toast.success('Шаблон создан');
+      setName('');
+      setSlug('');
+      void queryClient.invalidateQueries({ queryKey: ['platform-templates'] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Не удалось создать шаблон');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <main className="platform-page">
+      <header className="platform-page-head">
+        <div>
+          <h1>Шаблоны</h1>
+          <p>Создавайте ресторанные шаблоны и настраивайте их как обычные каталоги</p>
+        </div>
+      </header>
+
+      <form className="platform-template-create" onSubmit={onCreateTemplate}>
+        <label>
+          Название шаблона
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Шаблон: Шашлычная"
+            required
+          />
+        </label>
+        <label>
+          Slug шаблона
+          <input
+            value={slug}
+            onChange={(event) => setSlug(event.target.value)}
+            placeholder="shashlik-base"
+            required
+          />
+        </label>
+        <button type="submit" disabled={isSubmitting}>
+          <Plus />
+          {isSubmitting ? 'Создаём...' : 'Создать шаблон'}
+        </button>
+      </form>
+
+      <section className="platform-template-list">
+        {templates.length === 0 && (
+          <div className="platform-placeholder">
+            <LayoutTemplate />
+            <h2>Шаблонов пока нет</h2>
+            <p>Создайте первый шаблон, затем откройте его админку и наполните каталог.</p>
+          </div>
+        )}
+        {templates.map((template) => (
+          <article className="platform-template-card" key={template.templateVersionId}>
+            <div>
+              <span className="platform-template-badge">TEMPLATE</span>
+              <h2>{template.templateName}</h2>
+              <p>{template.description}</p>
+              {template.templateCatalogSlug && <small>#/{template.templateCatalogSlug}</small>}
+            </div>
+            {template.templateCatalogSlug && (
+              <a href={getCatalogAdminUrl(template.templateCatalogSlug)}>
+                <Settings />
+                Настроить
+              </a>
+            )}
+          </article>
+        ))}
+      </section>
+    </main>
+  );
+}
+
 function PlaceholderPage({ route }: { route: PlatformRoute }) {
   const title = navItems.find((item) => item.route === route)?.label ?? 'Раздел';
   return (
@@ -1449,8 +1549,11 @@ function PlatformAdminContent() {
         />
       );
     }
+    if (route === 'templates') {
+      return <TemplatesPage templates={templatesQuery.data ?? []} />;
+    }
     return <PlaceholderPage route={route} />;
-  }, [route]);
+  }, [route, templatesQuery.data]);
 
   if (platformAdminQuery.isLoading) {
     return <main className="platform-state platform-state--full">Проверяем права доступа...</main>;
