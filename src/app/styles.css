@@ -15,7 +15,6 @@
   --muted: #667085;
   --accent: #5b3df4;
   --accent-2: #12b76a;
-  max-width: 520px;
   padding: 0;
   background: #f4f7fb;
   color: #111827;
@@ -23,9 +22,70 @@
 
 .restaurant-admin {
   min-height: 100vh;
-  padding: 18px 16px 96px;
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
   background: #f4f7fb;
   color: #111827;
+}
+
+.restaurant-admin__workspace {
+  min-width: 0;
+  padding: 22px 24px 32px;
+}
+
+.restaurant-admin-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 20px;
+  border-right: 1px solid #e7eaf1;
+  padding: 20px 12px;
+  background: #ffffff;
+}
+
+.restaurant-admin-sidebar .logo {
+  justify-content: flex-start;
+  padding: 0 10px;
+  color: #111827;
+}
+
+.restaurant-admin-sidebar nav {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.restaurant-admin-sidebar button {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: transparent;
+  color: #344054;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  text-align: left;
+}
+
+.restaurant-admin-sidebar button.is-active {
+  background: #f0edff;
+  color: #5b3df4;
+}
+
+.restaurant-admin-sidebar svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.restaurant-admin-sidebar__exit {
+  color: #667085;
 }
 
 .restaurant-admin__hero,
@@ -94,7 +154,7 @@
 
 .admin-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -159,7 +219,7 @@
 
 .admin-quick-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -294,7 +354,7 @@
   bottom: 14px;
   left: max(16px, calc((100vw - 520px) / 2 + 16px));
   z-index: 30;
-  display: grid;
+  display: none;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   padding: 8px;
@@ -321,6 +381,51 @@
 .restaurant-admin-nav button.is-active {
   background: #111827;
   color: #ffffff;
+}
+
+@media (max-width: 1199px) {
+  .restaurant-admin {
+    grid-template-columns: 144px minmax(0, 1fr);
+  }
+
+  .admin-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .restaurant-admin {
+    display: block;
+    padding: 14px 12px calc(86px + env(safe-area-inset-bottom));
+  }
+
+  .restaurant-admin__workspace {
+    padding: 0;
+  }
+
+  .restaurant-admin-sidebar {
+    display: none;
+  }
+
+  .restaurant-admin__hero {
+    border-radius: 18px;
+  }
+
+  .admin-kpi-grid,
+  .admin-quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .restaurant-admin-nav {
+    right: 16px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    left: 16px;
+    display: grid;
+  }
 }
 
 .admin-detail-header {
@@ -514,6 +619,14 @@ a {
   background-position: center;
   background-size: cover;
   color: var(--text);
+}
+
+.app-shell.app-shell--restaurant-admin {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background: #f4f7fb;
 }
 
 .app-shell--stock {

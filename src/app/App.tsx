@@ -1901,6 +1901,7 @@ function RestaurantAdminShell({
   const [tab, setTab] = useState<'home' | 'dishes' | 'orders' | 'settings'>('home');
   const [filter, setFilter] = useState<'all' | RestaurantOrderStatus>('all');
   const [selectedOrder, setSelectedOrder] = useState<RestaurantOrder | null>(null);
+  const logout = useAuthStore((state) => state.logout);
   const today = new Date().toDateString();
   const todayOrders = orders.filter((order) => new Date(order.createdAt).toDateString() === today);
   const todayRevenue = todayOrders
@@ -1924,123 +1925,137 @@ function RestaurantAdminShell({
 
   return (
     <main className="restaurant-admin">
-      <section className="restaurant-admin__hero">
-        <div>
-          <span>Панель ресторана</span>
-          <h1>{restaurant.name || 'Ресторан'}</h1>
-          <p>{restaurant.subtitle || 'Управляйте меню, заказами и доставкой'}</p>
-        </div>
-        <div className="restaurant-admin__logo">
-          {restaurant.logo_url ? <img src={restaurant.logo_url} alt="" /> : <Store />}
-        </div>
-      </section>
+      <aside className="restaurant-admin-sidebar">
+        <Logo compact />
+        <nav aria-label="Разделы админки">
+          <button className={tab === 'home' ? 'is-active' : ''} type="button" onClick={() => setTab('home')}><Home />Главная</button>
+          <button className={tab === 'dishes' ? 'is-active' : ''} type="button" onClick={() => setTab('dishes')}><Utensils />Блюда</button>
+          <button className={tab === 'orders' ? 'is-active' : ''} type="button" onClick={() => setTab('orders')}><ClipboardList />Заказы</button>
+          <button className={tab === 'settings' ? 'is-active' : ''} type="button" onClick={() => setTab('settings')}><Settings />Настройки</button>
+        </nav>
+        <button className="restaurant-admin-sidebar__exit" type="button" onClick={logout}><LogOut />Выход</button>
+      </aside>
 
-      {tab === 'home' && (
-        <section className="restaurant-admin__content">
-          <div className="admin-kpi-grid">
-            <article><strong>{products.length}</strong><span>Блюд</span></article>
-            <article><strong>{categories.length}</strong><span>Категорий</span></article>
-            <article><strong>{todayOrders.length}</strong><span>Заказов сегодня</span></article>
-            <article><strong>4.8</strong><span>Рейтинг</span></article>
+      <div className="restaurant-admin__workspace">
+        <section className="restaurant-admin__hero">
+          <div>
+            <span>Панель ресторана</span>
+            <h1>{restaurant.name || 'Ресторан'}</h1>
+            <p>{restaurant.subtitle || 'Управляйте меню, заказами и доставкой'}</p>
           </div>
-          <section className="admin-today-card">
-            <div>
-              <span>Сегодня</span>
-              <strong>{formatPrice(todayRevenue)}</strong>
-              <small>{activeOrders.length} активных заказов</small>
-            </div>
-            <button type="button" onClick={() => setTab('orders')}>
-              <ClipboardList />
-              Заказы
-            </button>
-          </section>
-          <section className="admin-quick-actions">
-            <button type="button" onClick={onAddDish}><Plus />Добавить блюдо</button>
-            <button type="button" onClick={() => onOpenScreen('settings-stock')}><Package />Остатки</button>
-            <button type="button" onClick={() => setTab('orders')}><ClipboardList />Заказы</button>
-            <button type="button" onClick={() => onOpenScreen('settings-profile')}><Settings />Настройки</button>
-          </section>
-        </section>
-      )}
-
-      {tab === 'dishes' && (
-        <section className="restaurant-admin__content">
-          <section className="admin-section-card">
-            <h2>Блюда и каталог</h2>
-            <p>Существующее ядро каталога сохранено. Эти кнопки открывают текущие рабочие экраны.</p>
-            <div className="admin-quick-actions">
-              <button type="button" onClick={onAddDish}><Plus />Добавить блюдо</button>
-              <button type="button" onClick={() => onOpenScreen('settings-categories')}><Tags />Категории</button>
-              <button type="button" onClick={() => onOpenScreen('settings-stock')}><RefreshCcw />Остатки</button>
-              <button type="button" onClick={() => onOpenScreen('settings-design')}><Paintbrush />Дизайн</button>
-            </div>
-          </section>
-          <div className="admin-menu-preview">
-            {products.slice(0, 8).map((product) => (
-              <article key={product.id}>
-                <SafeImage src={product.image_url} alt={product.title} />
-                <div>
-                  <strong>{product.title}</strong>
-                  <small>{formatPrice(product.price)} · остаток {getCurrentStock(product)}</small>
-                </div>
-              </article>
-            ))}
+          <div className="restaurant-admin__logo">
+            {restaurant.logo_url ? <img src={restaurant.logo_url} alt="" /> : <Store />}
           </div>
         </section>
-      )}
 
-      {tab === 'orders' && (
-        <section className="restaurant-admin__content">
-          <div className="admin-order-filters">
-            {adminOrderStatusFilters.map((item) => (
-              <button
-                className={filter === item.status ? 'is-active' : ''}
-                type="button"
-                key={item.status}
-                onClick={() => setFilter(item.status)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-          <div className="admin-order-list">
-            {filteredOrders.length === 0 && (
-              <section className="admin-empty-orders">
+        {tab === 'home' && (
+          <section className="restaurant-admin__content">
+            <div className="admin-kpi-grid">
+              <article><strong>{products.length}</strong><span>Блюд</span></article>
+              <article><strong>{categories.length}</strong><span>Категорий</span></article>
+              <article><strong>{todayOrders.length}</strong><span>Заказов сегодня</span></article>
+              <article><strong>{formatPrice(todayRevenue)}</strong><span>Выручка</span></article>
+              <article><strong>4.8</strong><span>Рейтинг</span></article>
+            </div>
+            <section className="admin-today-card">
+              <div>
+                <span>Сегодня</span>
+                <strong>{formatPrice(todayRevenue)}</strong>
+                <small>{activeOrders.length} активных заказов</small>
+              </div>
+              <button type="button" onClick={() => setTab('orders')}>
                 <ClipboardList />
-                <strong>Заказов пока нет</strong>
-                <span>Новые заказы появятся здесь автоматически.</span>
-              </section>
-            )}
-            {filteredOrders.map((order) => (
-              <button className={`admin-order-card status-${order.status}`} type="button" key={order.id} onClick={() => setSelectedOrder(order)}>
-                <span>
-                  <strong>#{order.orderNumber}</strong>
-                  <small>{fulfillmentLabels[order.fulfillmentType]} · {order.items.length} поз.</small>
-                </span>
-                <span>
-                  <b>{formatPrice(order.total)}</b>
-                  <i>{adminOrderStatusLabels[order.status]}</i>
-                </span>
+                Заказы
               </button>
-            ))}
-          </div>
-        </section>
-      )}
+            </section>
+            <section className="admin-quick-actions">
+              <button type="button" onClick={onAddDish}><Plus />Добавить блюдо</button>
+              <button type="button" onClick={() => onOpenScreen('settings-stock')}><Package />Остатки</button>
+              <button type="button" onClick={() => setTab('orders')}><ClipboardList />Заказы</button>
+              <button type="button" onClick={() => onOpenScreen('settings-profile')}><Settings />Настройки</button>
+            </section>
+          </section>
+        )}
 
-      {tab === 'settings' && (
-        <section className="restaurant-admin__content">
-          <section className="admin-section-card">
-            <h2>Настройки ресторана</h2>
-            <div className="admin-quick-actions">
-              <button type="button" onClick={() => onOpenScreen('settings-profile')}><Store />Профиль</button>
-              <button type="button" onClick={() => onOpenScreen('settings-design')}><Paintbrush />Дизайн</button>
-              <button type="button" onClick={() => onOpenScreen('settings-categories')}><Tags />Категории</button>
-              <button type="button" onClick={() => onOpenScreen('settings-backup')}><CloudUpload />Импорт</button>
+        {tab === 'dishes' && (
+          <section className="restaurant-admin__content">
+            <section className="admin-section-card">
+              <h2>Блюда и каталог</h2>
+              <p>Существующее ядро каталога сохранено. Эти кнопки открывают текущие рабочие экраны.</p>
+              <div className="admin-quick-actions">
+                <button type="button" onClick={onAddDish}><Plus />Добавить блюдо</button>
+                <button type="button" onClick={() => onOpenScreen('settings-categories')}><Tags />Категории</button>
+                <button type="button" onClick={() => onOpenScreen('settings-stock')}><RefreshCcw />Остатки</button>
+                <button type="button" onClick={() => onOpenScreen('settings-design')}><Paintbrush />Дизайн</button>
+              </div>
+            </section>
+            <div className="admin-menu-preview">
+              {products.slice(0, 8).map((product) => (
+                <article key={product.id}>
+                  <SafeImage src={product.image_url} alt={product.title} />
+                  <div>
+                    <strong>{product.title}</strong>
+                    <small>{formatPrice(product.price)} · остаток {getCurrentStock(product)}</small>
+                  </div>
+                </article>
+              ))}
             </div>
           </section>
-          <DeliverySettingsCard settings={deliverySettings ?? defaultAdminDeliverySettings} onSave={onSaveDeliverySettings} />
-        </section>
-      )}
+        )}
+
+        {tab === 'orders' && (
+          <section className="restaurant-admin__content">
+            <div className="admin-order-filters">
+              {adminOrderStatusFilters.map((item) => (
+                <button
+                  className={filter === item.status ? 'is-active' : ''}
+                  type="button"
+                  key={item.status}
+                  onClick={() => setFilter(item.status)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <div className="admin-order-list">
+              {filteredOrders.length === 0 && (
+                <section className="admin-empty-orders">
+                  <ClipboardList />
+                  <strong>Заказов пока нет</strong>
+                  <span>Новые заказы появятся здесь автоматически.</span>
+                </section>
+              )}
+              {filteredOrders.map((order) => (
+                <button className={`admin-order-card status-${order.status}`} type="button" key={order.id} onClick={() => setSelectedOrder(order)}>
+                  <span>
+                    <strong>#{order.orderNumber}</strong>
+                    <small>{fulfillmentLabels[order.fulfillmentType]} · {order.items.length} поз.</small>
+                  </span>
+                  <span>
+                    <b>{formatPrice(order.total)}</b>
+                    <i>{adminOrderStatusLabels[order.status]}</i>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {tab === 'settings' && (
+          <section className="restaurant-admin__content">
+            <section className="admin-section-card">
+              <h2>Настройки ресторана</h2>
+              <div className="admin-quick-actions">
+                <button type="button" onClick={() => onOpenScreen('settings-profile')}><Store />Профиль</button>
+                <button type="button" onClick={() => onOpenScreen('settings-design')}><Paintbrush />Дизайн</button>
+                <button type="button" onClick={() => onOpenScreen('settings-categories')}><Tags />Категории</button>
+                <button type="button" onClick={() => onOpenScreen('settings-backup')}><CloudUpload />Импорт</button>
+              </div>
+            </section>
+            <DeliverySettingsCard settings={deliverySettings ?? defaultAdminDeliverySettings} onSave={onSaveDeliverySettings} />
+          </section>
+        )}
+      </div>
 
       <nav className="restaurant-admin-nav" aria-label="Админка ресторана">
         <button className={tab === 'home' ? 'is-active' : ''} type="button" onClick={() => setTab('home')}><Home />Главная</button>
@@ -4310,11 +4325,13 @@ function AppContent({ catalogSlug }: { catalogSlug: string }) {
         </>
       )}
 
-      <AdminPanel
-        active={screen.startsWith('settings') ? 'settings' : undefined}
-        onAdd={() => setAdminEditor('dish')}
-        onSettings={() => setScreen('admin-home')}
-      />
+      {!screen.startsWith('settings') && screen !== 'admin-home' && (
+        <AdminPanel
+          active={undefined}
+          onAdd={() => setAdminEditor('dish')}
+          onSettings={() => setScreen('admin-home')}
+        />
+      )}
       <DesignEditor
         editingProduct={editingProduct}
         categories={catalog.categories}
