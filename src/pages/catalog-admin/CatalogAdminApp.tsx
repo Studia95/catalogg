@@ -1,5 +1,5 @@
-import { CheckCircle2, Copy, ExternalLink, LockKeyhole, LogOut, RefreshCw, ShieldAlert, Store } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type UIEvent } from 'react';
+import { CheckCircle2, LockKeyhole, LogOut, RefreshCw, ShieldAlert } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type UIEvent } from 'react';
 import { Toaster, toast } from 'sonner';
 import {
   confirmPersonalDataConsent,
@@ -8,25 +8,12 @@ import {
   signOutCatalogAdmin,
   type CatalogAdminAccess
 } from '../../shared/api/catalogAdminApi';
-import { copyText, getCatalogPublicUrl } from '../../shared/platformUrls';
 import { privacyPolicyIntro, privacyPolicySections, privacyPolicyTitle } from '../../shared/privacyPolicy';
+import { RestaurantAdminShell } from './RestaurantAdminShell';
 import './catalog-admin.css';
 
 type CatalogAdminAppProps = {
   slug: string;
-};
-
-const roleLabels: Record<NonNullable<CatalogAdminAccess['role']>, string> = {
-  owner: 'Владелец',
-  admin: 'Администратор',
-  editor: 'Редактор',
-  viewer: 'Просмотр'
-};
-
-const statusLabels: Record<NonNullable<CatalogAdminAccess['catalog']>['status'], string> = {
-  draft: 'Черновик',
-  published: 'Опубликован',
-  archived: 'Архив'
 };
 
 function CatalogLogin({
@@ -120,8 +107,6 @@ function CatalogDashboard({
   onConsentConfirmed: (access: CatalogAdminAccess) => void;
 }) {
   const catalog = access.catalog;
-  const publicUrl = useMemo(() => (catalog ? getCatalogPublicUrl(catalog.slug) : ''), [catalog]);
-
   if (!catalog) {
     return (
       <main className="catalog-admin-state">
@@ -135,85 +120,20 @@ function CatalogDashboard({
   const isBlockedByConsent = access.firstLogin || !access.consentGiven;
 
   return (
-    <main className="catalog-admin-page" data-consent-blocked={isBlockedByConsent}>
+    <>
       <Toaster richColors position="top-center" />
-      <header className="catalog-admin-header">
-        <div className="catalog-admin-brand">
-          {catalog.logoUrl ? <img src={catalog.logoUrl} alt="" /> : <span>{catalog.name.slice(0, 1)}</span>}
-          <div>
-            <strong>{catalog.name}</strong>
-            <small>{catalog.slug}</small>
-          </div>
-        </div>
-        <div className="catalog-admin-actions">
-          <button type="button" onClick={onRefresh}>
-            <RefreshCw />
-            Обновить
-          </button>
-          <button type="button" onClick={onSignOut}>
-            <LogOut />
-            Выйти
-          </button>
-        </div>
-      </header>
-
-      <section className="catalog-admin-hero">
-        <div>
-          <span>{roleLabels[access.role ?? 'viewer']}</span>
-          <h1>Админка каталога</h1>
-          <p>Базовый кабинет клиента подключён к Supabase Auth и catalog_members.</p>
-        </div>
-        <a href={publicUrl} target="_blank" rel="noreferrer">
-          <ExternalLink />
-          Открыть каталог
-        </a>
-      </section>
-
-      <section className="catalog-admin-grid">
-        <article>
-          <Store />
-          <small>Статус каталога</small>
-          <strong>{statusLabels[catalog.status]}</strong>
-        </article>
-        <article>
-          <Store />
-          <small>Шаблон</small>
-          <strong>
-            {catalog.templateName} v{catalog.templateVersion}
-          </strong>
-        </article>
-        <article>
-          <Store />
-          <small>Аккаунт</small>
-          <strong>{access.email}</strong>
-        </article>
-      </section>
-
-      <section className="catalog-admin-panel">
-        <h2>Ссылки</h2>
-        <div>
-          <span>{publicUrl}</span>
-          <button type="button" onClick={() => void copyText(publicUrl).then(() => toast.success('Ссылка скопирована'))}>
-            <Copy />
-            Копировать
-          </button>
-        </div>
-      </section>
-
-      <section className="catalog-admin-panel">
-        <h2>Следующий этап</h2>
-        <p>
-          Дальше сюда подключаются товары, категории, настройки дизайна и импорт/экспорт именно для этого каталога.
-          Доступ уже отделён от суперадминки.
-        </p>
-      </section>
-      {isBlockedByConsent && (
-        <ConsentModal
-          slug={catalog.slug}
-          onConfirmed={onConsentConfirmed}
-        />
-      )}
-    </main>
+      <RestaurantAdminShell
+        access={access}
+        onRefresh={onRefresh}
+        onSignOut={onSignOut}
+        consentModal={isBlockedByConsent ? (
+          <ConsentModal
+            slug={catalog.slug}
+            onConfirmed={onConsentConfirmed}
+          />
+        ) : undefined}
+      />
+    </>
   );
 }
 
