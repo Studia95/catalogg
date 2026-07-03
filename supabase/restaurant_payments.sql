@@ -38,6 +38,10 @@ for select using (
   or public.is_catalog_member(restaurant_id, array['owner','admin','editor','viewer']::public.catalog_role[])
 );
 
+drop policy if exists "restaurant payments public read published" on public.restaurant_payments;
+create policy "restaurant payments public read published" on public.restaurant_payments
+for select using (public.is_catalog_published(restaurant_id));
+
 drop policy if exists "restaurant owners manage payment settings" on public.restaurant_payments;
 create policy "restaurant owners manage payment settings" on public.restaurant_payments
 for all using (

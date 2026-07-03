@@ -85,6 +85,7 @@
 .restaurant-card,
 .restaurant-list-item,
 .profile-card,
+.profile-role-grid a,
 .profile-menu a,
 .profile-menu button,
 .order-card,
@@ -122,6 +123,7 @@
 .filter-chip svg,
 .restaurant-list-item svg,
 .bottom-nav svg,
+.profile-role-grid svg,
 .profile-menu svg,
 .order-card svg,
 .payment-method svg {
@@ -366,6 +368,17 @@
   gap: 8px;
   padding: 0 14px;
   font-weight: 900;
+}
+
+.wide-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
+}
+
+.wide-action--secondary {
+  border-color: #d8e0ec;
+  background: #f8fafc;
+  color: #111827;
 }
 
 .plain-section {
@@ -1049,6 +1062,32 @@
   min-width: 0;
 }
 
+.address-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.address-actions a {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 5px;
+  border-radius: 8px;
+  padding: 0 9px;
+  background: #f0edff;
+  color: #5b3df4;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.address-actions svg {
+  width: 16px;
+  height: 16px;
+}
+
 .map-panel {
   display: grid;
   gap: 12px;
@@ -1242,6 +1281,56 @@
 .profile-card span:nth-child(2) {
   display: grid;
   gap: 4px;
+}
+
+.profile-form-section {
+  margin-bottom: 14px;
+}
+
+.profile-inline-form {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-role-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.profile-role-grid a {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 0 14px;
+  color: #111827;
+  font-weight: 900;
+}
+
+.profile-role-grid span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.profile-role-grid small {
+  color: #667085;
+  font-weight: 700;
+}
+
+.form-error,
+.form-success {
+  font-weight: 800;
+}
+
+.form-error {
+  color: #c2410c;
+}
+
+.form-success {
+  color: #047857;
 }
 
 .profile-menu {

@@ -127,6 +127,14 @@ create table if not exists public.client_profiles (
   unique (user_id)
 );
 
+create table if not exists public.client_signups (
+  id uuid primary key default gen_random_uuid(),
+  name text not null default '',
+  phone text not null default '',
+  source text not null default 'client_profile',
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.client_addresses (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
@@ -228,6 +236,17 @@ create index if not exists platform_categories_slug_idx on public.platform_categ
 create index if not exists restaurant_platform_categories_lookup_idx on public.restaurant_platform_categories(platform_category_id, restaurant_id);
 create index if not exists restaurant_categories_restaurant_idx on public.restaurant_categories(restaurant_id, sort_order);
 create index if not exists dishes_restaurant_category_idx on public.dishes(restaurant_id, category_id, is_active);
+create index if not exists client_signups_created_idx on public.client_signups(created_at desc);
 create index if not exists client_addresses_user_idx on public.client_addresses(user_id, is_default desc);
 create index if not exists orders_client_status_idx on public.orders(client_id, status, created_at desc);
 create index if not exists deliveries_order_idx on public.deliveries(order_id);
+
+alter table public.client_signups enable row level security;
+
+drop policy if exists "client signups public insert" on public.client_signups;
+create policy "client signups public insert" on public.client_signups
+for insert with check (true);
+
+drop policy if exists "client signups platform admins read" on public.client_signups;
+create policy "client signups platform admins read" on public.client_signups
+for select using (public.is_platform_admin());

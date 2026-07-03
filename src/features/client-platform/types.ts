@@ -41,6 +41,7 @@ export type ClientRestaurant = {
   name: string;
   description: string;
   cityId: string;
+  serviceCityIds?: string[];
   categorySlugs: string[];
   logoUrl: string;
   coverUrl: string;
@@ -53,6 +54,7 @@ export type ClientRestaurant = {
   theme: RestaurantTheme;
   orderTypes: ClientOrderType[];
   paymentMethods: ClientPaymentMethod[];
+  publicPath?: string;
 };
 
 export type ClientPlatformCategory = {

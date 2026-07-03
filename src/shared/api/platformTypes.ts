@@ -42,6 +42,14 @@ export type PlatformClient = {
   createdAt: string;
 };
 
+export type ClientSignup = {
+  id: string;
+  name: string;
+  phone: string;
+  source: string;
+  createdAt: string;
+};
+
 export type ClientListParams = {
   search?: string;
   status?: string;

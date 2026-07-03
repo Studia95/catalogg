@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import type {
   ClientListParams,
+  ClientSignup,
   CreateClientPayload,
   CreateClientResult,
   PlatformClient,
@@ -81,6 +82,23 @@ const demoClients: PlatformClient[] = [
   }
 ];
 
+const demoClientSignups: ClientSignup[] = [
+  {
+    id: 'signup-adam',
+    name: 'Адам М.',
+    phone: '+7 928 123-45-67',
+    source: 'client_profile',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'signup-madina',
+    name: 'Мадина',
+    phone: '+7 928 555-44-33',
+    source: 'delivery_checkout',
+    createdAt: new Date(Date.now() - 86_400_000).toISOString()
+  }
+];
+
 type ClientRow = {
   id: string;
   company_name: string;
@@ -111,6 +129,14 @@ type ClientRow = {
   } | null;
 };
 
+type ClientSignupRow = {
+  id: string;
+  name: string;
+  phone: string;
+  source: string;
+  created_at: string;
+};
+
 const mapClient = (row: ClientRow): PlatformClient => ({
   id: row.id,
   companyName: row.company_name,
@@ -132,6 +158,14 @@ const mapClient = (row: ClientRow): PlatformClient => ({
   templateVersion: row.catalogs?.template_versions?.version ?? 1,
   businessType: row.catalogs?.template_versions?.templates?.business_type ?? 'restaurant',
   logoUrl: row.catalogs?.logo_url ?? '',
+  createdAt: row.created_at
+});
+
+const mapClientSignup = (row: ClientSignupRow): ClientSignup => ({
+  id: row.id,
+  name: row.name,
+  phone: row.phone,
+  source: row.source,
   createdAt: row.created_at
 });
 
@@ -210,6 +244,20 @@ export async function getPlatformStats(): Promise<PlatformStats> {
     monthlyRevenue: 0,
     monthlyViews: 0
   };
+}
+
+export async function getClientSignups(): Promise<ClientSignup[]> {
+  if (!supabase) return demoClientSignups;
+
+  const { data, error } = await supabase
+    .from('client_signups')
+    .select('id, name, phone, source, created_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) throw error;
+
+  return ((data ?? []) as ClientSignupRow[]).map(mapClientSignup);
 }
 
 export async function createClient(payload: CreateClientPayload): Promise<CreateClientResult> {

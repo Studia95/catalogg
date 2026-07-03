@@ -5,10 +5,12 @@ import {
   Bell,
   Bike,
   Building2,
+  Car,
   Check,
   ChevronRight,
   CircleUserRound,
   Clock,
+  ExternalLink,
   Grid2X2,
   Heart,
   Home,
@@ -26,18 +28,20 @@ import {
   Repeat2,
   Search,
   Settings,
+  ShieldCheck,
   ShoppingCart,
   Star,
   Store,
   Truck,
   User,
+  UserRoundCheck,
   WalletCards
 } from 'lucide-react';
 import type { CSSProperties, FormEvent } from 'react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { buildOrderAfterClientPaymentNotice, calculateCartSummary, filterRestaurants, getDeliveryProviderLabel } from '../../features/client-platform/clientPlatformLogic';
+import { buildOrderAfterClientPaymentNotice, buildRestaurantPublicPath, buildYandexMapsUrl, calculateCartSummary, filterRestaurants, getDeliveryProviderLabel } from '../../features/client-platform/clientPlatformLogic';
 import { clientPlatformSnapshot, fallbackPaymentSettings } from '../../features/client-platform/mockData';
 import {
   selectAllCartCount,
@@ -59,7 +63,8 @@ import type {
   ClientPlatformSnapshot,
   ClientRestaurant
 } from '../../features/client-platform/types';
-import { getClientPlatformSnapshot } from '../../shared/api/clientPlatformApi';
+import { getClientPlatformSnapshot, saveClientSignup } from '../../shared/api/clientPlatformApi';
+import { signInPlatformAdmin } from '../../shared/api/platformAdminApi';
 import './client-platform.css';
 
 const clientPlatformQueryClient = new QueryClient();
@@ -501,7 +506,7 @@ function RestaurantCard({
     .join(' · ');
 
   return (
-    <Link className="restaurant-card" to={`/r/${restaurant.slug}`}>
+    <Link className="restaurant-card" to={buildRestaurantPublicPath(restaurant)}>
       <img src={restaurant.coverUrl} alt="" />
       <span className="restaurant-card__body">
         <span className="restaurant-card__title">
@@ -512,7 +517,10 @@ function RestaurantCard({
         </span>
         <small>{categoryNames}</small>
         <b>от {formatPrice(restaurant.minOrderAmount)} · {restaurant.deliveryTimeFrom}-{restaurant.deliveryTimeTo} мин</b>
-        <em>{restaurant.freeDeliveryFrom > 0 ? 'Бесплатная доставка' : getDeliveryProviderLabel(restaurant.deliveryProvider)}</em>
+        <em>
+          {getDeliveryProviderLabel(restaurant.deliveryProvider)}
+          {restaurant.freeDeliveryFrom > 0 && ` · бесплатно от ${formatPrice(restaurant.freeDeliveryFrom)}`}
+        </em>
       </span>
     </Link>
   );
@@ -533,7 +541,7 @@ function RestaurantListItem({
     .join(' · ');
 
   return (
-    <Link className="restaurant-list-item" to={`/r/${restaurant.slug}`}>
+    <Link className="restaurant-list-item" to={buildRestaurantPublicPath(restaurant)}>
       <img src={restaurant.coverUrl} alt="" />
       <span>
         <strong>{restaurant.name}</strong>
@@ -1333,7 +1341,18 @@ function ProfileArea({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
 }
 
 function ProfilePage() {
+  const navigate = useNavigate();
   const profile = useClientPlatformStore((state) => state.profile);
+  const saveProfile = useClientPlatformStore((state) => state.saveProfile);
+  const [clientName, setClientName] = useState(profile.name);
+  const [clientPhone, setClientPhone] = useState(profile.phone);
+  const [clientMessage, setClientMessage] = useState('');
+  const [clientError, setClientError] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [adminError, setAdminError] = useState('');
+  const [isSavingClient, setIsSavingClient] = useState(false);
+  const [isSigningAdmin, setIsSigningAdmin] = useState(false);
   const items = [
     { to: '/profile/orders', label: 'Мои заказы', Icon: ReceiptText },
     { to: '/profile/favorites', label: 'Избранное', Icon: Heart },
@@ -1342,6 +1361,52 @@ function ProfilePage() {
     { to: '/profile/support', label: 'Поддержка', Icon: MessageCircle },
     { to: '/profile/settings', label: 'Настройки', Icon: Settings }
   ];
+  const displayName = profile.name || 'Гость WayCatalog';
+  const displayPhone = profile.phone || 'Телефон не указан';
+
+  const submitClientProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextProfile = { name: clientName.trim(), phone: clientPhone.trim() };
+
+    setClientError('');
+    setClientMessage('');
+    setIsSavingClient(true);
+
+    if (!nextProfile.name || !nextProfile.phone) {
+      setClientError('Введите имя и номер телефона.');
+      setIsSavingClient(false);
+      return;
+    }
+
+    try {
+      saveProfile(nextProfile);
+      await saveClientSignup(nextProfile);
+      setClientMessage('Профиль сохранён');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'неизвестная ошибка';
+      setClientError(`Профиль сохранён на устройстве. Supabase: ${message}`);
+    } finally {
+      setIsSavingClient(false);
+    }
+  };
+
+  const submitPlatformAdmin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAdminError('');
+    setIsSigningAdmin(true);
+
+    try {
+      const access = await signInPlatformAdmin(adminEmail, adminPassword);
+      if (!access.isPlatformAdmin) {
+        throw new Error('Этот пользователь не добавлен в platform_admins.');
+      }
+      navigate('/admin/clients');
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : 'Не удалось войти в супер-админку.');
+    } finally {
+      setIsSigningAdmin(false);
+    }
+  };
 
   return (
     <>
@@ -1349,11 +1414,70 @@ function ProfilePage() {
       <section className="profile-card">
         <span className="avatar"><CircleUserRound /></span>
         <span>
-          <strong>{profile.name}</strong>
-          <small>{profile.phone}</small>
+          <strong>{displayName}</strong>
+          <small>{displayPhone}</small>
         </span>
         <ChevronRight />
       </section>
+
+      <section className="plain-section profile-form-section">
+        <h2>Клиент</h2>
+        <form className="profile-inline-form" onSubmit={submitClientProfile}>
+          <label className="field-label">
+            <span>Имя</span>
+            <input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Ваше имя" />
+          </label>
+          <label className="field-label">
+            <span>Телефон</span>
+            <input value={clientPhone} onChange={(event) => setClientPhone(event.target.value)} placeholder="+7" inputMode="tel" />
+          </label>
+          {clientError && <small className="form-error">{clientError}</small>}
+          {clientMessage && <small className="form-success">{clientMessage}</small>}
+          <button className="wide-action" type="submit" disabled={isSavingClient}>
+            <UserRoundCheck />
+            {isSavingClient ? 'Сохраняем...' : 'Войти как клиент'}
+          </button>
+        </form>
+      </section>
+
+      <section className="profile-role-grid">
+        <Link to="/login">
+          <Building2 />
+          <span>
+            <strong>Войти как ресторан</strong>
+            <small>Аккаунт выдаёт супер-админ</small>
+          </span>
+          <ChevronRight />
+        </Link>
+        <Link to="/driver">
+          <Car />
+          <span>
+            <strong>Войти как водитель</strong>
+            <small>Аккаунт выдаёт супер-админ</small>
+          </span>
+          <ChevronRight />
+        </Link>
+      </section>
+
+      <section className="plain-section profile-form-section">
+        <h2>Супер-админ</h2>
+        <form className="profile-inline-form" onSubmit={submitPlatformAdmin}>
+          <label className="field-label">
+            <span>Email</span>
+            <input value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} type="email" autoComplete="email" required />
+          </label>
+          <label className="field-label">
+            <span>Пароль</span>
+            <input value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} type="password" autoComplete="current-password" required />
+          </label>
+          {adminError && <small className="form-error">{adminError}</small>}
+          <button className="wide-action" type="submit" disabled={isSigningAdmin}>
+            <ShieldCheck />
+            {isSigningAdmin ? 'Проверяем...' : 'Войти в супер-админку'}
+          </button>
+        </form>
+      </section>
+
       <nav className="profile-menu">
         {items.map(({ to, label, Icon }) => (
           <Link to={to} key={to}>
@@ -1454,7 +1578,7 @@ function FavoritesPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
         <h2>Любимые блюда</h2>
         <div className="favorite-dish-list">
           {dishes.map((dish) => (
-            <Link to={`/r/${dish.restaurantSlug}`} key={dish.id}>
+            <Link to={`/${dish.restaurantSlug}`} key={dish.id}>
               <img src={dish.imageUrl} alt="" />
               <span>
                 <strong>{dish.name}</strong>
@@ -1483,7 +1607,13 @@ function AddressesPage() {
               <strong>{address.title}</strong>
               <small>{address.addressLine}</small>
             </span>
-            {address.isDefault && <Check />}
+            <div className="address-actions">
+              {address.isDefault && <Check />}
+              <a href={buildYandexMapsUrl(address)} target="_blank" rel="noreferrer" aria-label="Открыть адрес в Яндекс Картах">
+                <ExternalLink />
+                Яндекс
+              </a>
+            </div>
           </article>
         ))}
       </div>
@@ -1512,6 +1642,15 @@ function AddressesPage() {
           <Plus />
           Добавить адрес
         </button>
+        <a
+          className="wide-action wide-action--secondary"
+          href={buildYandexMapsUrl({ addressLine: addressLine.trim(), lat: Number.NaN, lng: Number.NaN })}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <MapPin />
+          Открыть Яндекс Карты
+        </a>
       </section>
     </>
   );

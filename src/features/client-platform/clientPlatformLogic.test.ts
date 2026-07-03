@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  buildYandexMapsUrl,
+  buildRestaurantPublicPath,
   buildOrderAfterClientPaymentNotice,
   calculateCartSummary,
   filterRestaurants,
@@ -15,6 +17,7 @@ const restaurants: ClientRestaurant[] = [
     name: 'Rizih',
     description: 'Суши и пицца',
     cityId: 'grozny',
+    serviceCityIds: ['chernoreche'],
     categorySlugs: ['sushi', 'pizza'],
     logoUrl: '',
     coverUrl: '',
@@ -139,6 +142,45 @@ describe('client platform restaurant filtering', () => {
     assert.deepEqual(
       result.map((restaurant) => restaurant.slug),
       ['rizih', 'mangal']
+    );
+  });
+
+  it('shows restaurants that serve the selected settlement even when their main city is different', () => {
+    const result = filterRestaurants(restaurants, { cityId: 'chernoreche', categorySlug: 'all', query: '' });
+
+    assert.deepEqual(
+      result.map((restaurant) => restaurant.slug),
+      ['rizih']
+    );
+  });
+});
+
+describe('client platform restaurant links', () => {
+  it('opens the existing public catalog slug without the /r prefix', () => {
+    assert.equal(buildRestaurantPublicPath(restaurants[0]), '/rizih');
+  });
+});
+
+describe('client platform address maps', () => {
+  it('opens Yandex Maps with the selected delivery coordinates', () => {
+    assert.equal(
+      buildYandexMapsUrl({
+        addressLine: 'ул. Ленина, 123',
+        lat: 43.3184,
+        lng: 45.6927
+      }),
+      'https://yandex.ru/maps/?ll=45.6927,43.3184&z=17&pt=45.6927,43.3184,pm2rdm'
+    );
+  });
+
+  it('falls back to address search when coordinates are not set yet', () => {
+    assert.equal(
+      buildYandexMapsUrl({
+        addressLine: 'Грозный, проспект Путина',
+        lat: Number.NaN,
+        lng: Number.NaN
+      }),
+      'https://yandex.ru/maps/?text=%D0%93%D1%80%D0%BE%D0%B7%D0%BD%D1%8B%D0%B9%2C%20%D0%BF%D1%80%D0%BE%D1%81%D0%BF%D0%B5%D0%BA%D1%82%20%D0%9F%D1%83%D1%82%D0%B8%D0%BD%D0%B0'
     );
   });
 });

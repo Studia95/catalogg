@@ -32,6 +32,7 @@ export const clientPlatformSnapshot: ClientPlatformSnapshot = {
       name: 'Rizih',
       description: 'Суши, пицца, напитки',
       cityId: 'grozny',
+      serviceCityIds: ['chernoreche', 'berkat-yurt'],
       categorySlugs: ['sushi', 'pizza', 'drinks'],
       logoUrl: '',
       coverUrl: image('photo-1611143669185-af224c5e3252', 'sushi'),
@@ -51,7 +52,8 @@ export const clientPlatformSnapshot: ClientPlatformSnapshot = {
         mutedTextColor: '#607568'
       },
       orderTypes: ['dine_in', 'pickup', 'delivery'],
-      paymentMethods: ['qr', 'bank_transfer', 'cash']
+      paymentMethods: ['qr', 'bank_transfer', 'cash'],
+      publicPath: '/rizih'
     },
     {
       id: 'restaurant-mangal',
@@ -59,6 +61,7 @@ export const clientPlatformSnapshot: ClientPlatformSnapshot = {
       name: 'Мангал',
       description: 'Шашлык, бургеры, хинкал',
       cityId: 'grozny',
+      serviceCityIds: ['chernoreche'],
       categorySlugs: ['kebab', 'burgers', 'soups'],
       logoUrl: '',
       coverUrl: image('photo-1555939594-58d7cb561ad1', 'grill'),
@@ -78,7 +81,8 @@ export const clientPlatformSnapshot: ClientPlatformSnapshot = {
         mutedTextColor: '#775d4b'
       },
       orderTypes: ['dine_in', 'pickup', 'delivery'],
-      paymentMethods: ['bank_transfer', 'cash']
+      paymentMethods: ['bank_transfer', 'cash'],
+      publicPath: '/mangal'
     },
     {
       id: 'restaurant-barakat',
@@ -86,6 +90,7 @@ export const clientPlatformSnapshot: ClientPlatformSnapshot = {
       name: 'Баракат',
       description: 'Пицца, суши, напитки',
       cityId: 'grozny',
+      serviceCityIds: ['berkat-yurt'],
       categorySlugs: ['pizza', 'sushi', 'drinks'],
       logoUrl: '',
       coverUrl: image('photo-1565299624946-b28f40a0ae38', 'pizza'),
@@ -105,7 +110,8 @@ export const clientPlatformSnapshot: ClientPlatformSnapshot = {
         mutedTextColor: '#69617f'
       },
       orderTypes: ['pickup', 'delivery'],
-      paymentMethods: ['qr', 'cash']
+      paymentMethods: ['qr', 'cash'],
+      publicPath: '/barakat'
     },
     {
       id: 'restaurant-halal-house',
@@ -113,6 +119,7 @@ export const clientPlatformSnapshot: ClientPlatformSnapshot = {
       name: 'Халяль Хаус',
       description: 'Шашлык, пицца, хинкал',
       cityId: 'grozny',
+      serviceCityIds: [],
       categorySlugs: ['kebab', 'pizza', 'soups'],
       logoUrl: '',
       coverUrl: image('photo-1529692236671-f1f6cf9683ba', 'meat'),
@@ -132,7 +139,8 @@ export const clientPlatformSnapshot: ClientPlatformSnapshot = {
         mutedTextColor: '#58717a'
       },
       orderTypes: ['dine_in', 'pickup'],
-      paymentMethods: ['cash']
+      paymentMethods: ['cash'],
+      publicPath: '/halal-house'
     },
     {
       id: 'restaurant-vostok',
@@ -140,6 +148,7 @@ export const clientPlatformSnapshot: ClientPlatformSnapshot = {
       name: 'Вкус Востока',
       description: 'Плов, шашлык, салаты',
       cityId: 'argun',
+      serviceCityIds: [],
       categorySlugs: ['kebab', 'salads', 'soups'],
       logoUrl: '',
       coverUrl: image('photo-1604908176997-125f25cc6f3d', 'rice'),
@@ -159,7 +168,8 @@ export const clientPlatformSnapshot: ClientPlatformSnapshot = {
         mutedTextColor: '#607573'
       },
       orderTypes: ['pickup', 'delivery'],
-      paymentMethods: ['bank_transfer', 'cash']
+      paymentMethods: ['bank_transfer', 'cash'],
+      publicPath: '/vkus-vostoka'
     }
   ],
   restaurantCategories: [

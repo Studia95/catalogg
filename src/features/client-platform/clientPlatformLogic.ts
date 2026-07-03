@@ -1,6 +1,7 @@
 import type {
   ClientCartLine,
   ClientCartSummary,
+  ClientAddress,
   ClientDeliveryProvider,
   ClientDish,
   ClientOrder,
@@ -44,7 +45,7 @@ export const filterRestaurants = (
   const hasCategory = categorySlug !== '' && categorySlug !== 'all';
 
   return restaurants.filter((restaurant) => {
-    const inCity = restaurant.cityId === cityId;
+    const inCity = restaurant.cityId === cityId || (restaurant.serviceCityIds ?? []).includes(cityId);
     const inCategory = !hasCategory || restaurant.categorySlugs.includes(categorySlug);
     const matchesQuery =
       normalizedQuery.length === 0 ||
@@ -52,6 +53,18 @@ export const filterRestaurants = (
 
     return inCity && inCategory && matchesQuery;
   });
+};
+
+export const buildRestaurantPublicPath = (restaurant: Pick<ClientRestaurant, 'slug' | 'publicPath'>) =>
+  restaurant.publicPath ?? `/${restaurant.slug}`;
+
+export const buildYandexMapsUrl = (address: Pick<ClientAddress, 'addressLine' | 'lat' | 'lng'>) => {
+  const coordinatesAreUsable = Number.isFinite(address.lat) && Number.isFinite(address.lng);
+  if (coordinatesAreUsable) {
+    return `https://yandex.ru/maps/?ll=${address.lng},${address.lat}&z=17&pt=${address.lng},${address.lat},pm2rdm`;
+  }
+
+  return `https://yandex.ru/maps/?text=${encodeURIComponent(address.addressLine)}`;
 };
 
 export const calculateCartSummary = (

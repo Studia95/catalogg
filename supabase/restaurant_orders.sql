@@ -99,6 +99,10 @@ drop policy if exists "delivery settings members read" on public.restaurant_deli
 create policy "delivery settings members read" on public.restaurant_delivery_settings
 for select using (public.is_catalog_member(catalog_id, array['owner','admin','editor','viewer']::public.catalog_role[]));
 
+drop policy if exists "delivery settings public read published" on public.restaurant_delivery_settings;
+create policy "delivery settings public read published" on public.restaurant_delivery_settings
+for select using (public.is_catalog_published(catalog_id));
+
 drop policy if exists "delivery settings admins write" on public.restaurant_delivery_settings;
 create policy "delivery settings admins write" on public.restaurant_delivery_settings
 for all using (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[]))

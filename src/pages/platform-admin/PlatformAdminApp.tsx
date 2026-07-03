@@ -22,15 +22,16 @@ import {
   Settings,
   ShieldAlert,
   Store,
+  UserRound,
   Users,
   X
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { Toaster, toast } from 'sonner';
-import { createClient, getClients, getPlatformStats, updateClient } from '../../shared/api/clientsApi';
+import { createClient, getClientSignups, getClients, getPlatformStats, updateClient } from '../../shared/api/clientsApi';
 import { getPlatformAdminAccess, signInPlatformAdmin, signOutPlatformAdmin } from '../../shared/api/platformAdminApi';
-import type { PlatformClient, PlatformStats, PlatformTemplateOption } from '../../shared/api/platformTypes';
+import type { ClientSignup, PlatformClient, PlatformStats, PlatformTemplateOption } from '../../shared/api/platformTypes';
 import { createRestaurantTemplate, getTemplateOptions } from '../../shared/api/templatesApi';
 import { copyText, getCatalogAdminUrl, getCatalogPublicUrl } from '../../shared/platformUrls';
 import {
@@ -44,6 +45,7 @@ import './platform-admin.css';
 type PlatformRoute =
   | 'dashboard'
   | 'clients'
+  | 'client-signups'
   | 'catalogs'
   | 'templates'
   | 'import-export'
@@ -63,6 +65,7 @@ const platformQueryClient = new QueryClient();
 const navItems: Array<{ route: PlatformRoute; label: string; detail: string; Icon: typeof Home }> = [
   { route: 'dashboard', label: 'Главная', detail: 'Дашборд', Icon: Home },
   { route: 'clients', label: 'Клиенты', detail: 'Список клиентов', Icon: Users },
+  { route: 'client-signups', label: 'Пользователи', detail: 'Клиенты приложения', Icon: UserRound },
   { route: 'catalogs', label: 'Каталоги', detail: 'Управление каталогами', Icon: Store },
   { route: 'templates', label: 'Шаблоны', detail: 'Управление шаблонами', Icon: LayoutTemplate },
   { route: 'import-export', label: 'Импорт / Экспорт', detail: 'Данные и каталоги', Icon: Database },
@@ -114,6 +117,7 @@ const getCurrentPlatformPath = () => {
 const readRouteFromLocation = (): PlatformRoute => {
   const path = getCurrentPlatformPath();
   if (path.includes('/admin/catalogs')) return 'catalogs';
+  if (path.includes('/admin/client-signups')) return 'client-signups';
   if (path.includes('/admin/templates')) return 'templates';
   if (path.includes('/admin/import-export')) return 'import-export';
   if (path.includes('/admin/subscriptions')) return 'subscriptions';
@@ -1432,6 +1436,56 @@ function TemplatesPage({ templates }: { templates: PlatformTemplateOption[] }) {
   );
 }
 
+function ClientSignupsPage() {
+  const signupsQuery = useQuery({ queryKey: ['client-signups'], queryFn: getClientSignups });
+  const signups = signupsQuery.data ?? [];
+
+  const renderSignup = (signup: ClientSignup) => (
+    <article className="client-signup-card" key={signup.id}>
+      <span className="client-signup-card__avatar">
+        <UserRound />
+      </span>
+      <div>
+        <strong>{signup.name || 'Без имени'}</strong>
+        <small>{signup.phone || 'Телефон не указан'}</small>
+      </div>
+      <span>
+        <small>{signup.source}</small>
+        <b>{new Date(signup.createdAt).toLocaleDateString('ru-RU')}</b>
+      </span>
+    </article>
+  );
+
+  return (
+    <main className="platform-page">
+      <header className="platform-page-head">
+        <div>
+          <h1>Пользователи</h1>
+          <p>Клиенты, которые вошли или оставили телефон в клиентской платформе</p>
+        </div>
+      </header>
+
+      {signupsQuery.isLoading && <div className="platform-state">Загружаем пользователей...</div>}
+      {signupsQuery.isError && (
+        <div className="platform-state">
+          Не удалось загрузить пользователей.
+          <button type="button" onClick={() => void signupsQuery.refetch()}>
+            Повторить
+          </button>
+        </div>
+      )}
+      {!signupsQuery.isLoading && !signupsQuery.isError && signups.length === 0 && (
+        <section className="platform-placeholder">
+          <UserRound />
+          <h2>Пользователей пока нет</h2>
+          <p>Когда клиент сохранит имя и телефон в профиле, запись появится здесь.</p>
+        </section>
+      )}
+      {signups.length > 0 && <section className="client-signup-list">{signups.map(renderSignup)}</section>}
+    </main>
+  );
+}
+
 function PlaceholderPage({ route }: { route: PlatformRoute }) {
   const title = navItems.find((item) => item.route === route)?.label ?? 'Раздел';
   return (
@@ -1597,6 +1651,9 @@ function PlatformAdminContent() {
     }
     if (route === 'templates') {
       return <TemplatesPage templates={templatesQuery.data ?? []} />;
+    }
+    if (route === 'client-signups') {
+      return <ClientSignupsPage />;
     }
     return <PlaceholderPage route={route} />;
   }, [route, templatesQuery.data]);

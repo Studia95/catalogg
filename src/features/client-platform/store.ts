@@ -61,12 +61,17 @@ const toggleId = (ids: string[], id: string) =>
 const orderItemsToCart = (items: ClientOrderItem[]): ClientCartLine[] =>
   items.map((item) => ({ dishId: item.dishId, quantity: item.quantity }));
 
+const demoProfile: ClientProfile = { name: 'Адам М.', phone: '+7 928 123-45-67' };
+
+const isPersistedClientStore = (value: unknown): value is Partial<ClientPlatformStore> =>
+  typeof value === 'object' && value !== null;
+
 export const useClientPlatformStore = create<ClientPlatformStore>()(
   persist(
     (set) => ({
       selectedCityId: 'grozny',
       recentCityIds: ['grozny'],
-      profile: { name: 'Адам М.', phone: '+7 928 123-45-67' },
+      profile: { name: '', phone: '' },
       addresses: defaultClientAddresses,
       favoriteRestaurantIds: ['restaurant-rizih'],
       favoriteDishIds: ['rizih-philadelphia'],
@@ -175,6 +180,19 @@ export const useClientPlatformStore = create<ClientPlatformStore>()(
     {
       name: 'waycatalog-client-platform',
       storage: createJSONStorage(() => localStorage),
+      version: 2,
+      migrate: (persistedState, version) => {
+        if (version >= 2 || !isPersistedClientStore(persistedState)) {
+          return persistedState as ClientPlatformStore;
+        }
+
+        const persistedProfile = persistedState.profile;
+        if (persistedProfile?.name === demoProfile.name && persistedProfile.phone === demoProfile.phone) {
+          return { ...persistedState, profile: { name: '', phone: '' } } as ClientPlatformStore;
+        }
+
+        return persistedState as ClientPlatformStore;
+      },
       partialize: (state) => ({
         selectedCityId: state.selectedCityId,
         recentCityIds: state.recentCityIds,
