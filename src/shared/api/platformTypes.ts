@@ -50,6 +50,31 @@ export type ClientSignup = {
   createdAt: string;
 };
 
+export type PlatformBannerAdmin = {
+  id: string;
+  title: string;
+  subtitle: string;
+  kind: 'contest' | 'promo' | 'news';
+  imageUrl: string;
+  linkUrl: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+export type PlatformGlobalSettings = {
+  supportWhatsapp: string;
+};
+
+export type PlatformRestaurantStats = {
+  id: string;
+  name: string;
+  slug: string;
+  revenue: number;
+  debt: number;
+  ordersCount: number;
+  driverDeliveries: number;
+};
+
 export type ClientListParams = {
   search?: string;
   status?: string;
@@ -64,6 +89,10 @@ export type PlatformStats = {
   activeCatalogs: number;
   monthlyRevenue: number;
   monthlyViews: number;
+  totalDebt: number;
+  totalOrders: number;
+  driverDeliveries: number;
+  restaurantStats: PlatformRestaurantStats[];
 };
 
 export type CreateClientPayload = {

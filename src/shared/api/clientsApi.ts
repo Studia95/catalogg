@@ -4,11 +4,14 @@ import type {
   ClientSignup,
   CreateClientPayload,
   CreateClientResult,
+  PlatformBannerAdmin,
+  PlatformGlobalSettings,
   PlatformClient,
   PlatformStats,
   UpdateClientPayload,
   UpdateClientResult
 } from './platformTypes';
+import { summarizePlatformStats, type PlatformOrderStatsRow } from './platformStats';
 
 const demoClients: PlatformClient[] = [
   {
@@ -137,6 +140,17 @@ type ClientSignupRow = {
   created_at: string;
 };
 
+type PlatformBannerRow = {
+  id: string;
+  title: string;
+  subtitle: string;
+  kind: PlatformBannerAdmin['kind'];
+  image_url: string;
+  link_url: string;
+  sort_order: number;
+  is_active: boolean;
+};
+
 const mapClient = (row: ClientRow): PlatformClient => ({
   id: row.id,
   companyName: row.company_name,
@@ -167,6 +181,17 @@ const mapClientSignup = (row: ClientSignupRow): ClientSignup => ({
   phone: row.phone,
   source: row.source,
   createdAt: row.created_at
+});
+
+const mapPlatformBanner = (row: PlatformBannerRow): PlatformBannerAdmin => ({
+  id: row.id,
+  title: row.title,
+  subtitle: row.subtitle,
+  kind: row.kind,
+  imageUrl: row.image_url,
+  linkUrl: row.link_url,
+  sortOrder: row.sort_order,
+  isActive: row.is_active
 });
 
 const filterDemoClients = (params: ClientListParams) => {
@@ -237,13 +262,21 @@ export async function getClients(params: ClientListParams): Promise<{ data: Plat
 }
 
 export async function getPlatformStats(): Promise<PlatformStats> {
-  const clients = await getClients({ page: 1, pageSize: 50, status: 'all', payment: 'all', templateId: 'all' });
-  return {
-    totalClients: clients.count,
-    activeCatalogs: clients.data.filter((client) => client.catalogStatus === 'published').length,
-    monthlyRevenue: 0,
-    monthlyViews: 0
-  };
+  const clients = await getClients({ page: 1, pageSize: 1000, status: 'all', payment: 'all', templateId: 'all' });
+  if (!supabase) {
+    return summarizePlatformStats(clients.data, []);
+  }
+
+  const ordersResult = await supabase
+    .from('orders')
+    .select('catalog_id, total, total_amount, delivery_provider, status')
+    .limit(1000);
+  const fallbackOrdersResult = ordersResult.error
+    ? await supabase.from('orders').select('catalog_id, total, status').limit(1000)
+    : null;
+  const orderRows = ((ordersResult.data ?? fallbackOrdersResult?.data ?? []) as PlatformOrderStatsRow[]);
+
+  return summarizePlatformStats(clients.data, orderRows);
 }
 
 export async function getClientSignups(): Promise<ClientSignup[]> {
@@ -258,6 +291,80 @@ export async function getClientSignups(): Promise<ClientSignup[]> {
   if (error) throw error;
 
   return ((data ?? []) as ClientSignupRow[]).map(mapClientSignup);
+}
+
+export async function deleteClientSignup(id: string) {
+  if (!supabase) return;
+  const { error } = await supabase.from('client_signups').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function getPlatformGlobalSettings(): Promise<PlatformGlobalSettings> {
+  if (!supabase) return { supportWhatsapp: '79990000000' };
+
+  const { data, error } = await supabase
+    .from('platform_settings')
+    .select('support_whatsapp')
+    .eq('id', 'global')
+    .maybeSingle();
+  if (error) throw error;
+  return { supportWhatsapp: (data as { support_whatsapp?: string } | null)?.support_whatsapp ?? '' };
+}
+
+export async function savePlatformGlobalSettings(settings: PlatformGlobalSettings) {
+  if (!supabase) return;
+  const { error } = await supabase.from('platform_settings').upsert({
+    id: 'global',
+    support_whatsapp: settings.supportWhatsapp,
+    updated_at: new Date().toISOString()
+  });
+  if (error) throw error;
+}
+
+export async function getPlatformBanners(): Promise<PlatformBannerAdmin[]> {
+  if (!supabase) {
+    return [{
+      id: 'demo-banner',
+      title: 'Конкурс от WayCatalog',
+      subtitle: 'Закажи на 1000₽ и выиграй приз',
+      kind: 'contest',
+      imageUrl: '',
+      linkUrl: '/restaurants',
+      sortOrder: 0,
+      isActive: true
+    }];
+  }
+
+  const { data, error } = await supabase
+    .from('platform_banners')
+    .select('id, title, subtitle, kind, image_url, link_url, sort_order, is_active')
+    .order('sort_order');
+  if (error) throw error;
+  return ((data ?? []) as PlatformBannerRow[]).map(mapPlatformBanner);
+}
+
+export async function savePlatformBanner(banner: Omit<PlatformBannerAdmin, 'id'> & { id?: string }) {
+  if (!supabase) return;
+  const payload = {
+    title: banner.title,
+    subtitle: banner.subtitle,
+    kind: banner.kind,
+    image_url: banner.imageUrl,
+    link_url: banner.linkUrl,
+    sort_order: banner.sortOrder,
+    is_active: banner.isActive
+  };
+  const query = banner.id
+    ? supabase.from('platform_banners').update(payload).eq('id', banner.id)
+    : supabase.from('platform_banners').insert(payload);
+  const { error } = await query;
+  if (error) throw error;
+}
+
+export async function deletePlatformBanner(id: string) {
+  if (!supabase) return;
+  const { error } = await supabase.from('platform_banners').delete().eq('id', id);
+  if (error) throw error;
 }
 
 export async function createClient(payload: CreateClientPayload): Promise<CreateClientResult> {

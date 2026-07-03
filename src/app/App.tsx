@@ -2577,6 +2577,17 @@ function ProfileSettings({
     setError('');
   };
 
+  const updateBanner = async (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Обложка должна быть изображением.');
+      return;
+    }
+    const value = await imageFileToDataUrl(file);
+    setDraft((current) => ({ ...current, banner_url: value }));
+    setError('');
+  };
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!draft.name.trim()) {
@@ -2640,6 +2651,25 @@ function ProfileSettings({
           />
           <small>{draft.subtitle.length}/200</small>
         </label>
+        <div className="profile-field">
+          <span>Фото карточки ресторана</span>
+          <label className="profile-cover-picker">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(event) => void updateBanner(event.target.files?.[0])}
+            />
+            {draft.banner_url ? <img src={draft.banner_url} alt="" /> : <span>Добавить фото</span>}
+          </label>
+          <div className="profile-logo-actions">
+            <small>Это фото увидят клиенты на главной и в списке ресторанов.</small>
+            {draft.banner_url && (
+              <button type="button" onClick={() => setDraft({ ...draft, banner_url: '' })}>
+                Удалить фото
+              </button>
+            )}
+          </div>
+        </div>
         <label>
           WhatsApp
           <input

@@ -135,6 +135,30 @@ create table if not exists public.client_signups (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.platform_settings (
+  id text primary key default 'global',
+  support_whatsapp text not null default '',
+  updated_at timestamptz not null default now(),
+  check (id = 'global')
+);
+
+insert into public.platform_settings (id, support_whatsapp)
+values ('global', '')
+on conflict (id) do nothing;
+
+create table if not exists public.platform_banners (
+  id uuid primary key default gen_random_uuid(),
+  title text not null default '',
+  subtitle text not null default '',
+  kind text not null default 'promo' check (kind in ('contest', 'promo', 'news')),
+  image_url text not null default '',
+  link_url text not null default '/restaurants',
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.client_addresses (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
@@ -199,6 +223,19 @@ create table if not exists public.drivers (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.client_reviews (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid references public.catalogs(id) on delete cascade,
+  driver_id uuid references public.drivers(id) on delete set null,
+  client_name text not null default '',
+  client_phone text not null default '',
+  rating integer not null check (rating between 1 and 5),
+  comment text not null default '',
+  target_type text not null default 'restaurant' check (target_type in ('restaurant', 'driver')),
+  is_visible boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.deliveries (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id) on delete cascade,
@@ -237,11 +274,16 @@ create index if not exists restaurant_platform_categories_lookup_idx on public.r
 create index if not exists restaurant_categories_restaurant_idx on public.restaurant_categories(restaurant_id, sort_order);
 create index if not exists dishes_restaurant_category_idx on public.dishes(restaurant_id, category_id, is_active);
 create index if not exists client_signups_created_idx on public.client_signups(created_at desc);
+create index if not exists platform_banners_order_idx on public.platform_banners(is_active, sort_order);
+create index if not exists client_reviews_restaurant_idx on public.client_reviews(restaurant_id, created_at desc);
 create index if not exists client_addresses_user_idx on public.client_addresses(user_id, is_default desc);
 create index if not exists orders_client_status_idx on public.orders(client_id, status, created_at desc);
 create index if not exists deliveries_order_idx on public.deliveries(order_id);
 
 alter table public.client_signups enable row level security;
+alter table public.platform_settings enable row level security;
+alter table public.platform_banners enable row level security;
+alter table public.client_reviews enable row level security;
 
 drop policy if exists "client signups public insert" on public.client_signups;
 create policy "client signups public insert" on public.client_signups
@@ -250,3 +292,39 @@ for insert with check (true);
 drop policy if exists "client signups platform admins read" on public.client_signups;
 create policy "client signups platform admins read" on public.client_signups
 for select using (public.is_platform_admin());
+
+drop policy if exists "client signups platform admins manage" on public.client_signups;
+create policy "client signups platform admins manage" on public.client_signups
+for all using (public.is_platform_admin())
+with check (public.is_platform_admin());
+
+drop policy if exists "platform settings public read" on public.platform_settings;
+create policy "platform settings public read" on public.platform_settings
+for select using (true);
+
+drop policy if exists "platform settings admins manage" on public.platform_settings;
+create policy "platform settings admins manage" on public.platform_settings
+for all using (public.is_platform_admin())
+with check (public.is_platform_admin());
+
+drop policy if exists "platform banners public read active" on public.platform_banners;
+create policy "platform banners public read active" on public.platform_banners
+for select using (is_active or public.is_platform_admin());
+
+drop policy if exists "platform banners admins manage" on public.platform_banners;
+create policy "platform banners admins manage" on public.platform_banners
+for all using (public.is_platform_admin())
+with check (public.is_platform_admin());
+
+drop policy if exists "client reviews public insert" on public.client_reviews;
+create policy "client reviews public insert" on public.client_reviews
+for insert with check (true);
+
+drop policy if exists "client reviews public read visible" on public.client_reviews;
+create policy "client reviews public read visible" on public.client_reviews
+for select using (is_visible or public.is_platform_admin());
+
+drop policy if exists "client reviews admins manage" on public.client_reviews;
+create policy "client reviews admins manage" on public.client_reviews
+for all using (public.is_platform_admin())
+with check (public.is_platform_admin());

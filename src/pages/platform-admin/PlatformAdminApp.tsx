@@ -22,6 +22,7 @@ import {
   Settings,
   ShieldAlert,
   Store,
+  Trash2,
   UserRound,
   Users,
   X
@@ -29,9 +30,27 @@ import {
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { Toaster, toast } from 'sonner';
-import { createClient, getClientSignups, getClients, getPlatformStats, updateClient } from '../../shared/api/clientsApi';
+import {
+  createClient,
+  deleteClientSignup,
+  deletePlatformBanner,
+  getClientSignups,
+  getClients,
+  getPlatformBanners,
+  getPlatformGlobalSettings,
+  getPlatformStats,
+  savePlatformBanner,
+  savePlatformGlobalSettings,
+  updateClient
+} from '../../shared/api/clientsApi';
 import { getPlatformAdminAccess, signInPlatformAdmin, signOutPlatformAdmin } from '../../shared/api/platformAdminApi';
-import type { ClientSignup, PlatformClient, PlatformStats, PlatformTemplateOption } from '../../shared/api/platformTypes';
+import type {
+  ClientSignup,
+  PlatformBannerAdmin,
+  PlatformClient,
+  PlatformStats,
+  PlatformTemplateOption
+} from '../../shared/api/platformTypes';
 import { createRestaurantTemplate, getTemplateOptions } from '../../shared/api/templatesApi';
 import { copyText, getCatalogAdminUrl, getCatalogPublicUrl } from '../../shared/platformUrls';
 import {
@@ -273,8 +292,10 @@ function StatsCards({ stats }: { stats?: PlatformStats }) {
   const items = [
     { label: 'Всего клиентов', value: stats?.totalClients ?? 0, Icon: Users },
     { label: 'Активные каталоги', value: stats?.activeCatalogs ?? 0, Icon: Store },
-    { label: 'Доход за месяц', value: formatMoney(stats?.monthlyRevenue ?? 0), Icon: CreditCard },
-    { label: 'Просмотры за месяц', value: stats?.monthlyViews ?? 0, Icon: Activity }
+    { label: 'Выручка ресторанов', value: formatMoney(stats?.monthlyRevenue ?? 0), Icon: CreditCard },
+    { label: 'Долг клиентов', value: stats?.totalDebt ?? 0, Icon: ShieldAlert },
+    { label: 'Заказов всего', value: stats?.totalOrders ?? 0, Icon: Activity },
+    { label: 'Доставки водителей', value: stats?.driverDeliveries ?? 0, Icon: Store }
   ];
 
   return (
@@ -291,6 +312,54 @@ function StatsCards({ stats }: { stats?: PlatformStats }) {
         </article>
       ))}
     </section>
+  );
+}
+
+function RestaurantStatsTable({ stats }: { stats?: PlatformStats }) {
+  const restaurants = stats?.restaurantStats ?? [];
+
+  if (restaurants.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="restaurant-stats-table">
+      <header>
+        <h2>Рестораны по выручке</h2>
+        <p>Выручка, долг, заказы и доставки водителями платформы отдельно по каждому ресторану.</p>
+      </header>
+      <div>
+        {restaurants.map((restaurant) => (
+          <article key={restaurant.id}>
+            <span>
+              <strong>{restaurant.name}</strong>
+              {restaurant.slug && <small>/{restaurant.slug}</small>}
+            </span>
+            <b>{formatMoney(restaurant.revenue)}</b>
+            <small>Долг: {restaurant.debt}</small>
+            <small>Заказы: {restaurant.ordersCount}</small>
+            <small>Водители: {restaurant.driverDeliveries}</small>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DashboardPage() {
+  const statsQuery = useQuery({ queryKey: ['platform-stats'], queryFn: getPlatformStats });
+
+  return (
+    <main className="platform-page">
+      <header className="platform-page-head">
+        <div>
+          <h1>Главная</h1>
+          <p>Общая статистика WayCatalog, ресторанов и доставок</p>
+        </div>
+      </header>
+      <StatsCards stats={statsQuery.data} />
+      <RestaurantStatsTable stats={statsQuery.data} />
+    </main>
   );
 }
 
@@ -1279,6 +1348,7 @@ function ClientsPage({
         </button>
       </header>
       <StatsCards stats={statsQuery.data} />
+      <RestaurantStatsTable stats={statsQuery.data} />
       <ClientFilters
         search={search}
         status={status}
@@ -1437,6 +1507,7 @@ function TemplatesPage({ templates }: { templates: PlatformTemplateOption[] }) {
 }
 
 function ClientSignupsPage() {
+  const queryClient = useQueryClient();
   const signupsQuery = useQuery({ queryKey: ['client-signups'], queryFn: getClientSignups });
   const signups = signupsQuery.data ?? [];
 
@@ -1449,10 +1520,20 @@ function ClientSignupsPage() {
         <strong>{signup.name || 'Без имени'}</strong>
         <small>{signup.phone || 'Телефон не указан'}</small>
       </div>
-      <span>
+      <span className="client-signup-card__meta">
         <small>{signup.source}</small>
         <b>{new Date(signup.createdAt).toLocaleDateString('ru-RU')}</b>
       </span>
+      <button
+        type="button"
+        onClick={() => {
+          void deleteClientSignup(signup.id).then(() => {
+            void queryClient.invalidateQueries({ queryKey: ['client-signups'] });
+          });
+        }}
+      >
+        <Trash2 />
+      </button>
     </article>
   );
 
@@ -1482,6 +1563,128 @@ function ClientSignupsPage() {
         </section>
       )}
       {signups.length > 0 && <section className="client-signup-list">{signups.map(renderSignup)}</section>}
+    </main>
+  );
+}
+
+function PlatformSettingsPage() {
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery({ queryKey: ['platform-global-settings'], queryFn: getPlatformGlobalSettings });
+  const bannersQuery = useQuery({ queryKey: ['platform-banners'], queryFn: getPlatformBanners });
+  const [supportWhatsapp, setSupportWhatsapp] = useState('');
+  const [bannerTitle, setBannerTitle] = useState('');
+  const [bannerSubtitle, setBannerSubtitle] = useState('');
+  const [bannerKind, setBannerKind] = useState<PlatformBannerAdmin['kind']>('promo');
+  const [bannerLink, setBannerLink] = useState('/restaurants');
+  const [bannerImage, setBannerImage] = useState('');
+
+  useEffect(() => {
+    if (settingsQuery.data) {
+      setSupportWhatsapp(settingsQuery.data.supportWhatsapp);
+    }
+  }, [settingsQuery.data]);
+
+  const saveSupport = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    try {
+      await savePlatformGlobalSettings({ supportWhatsapp });
+      toast.success('Номер поддержки сохранён');
+      void queryClient.invalidateQueries({ queryKey: ['platform-global-settings'] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Не удалось сохранить настройки');
+    }
+  };
+
+  const createBanner = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    try {
+      await savePlatformBanner({
+        title: bannerTitle,
+        subtitle: bannerSubtitle,
+        kind: bannerKind,
+        imageUrl: bannerImage,
+        linkUrl: bannerLink,
+        sortOrder: bannersQuery.data?.length ?? 0,
+        isActive: true
+      });
+      setBannerTitle('');
+      setBannerSubtitle('');
+      setBannerImage('');
+      setBannerLink('/restaurants');
+      toast.success('Баннер сохранён');
+      void queryClient.invalidateQueries({ queryKey: ['platform-banners'] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Не удалось сохранить баннер');
+    }
+  };
+
+  return (
+    <main className="platform-page">
+      <header className="platform-page-head">
+        <div>
+          <h1>Настройки</h1>
+          <p>Баннеры главной, новости, акции и поддержка клиентов</p>
+        </div>
+      </header>
+
+      <form className="platform-settings-form" onSubmit={saveSupport}>
+        <label>
+          WhatsApp поддержки
+          <input value={supportWhatsapp} onChange={(event) => setSupportWhatsapp(event.target.value)} placeholder="79990000000" />
+        </label>
+        <button type="submit">Сохранить поддержку</button>
+      </form>
+
+      <form className="platform-settings-form platform-settings-form--banner" onSubmit={createBanner}>
+        <label>
+          Заголовок
+          <input value={bannerTitle} onChange={(event) => setBannerTitle(event.target.value)} required />
+        </label>
+        <label>
+          Текст
+          <input value={bannerSubtitle} onChange={(event) => setBannerSubtitle(event.target.value)} required />
+        </label>
+        <label>
+          Тип
+          <select value={bannerKind} onChange={(event) => setBannerKind(event.target.value as PlatformBannerAdmin['kind'])}>
+            <option value="promo">Акция</option>
+            <option value="contest">Конкурс</option>
+            <option value="news">Новость</option>
+          </select>
+        </label>
+        <label>
+          Ссылка
+          <input value={bannerLink} onChange={(event) => setBannerLink(event.target.value)} />
+        </label>
+        <label>
+          Фото
+          <input value={bannerImage} onChange={(event) => setBannerImage(event.target.value)} placeholder="https://..." />
+        </label>
+        <button type="submit">
+          <Plus />
+          Добавить баннер
+        </button>
+      </form>
+
+      <section className="platform-banner-list">
+        {(bannersQuery.data ?? []).map((banner) => (
+          <article className="platform-banner-card" key={banner.id}>
+            <span>{banner.kind}</span>
+            <strong>{banner.title}</strong>
+            <small>{banner.subtitle}</small>
+            <button
+              type="button"
+              onClick={() => {
+                void deletePlatformBanner(banner.id).then(() => {
+                  void queryClient.invalidateQueries({ queryKey: ['platform-banners'] });
+                });
+              }}
+            >
+              <Trash2 />
+            </button>
+          </article>
+        ))}
+      </section>
     </main>
   );
 }
@@ -1633,6 +1836,9 @@ function PlatformAdminContent() {
   }, [closeCreateModal, createOpen, editingClient]);
 
   const content = useMemo(() => {
+    if (route === 'dashboard') {
+      return <DashboardPage />;
+    }
     if (route === 'clients') {
       return (
         <ClientsPage
@@ -1654,6 +1860,9 @@ function PlatformAdminContent() {
     }
     if (route === 'client-signups') {
       return <ClientSignupsPage />;
+    }
+    if (route === 'settings') {
+      return <PlatformSettingsPage />;
     }
     return <PlaceholderPage route={route} />;
   }, [route, templatesQuery.data]);

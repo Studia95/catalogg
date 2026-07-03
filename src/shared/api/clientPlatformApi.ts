@@ -1,3 +1,4 @@
+import { buildClientReviewPayload } from '../../features/client-platform/clientPlatformLogic';
 import { clientPlatformSnapshot, fallbackPaymentSettings } from '../../features/client-platform/mockData';
 import type {
   ClientCity,
@@ -11,6 +12,7 @@ import type {
   ClientRestaurant,
   ClientRestaurantCategory,
   PaymentSettings,
+  PlatformBanner,
   RestaurantTheme
 } from '../../features/client-platform/types';
 import { supabase } from '../supabase';
@@ -93,6 +95,21 @@ type PaymentRow = {
   middle_name: string;
   comment: string;
   qr_image_url: string;
+};
+
+type PlatformBannerRow = {
+  id: string;
+  title: string;
+  subtitle: string;
+  kind: PlatformBanner['kind'];
+  image_url: string;
+  link_url: string;
+  is_active: boolean;
+  sort_order: number;
+};
+
+type PlatformSettingsRow = {
+  support_whatsapp: string;
 };
 
 const transliteration: Record<string, string> = {
@@ -205,6 +222,29 @@ export async function saveClientSignup(profile: ClientProfile) {
   if (error) throw error;
 }
 
+export async function saveClientReview(input: {
+  restaurantId: string;
+  clientName: string;
+  clientPhone: string;
+  rating: number;
+  comment: string;
+}) {
+  const review = buildClientReviewPayload(input);
+
+  if (!supabase) return;
+
+  const { error } = await supabase.from('client_reviews').insert({
+    target_type: 'restaurant',
+    restaurant_id: review.restaurantId,
+    client_name: review.clientName,
+    client_phone: review.clientPhone,
+    rating: review.rating,
+    comment: review.comment
+  });
+
+  if (error) throw error;
+}
+
 export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapshot> {
   if (!supabase) return clientPlatformSnapshot;
 
@@ -219,7 +259,16 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
   const catalogs = catalogsResult.data as CatalogRow[];
   const catalogIds = catalogs.map((catalog) => catalog.id);
 
-  const [categoriesResult, productsResult, productImagesResult, themeResult, deliveryResult, paymentsResult] =
+  const [
+    categoriesResult,
+    productsResult,
+    productImagesResult,
+    themeResult,
+    deliveryResult,
+    paymentsResult,
+    bannersResult,
+    settingsResult
+  ] =
     await Promise.all([
       supabase
         .from('categories')
@@ -245,7 +294,13 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
       supabase
         .from('restaurant_payments')
         .select('restaurant_id, enable_transfer, allow_cash, require_confirmation, bank_name, phone_number, display_name, first_name, last_name, middle_name, comment, qr_image_url')
-        .in('restaurant_id', catalogIds)
+        .in('restaurant_id', catalogIds),
+      supabase
+        .from('platform_banners')
+        .select('id, title, subtitle, kind, image_url, link_url, is_active, sort_order')
+        .eq('is_active', true)
+        .order('sort_order'),
+      supabase.from('platform_settings').select('support_whatsapp').eq('id', 'global').maybeSingle()
     ]);
 
   const categories = (categoriesResult.data ?? []) as CategoryRow[];
@@ -254,6 +309,8 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
   const themes = (themeResult.data ?? []) as ThemeRow[];
   const deliverySettings = (deliveryResult.data ?? []) as DeliverySettingsRow[];
   const paymentRows = (paymentsResult.data ?? []) as PaymentRow[];
+  const bannerRows = (bannersResult.data ?? []) as PlatformBannerRow[];
+  const settingsRow = settingsResult.data as PlatformSettingsRow | null;
 
   const categoriesByCatalog = new Map<string, CategoryRow[]>();
   categories
@@ -376,6 +433,18 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
     dishes,
     paymentSettings: restaurants.map((restaurant) =>
       mapPaymentSettings(paymentByCatalog.get(restaurant.id), restaurant.slug)
-    )
+    ),
+    banners: bannerRows.length > 0
+      ? bannerRows.map((banner) => ({
+          id: banner.id,
+          title: banner.title,
+          subtitle: banner.subtitle,
+          kind: banner.kind,
+          imageUrl: banner.image_url,
+          linkUrl: banner.link_url,
+          isActive: banner.is_active
+        }))
+      : clientPlatformSnapshot.banners,
+    supportWhatsapp: settingsRow?.support_whatsapp || clientPlatformSnapshot.supportWhatsapp
   };
 }

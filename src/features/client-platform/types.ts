@@ -169,6 +169,16 @@ export type PaymentSettings = {
   requireManualConfirmation: boolean;
 };
 
+export type PlatformBanner = {
+  id: string;
+  title: string;
+  subtitle: string;
+  kind: 'contest' | 'promo' | 'news';
+  imageUrl: string;
+  linkUrl: string;
+  isActive: boolean;
+};
+
 export type ClientPlatformSnapshot = {
   cities: ClientCity[];
   categories: ClientPlatformCategory[];
@@ -176,4 +186,6 @@ export type ClientPlatformSnapshot = {
   restaurantCategories: ClientRestaurantCategory[];
   dishes: ClientDish[];
   paymentSettings: PaymentSettings[];
+  banners: PlatformBanner[];
+  supportWhatsapp: string;
 };

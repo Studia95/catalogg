@@ -35,6 +35,14 @@ type OrderPaymentNoticeInput = {
   items?: ClientOrder['items'];
 };
 
+type ClientReviewInput = {
+  restaurantId: string;
+  clientName: string;
+  clientPhone: string;
+  rating: number;
+  comment: string;
+};
+
 const normalizeText = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
 
 export const filterRestaurants = (
@@ -65,6 +73,35 @@ export const buildYandexMapsUrl = (address: Pick<ClientAddress, 'addressLine' | 
   }
 
   return `https://yandex.ru/maps/?text=${encodeURIComponent(address.addressLine)}`;
+};
+
+export const buildSupportWhatsappUrl = (phone: string) => {
+  const normalizedPhone = phone.replace(/\D/g, '') || '79990000000';
+  return `https://wa.me/${normalizedPhone}`;
+};
+
+export const buildClientReviewPayload = (input: ClientReviewInput) => {
+  const restaurantId = input.restaurantId.trim();
+  const clientName = input.clientName.trim();
+  const clientPhone = input.clientPhone.trim();
+  const comment = input.comment.trim();
+  const rating = Math.min(5, Math.max(1, Math.round(Number.isFinite(input.rating) ? input.rating : 5)));
+
+  if (!restaurantId) {
+    throw new Error('Ресторан не найден.');
+  }
+
+  if (!clientName || !clientPhone || !comment) {
+    throw new Error('Введите имя, телефон и текст отзыва.');
+  }
+
+  return {
+    restaurantId,
+    clientName,
+    clientPhone,
+    rating,
+    comment
+  };
 };
 
 export const calculateCartSummary = (

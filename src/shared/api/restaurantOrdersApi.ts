@@ -1,6 +1,6 @@
 import { supabase } from '../supabase';
 import type { CartItem } from '../../entities/models';
-import { buildPublicRestaurantOrderItems } from './restaurantOrderPayload';
+import { buildPublicRestaurantOrderItems, resolvePublicOrderRpcName } from './restaurantOrderPayload';
 
 export type RestaurantOrderStatus =
   | 'new'
@@ -338,7 +338,7 @@ export async function createRestaurantOrderFromCart({
   const catalogId = await getCatalogIdBySlug(slug);
   if (!catalogId) return null;
 
-  const { data, error } = await supabase.rpc('create_public_restaurant_order', {
+  const { data, error } = await supabase.rpc(resolvePublicOrderRpcName(items), {
     target_catalog_id: catalogId,
     customer_name: 'Гость',
     customer_phone: '',

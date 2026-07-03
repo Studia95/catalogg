@@ -1405,6 +1405,42 @@
   padding: 12px;
 }
 
+.order-review-form {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.order-review-form label {
+  display: grid;
+  gap: 6px;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.order-review-form select,
+.order-review-form textarea {
+  width: 100%;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+}
+
+.order-review-form button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  background: #5b3df4;
+  color: #ffffff;
+  font-weight: 800;
+}
+
 .order-card--link {
   color: #111827;
 }

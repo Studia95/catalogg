@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   buildYandexMapsUrl,
+  buildClientReviewPayload,
   buildRestaurantPublicPath,
   buildOrderAfterClientPaymentNotice,
+  buildSupportWhatsappUrl,
   calculateCartSummary,
   filterRestaurants,
   getDeliveryProviderLabel
@@ -181,6 +183,51 @@ describe('client platform address maps', () => {
         lng: Number.NaN
       }),
       'https://yandex.ru/maps/?text=%D0%93%D1%80%D0%BE%D0%B7%D0%BD%D1%8B%D0%B9%2C%20%D0%BF%D1%80%D0%BE%D1%81%D0%BF%D0%B5%D0%BA%D1%82%20%D0%9F%D1%83%D1%82%D0%B8%D0%BD%D0%B0'
+    );
+  });
+});
+
+describe('client platform support links', () => {
+  it('opens WhatsApp support with a normalized phone number', () => {
+    assert.equal(buildSupportWhatsappUrl('+7 (999) 000-00-11'), 'https://wa.me/79990000011');
+  });
+
+  it('uses the platform fallback number when support number is empty', () => {
+    assert.equal(buildSupportWhatsappUrl(''), 'https://wa.me/79990000000');
+  });
+});
+
+describe('client platform reviews', () => {
+  it('builds a trimmed restaurant review with a rating inside the allowed range', () => {
+    assert.deepEqual(
+      buildClientReviewPayload({
+        restaurantId: 'restaurant-1',
+        clientName: ' Адам ',
+        clientPhone: ' +7 928 123-45-67 ',
+        rating: 7,
+        comment: '  Вкусно и быстро  '
+      }),
+      {
+        restaurantId: 'restaurant-1',
+        clientName: 'Адам',
+        clientPhone: '+7 928 123-45-67',
+        rating: 5,
+        comment: 'Вкусно и быстро'
+      }
+    );
+  });
+
+  it('requires client contacts and review text before sending a restaurant review', () => {
+    assert.throws(
+      () =>
+        buildClientReviewPayload({
+          restaurantId: 'restaurant-1',
+          clientName: 'Адам',
+          clientPhone: '',
+          rating: 4,
+          comment: ' '
+        }),
+      /Введите имя, телефон и текст отзыва/
     );
   });
 });

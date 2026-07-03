@@ -9,6 +9,18 @@ const image = (id: string, query: string) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=900&q=80&${query}`;
 
 export const clientPlatformSnapshot: ClientPlatformSnapshot = {
+  banners: [
+    {
+      id: 'banner-contest',
+      title: 'Конкурс от WayCatalog',
+      subtitle: 'Закажи на 1000₽ и выиграй приз',
+      kind: 'contest',
+      imageUrl: '',
+      linkUrl: '/restaurants',
+      isActive: true
+    }
+  ],
+  supportWhatsapp: '79990000000',
   cities: [
     { id: 'grozny', slug: 'grozny', name: 'Грозный', region: 'Чеченская Республика', isActive: true },
     { id: 'argun', slug: 'argun', name: 'Аргун', region: 'Чеченская Республика', isActive: true },

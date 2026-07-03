@@ -41,7 +41,7 @@ import type { CSSProperties, FormEvent } from 'react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { buildOrderAfterClientPaymentNotice, buildRestaurantPublicPath, buildYandexMapsUrl, calculateCartSummary, filterRestaurants, getDeliveryProviderLabel } from '../../features/client-platform/clientPlatformLogic';
+import { buildOrderAfterClientPaymentNotice, buildRestaurantPublicPath, buildSupportWhatsappUrl, buildYandexMapsUrl, calculateCartSummary, filterRestaurants, getDeliveryProviderLabel } from '../../features/client-platform/clientPlatformLogic';
 import { clientPlatformSnapshot, fallbackPaymentSettings } from '../../features/client-platform/mockData';
 import {
   selectAllCartCount,
@@ -63,7 +63,7 @@ import type {
   ClientPlatformSnapshot,
   ClientRestaurant
 } from '../../features/client-platform/types';
-import { getClientPlatformSnapshot, saveClientSignup } from '../../shared/api/clientPlatformApi';
+import { getClientPlatformSnapshot, saveClientReview, saveClientSignup } from '../../shared/api/clientPlatformApi';
 import { resolveLoginRedirect } from '../../shared/api/loginRedirectApi';
 import { signOutPlatformAdmin } from '../../shared/api/platformAdminApi';
 import './client-platform.css';
@@ -280,6 +280,7 @@ function HomePage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
   const restaurants = filterRestaurants(snapshot.restaurants, { cityId: selectedCityId })
     .slice()
     .sort((left, right) => right.rating - left.rating);
+  const banner = snapshot.banners.find((item) => item.isActive) ?? snapshot.banners[0];
   const [query, setQuery] = useState('');
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
@@ -310,13 +311,15 @@ function HomePage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
         />
       </form>
 
-      <section className="promo-band">
-        <div>
-          <strong>Конкурс от WayCatalog</strong>
-          <span>Закажи на 1000₽ и выиграй приз</span>
-        </div>
-        <Link to="/restaurants">Подробнее</Link>
-      </section>
+      {banner && (
+        <section className="promo-band">
+          <div>
+            <strong>{banner.title}</strong>
+            <span>{banner.subtitle}</span>
+          </div>
+          <Link to={banner.linkUrl || '/restaurants'}>Подробнее</Link>
+        </section>
+      )}
 
       <SectionHeader title="Популярные рестораны" to="/restaurants" />
       <div className="restaurant-grid">
@@ -1264,10 +1267,15 @@ function OrderStatusPage({
             <small>{order.addressLine}</small>
           </span>
         </section>
-        <button className="secondary-flow-button" type="button">
+        <a
+          className="secondary-flow-button"
+          href={buildSupportWhatsappUrl(snapshot.supportWhatsapp)}
+          target="_blank"
+          rel="noreferrer"
+        >
           <MessageCircle />
           Связаться с поддержкой
-        </button>
+        </a>
         <Link className="restaurant-primary-button restaurant-primary-button--soft" to="/">
           Вернуться на главную
         </Link>
@@ -1305,7 +1313,7 @@ function ProfileArea({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
   if (location.pathname === '/profile/orders') {
     return (
       <PlatformLayout active="orders">
-        <OrdersPage />
+        <OrdersPage snapshot={snapshot} />
       </PlatformLayout>
     );
   }
@@ -1334,10 +1342,33 @@ function ProfileArea({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
     );
   }
 
+  if (location.pathname === '/profile/support') {
+    return (
+      <PlatformLayout active="profile">
+        <SupportPage supportWhatsapp={snapshot.supportWhatsapp} />
+      </PlatformLayout>
+    );
+  }
+
   return (
     <PlatformLayout active="profile">
       <ProfilePage />
     </PlatformLayout>
+  );
+}
+
+function SupportPage({ supportWhatsapp }: { supportWhatsapp: string }) {
+  return (
+    <>
+      <PageHeader title="Поддержка" backTo="/profile" />
+      <section className="empty-state">
+        <MessageCircle />
+        <strong>Поддержка WayCatalog</strong>
+        <a href={buildSupportWhatsappUrl(supportWhatsapp)} target="_blank" rel="noreferrer">
+          Написать в WhatsApp
+        </a>
+      </section>
+    </>
   );
 }
 
@@ -1540,13 +1571,46 @@ function ProfilePage() {
   );
 }
 
-function OrdersPage() {
+function OrdersPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
   const navigate = useNavigate();
+  const profile = useClientPlatformStore((state) => state.profile);
   const orders = useClientPlatformStore((state) => state.orders);
   const repeatOrder = useClientPlatformStore((state) => state.repeatOrder);
+  const [reviewOrderId, setReviewOrderId] = useState<string | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewMessage, setReviewMessage] = useState('');
+  const [reviewError, setReviewError] = useState('');
+  const [isReviewSending, setIsReviewSending] = useState(false);
   const currentOrders = orders.filter((order) => !['completed', 'canceled'].includes(order.status));
   const finishedOrders = orders.filter((order) => order.status === 'completed');
   const canceledOrders = orders.filter((order) => order.status === 'canceled');
+
+  const submitReview = async (event: FormEvent<HTMLFormElement>, order: ClientOrder) => {
+    event.preventDefault();
+    const restaurant = snapshot.restaurants.find((item) => item.slug === order.restaurantSlug);
+
+    setReviewError('');
+    setReviewMessage('');
+    setIsReviewSending(true);
+
+    try {
+      await saveClientReview({
+        restaurantId: restaurant?.id ?? '',
+        clientName: profile.name || order.clientName,
+        clientPhone: profile.phone || order.clientPhone,
+        rating: reviewRating,
+        comment: reviewComment
+      });
+      setReviewMessage('Отзыв отправлен');
+      setReviewComment('');
+      setReviewOrderId(null);
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : 'Не удалось отправить отзыв');
+    } finally {
+      setIsReviewSending(false);
+    }
+  };
 
   const renderOrder = (order: ClientOrder) => (
     <article className="order-card" key={order.id}>
@@ -1567,7 +1631,40 @@ function OrdersPage() {
           <Repeat2 />
           Повторить
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            setReviewOrderId(reviewOrderId === order.id ? null : order.id);
+            setReviewError('');
+            setReviewMessage('');
+          }}
+        >
+          <Star />
+          Отзыв
+        </button>
       </div>
+      {reviewOrderId === order.id && (
+        <form className="order-review-form" onSubmit={(event) => void submitReview(event, order)}>
+          <label>
+            Оценка
+            <select value={reviewRating} onChange={(event) => setReviewRating(Number(event.target.value))}>
+              <option value={5}>5</option>
+              <option value={4}>4</option>
+              <option value={3}>3</option>
+              <option value={2}>2</option>
+              <option value={1}>1</option>
+            </select>
+          </label>
+          <label>
+            Отзыв
+            <textarea value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} rows={3} />
+          </label>
+          {reviewError && <small className="form-error">{reviewError}</small>}
+          <button type="submit" disabled={isReviewSending}>
+            {isReviewSending ? 'Отправляем...' : 'Отправить отзыв'}
+          </button>
+        </form>
+      )}
     </article>
   );
 
@@ -1577,6 +1674,7 @@ function OrdersPage() {
       <OrderGroup title="Текущие" orders={currentOrders} renderOrder={renderOrder} />
       <OrderGroup title="Завершённые" orders={finishedOrders} renderOrder={renderOrder} />
       <OrderGroup title="Отменённые" orders={canceledOrders} renderOrder={renderOrder} />
+      {reviewMessage && <p className="form-success">{reviewMessage}</p>}
       {orders.length === 0 && <EmptyState title="Заказов пока нет" linkTo="/restaurants" linkText="Выбрать ресторан" />}
     </>
   );
