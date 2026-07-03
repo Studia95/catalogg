@@ -36,6 +36,8 @@ type OrderStore = {
   deliveryCity: string;
   deliverySettlement: string;
   deliveryAddress: string;
+  clientName: string;
+  clientPhone: string;
   date: string;
   time: string;
   guests: number;
@@ -132,6 +134,8 @@ export const useOrderStore = create<OrderStore>((set) => ({
   deliveryCity: '',
   deliverySettlement: '',
   deliveryAddress: '',
+  clientName: '',
+  clientPhone: '',
   date: '24 мая, сб',
   time: '19:00',
   guests: 4,

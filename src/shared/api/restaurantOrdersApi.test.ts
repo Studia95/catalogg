@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { CartItem, Product } from '../../entities/models';
-import { buildPublicRestaurantOrderItems, resolvePublicOrderRpcName } from './restaurantOrderPayload';
+import {
+  buildPublicRestaurantOrderItems,
+  normalizeRestaurantDeliverySettingsForSave,
+  resolvePublicOrderRpcName
+} from './restaurantOrderPayload';
 
 const product = (overrides: Partial<Product> = {}): Product => ({
   id: 'product-1',
@@ -60,5 +64,38 @@ describe('public restaurant order payload', () => {
         options: []
       }
     ]);
+  });
+});
+
+describe('restaurant delivery settings payload', () => {
+  it('sends empty delivery hours as null instead of an invalid time string', () => {
+    const settings = {
+      enable_orders: true,
+      enable_delivery: true,
+      enable_pickup: true,
+      enable_hall_orders: true,
+      use_own_courier: false,
+      use_platform_drivers: true,
+      own_courier_wait_minutes: 5,
+      fallback_to_platform_drivers: true,
+      qr_required: false,
+      minimum_order_amount: 0,
+      free_delivery_from: 0,
+      default_preparation_minutes: 25,
+      delivery_radius_km: 5,
+      delivery_area_mode: 'radius',
+      primary_city: '',
+      service_settlements: ['Черноречье', ''],
+      delivery_hours_start: '',
+      delivery_hours_end: '',
+      out_of_hours_mode: 'warn'
+    };
+
+    assert.deepEqual(normalizeRestaurantDeliverySettingsForSave(settings), {
+      ...settings,
+      service_settlements: ['Черноречье'],
+      delivery_hours_start: null,
+      delivery_hours_end: null
+    });
   });
 });

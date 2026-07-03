@@ -26,7 +26,7 @@ alter table public.orders add column if not exists verification_code text;
 create table if not exists public.restaurant_delivery_settings (
   catalog_id uuid primary key references public.catalogs(id) on delete cascade,
   enable_orders boolean not null default false,
-  enable_delivery boolean not null default false,
+  enable_delivery boolean not null default true,
   enable_pickup boolean not null default true,
   enable_hall_orders boolean not null default true,
   use_own_courier boolean not null default false,
@@ -46,6 +46,9 @@ create table if not exists public.restaurant_delivery_settings (
   out_of_hours_mode text not null default 'warn' check (out_of_hours_mode in ('deny', 'preorder', 'warn')),
   updated_at timestamptz not null default now()
 );
+
+alter table public.restaurant_delivery_settings
+  alter column enable_delivery set default true;
 
 create table if not exists public.delivery_tasks (
   id uuid primary key default gen_random_uuid(),

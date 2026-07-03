@@ -1483,6 +1483,8 @@ function CheckoutScreen({
     deliveryCity,
     deliverySettlement,
     deliveryAddress,
+    clientName,
+    clientPhone,
     setOrder
   } = useOrderStore();
   const items = useCartStore((state) => state.items);
@@ -1545,6 +1547,8 @@ function CheckoutScreen({
     ...(mode === 'delivery' && deliveryCity ? [`Город: ${deliveryCity}`] : []),
     ...(mode === 'delivery' && deliverySettlement ? [`Село / район: ${deliverySettlement}`] : []),
     ...(mode === 'delivery' && deliveryAddress ? [`Адрес: ${deliveryAddress}`] : []),
+    ...(mode === 'delivery' && clientName ? [`Имя: ${clientName}`] : []),
+    ...(mode === 'delivery' && clientPhone ? [`Телефон: ${clientPhone}`] : []),
     '',
     'Комментарий:',
     'Пожалуйста, подтвердите заказ.'
@@ -1635,6 +1639,23 @@ function CheckoutScreen({
             <strong>Укажите населенный пункт и адрес доставки</strong>
           </div>
           <div className="checkout-delivery-fields">
+            <label className="checkout-field">
+              <span>Имя</span>
+              <input
+                value={clientName}
+                onChange={(event) => setOrder({ clientName: event.target.value })}
+                placeholder="Ваше имя"
+              />
+            </label>
+            <label className="checkout-field">
+              <span>Телефон</span>
+              <input
+                value={clientPhone}
+                onChange={(event) => setOrder({ clientPhone: event.target.value.replace(/[^\d+()\-\s]/g, '') })}
+                placeholder="+7"
+                inputMode="tel"
+              />
+            </label>
             <label className="checkout-field">
               <span>Город</span>
               {configuredCity ? (
@@ -1749,6 +1770,11 @@ function CheckoutScreen({
             }
             if (mode === 'delivery') {
               const effectiveCity = configuredCity || deliveryCity;
+              if (!clientName.trim() || !clientPhone.trim()) {
+                event.preventDefault();
+                toast.error('Введите имя и номер телефона для доставки');
+                return;
+              }
               if (!effectiveCity || !deliverySettlement || !deliveryAddress.trim()) {
                 event.preventDefault();
                 toast.error('Укажите город, населенный пункт и адрес доставки');
@@ -1764,7 +1790,9 @@ function CheckoutScreen({
               deliveryCity: configuredCity || deliveryCity,
               deliverySettlement,
               deliveryAddress: finalDeliveryAddress,
-              comment: mode === 'hall' && selectedCabin ? `Кабинка: ${selectedCabin.title}` : ''
+              comment: mode === 'hall' && selectedCabin ? `Кабинка: ${selectedCabin.title}` : '',
+              customerName: mode === 'delivery' ? clientName.trim() : 'Гость',
+              customerPhone: mode === 'delivery' ? clientPhone.trim() : ''
             })
               .then((orderId) => {
                 if (orderId) {
@@ -2045,7 +2073,7 @@ const paymentStatusLabels: Record<PaymentStatus, string> = {
 
 const defaultAdminDeliverySettings: RestaurantDeliverySettings = {
   enable_orders: false,
-  enable_delivery: false,
+  enable_delivery: true,
   enable_pickup: true,
   enable_hall_orders: true,
   use_own_courier: false,

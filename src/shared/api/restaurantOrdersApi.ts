@@ -1,6 +1,10 @@
 import { supabase } from '../supabase';
 import type { CartItem } from '../../entities/models';
-import { buildPublicRestaurantOrderItems, resolvePublicOrderRpcName } from './restaurantOrderPayload';
+import {
+  buildPublicRestaurantOrderItems,
+  normalizeRestaurantDeliverySettingsForSave,
+  resolvePublicOrderRpcName
+} from './restaurantOrderPayload';
 
 export type RestaurantOrderStatus =
   | 'new'
@@ -76,7 +80,7 @@ export type RestaurantDeliverySettings = {
 
 const defaultDeliverySettings: RestaurantDeliverySettings = {
   enable_orders: false,
-  enable_delivery: false,
+  enable_delivery: true,
   enable_pickup: true,
   enable_hall_orders: true,
   use_own_courier: false,
@@ -310,7 +314,7 @@ export async function saveRestaurantDeliverySettings(slug: string, settings: Res
 
   const { error } = await supabase
     .from('restaurant_delivery_settings')
-    .upsert({ catalog_id: catalogId, ...settings }, { onConflict: 'catalog_id' });
+    .upsert({ catalog_id: catalogId, ...normalizeRestaurantDeliverySettingsForSave(settings) }, { onConflict: 'catalog_id' });
 
   if (error) throw error;
 }
@@ -323,7 +327,9 @@ export async function createRestaurantOrderFromCart({
   deliveryCity = '',
   deliverySettlement = '',
   deliveryAddress = '',
-  comment = ''
+  comment = '',
+  customerName = 'Гость',
+  customerPhone = ''
 }: {
   slug: string;
   items: CartItem[];
@@ -333,6 +339,8 @@ export async function createRestaurantOrderFromCart({
   deliverySettlement?: string;
   deliveryAddress?: string;
   comment?: string;
+  customerName?: string;
+  customerPhone?: string;
 }) {
   if (!supabase) return null;
   const catalogId = await getCatalogIdBySlug(slug);
@@ -340,8 +348,8 @@ export async function createRestaurantOrderFromCart({
 
   const { data, error } = await supabase.rpc(resolvePublicOrderRpcName(items), {
     target_catalog_id: catalogId,
-    customer_name: 'Гость',
-    customer_phone: '',
+    customer_name: customerName,
+    customer_phone: customerPhone,
     fulfillment_type: fulfillmentType,
     cabin_label: cabinLabel ?? '',
     delivery_address: deliveryAddress,
