@@ -644,12 +644,17 @@ export async function replaceTagsInSupabase(values: CatalogTag[], options: { rem
     supabase
       .from('catalog_tag')
       .upsert(
-        values.map(({ slug: _slug, ...value }, index) => ({
-          ...value,
-          sort_order: index,
-          created_at: value.created_at ?? now,
-          updated_at: now
-        })),
+        values.map((value, index) => {
+          const valueWithoutSlug = { ...value };
+          delete valueWithoutSlug.slug;
+
+          return {
+            ...valueWithoutSlug,
+            sort_order: index,
+            created_at: value.created_at ?? now,
+            updated_at: now
+          };
+        }),
         { onConflict: 'id' }
       )
   );

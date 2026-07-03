@@ -48,7 +48,6 @@ import {
   Utensils,
   UtensilsCrossed,
   User,
-  Users,
   Wheat,
   GripVertical,
   Info,
@@ -2668,32 +2667,6 @@ function ProfileSettings({
   );
 }
 
-function InlineEditor({
-  placeholder,
-  onAdd
-}: {
-  placeholder: string;
-  onAdd: (name: string) => void;
-}) {
-  const [value, setValue] = useState('');
-  return (
-    <div className="inline-editor">
-      <input value={value} placeholder={placeholder} onChange={(event) => setValue(event.target.value)} />
-      <button
-        type="button"
-        onClick={() => {
-          if (!value.trim()) return;
-          onAdd(value.trim());
-          setValue('');
-        }}
-        aria-label="Добавить"
-      >
-        <Plus />
-      </button>
-    </div>
-  );
-}
-
 function CategoriesSettings({
   categories,
   cabins,
@@ -2709,8 +2682,7 @@ function CategoriesSettings({
   onModeChange,
   onChangeCategories,
   onChangeCabins,
-  onChangeTags,
-  onDeleteCategory
+  onChangeTags
 }: {
   categories: Category[];
   cabins: Cabin[];
@@ -2727,7 +2699,6 @@ function CategoriesSettings({
   onChangeCategories: (categories: Category[]) => void;
   onChangeCabins: (cabins: Cabin[]) => void;
   onChangeTags: (tags: CatalogTag[]) => void;
-  onDeleteCategory: (categoryId: string) => void;
 }) {
   const move = (index: number, direction: -1 | 1) => {
     const nextIndex = index + direction;
@@ -2896,7 +2867,7 @@ function CategoriesSettings({
           <span>Фото категории лучше загружать широким: 16:9 или около 1.72:1, например 1200 x 700 px.</span>
         </div>
         <div className="category-list">
-          {categories.map((category, index) => (
+          {categories.map((category) => (
             <button className="category-list-card" type="button" key={category.id} onClick={() => onModeChange('edit', category.id)}>
               <GripVertical className="category-list-card__drag" />
               <SafeImage src={category.image} alt={category.name} className="category-list-card__image" />
@@ -4286,10 +4257,6 @@ function AppContent({ catalogSlug, routeSection }: { catalogSlug: string; routeS
     persist(replaceCategoriesInSupabase(values), setLocalCategories);
   };
 
-  const openCategoryEditor = (mode: CategoryEditorMode, categoryId?: string) => {
-    setCategoryEditor({ mode, categoryId });
-  };
-
   const deleteCategoryFromSettings = (categoryId: string) => {
     saveCategories(catalog.categories.filter((category) => category.id !== categoryId));
     persist(deleteCategoryFromSupabase(categoryId));
@@ -4494,7 +4461,6 @@ function AppContent({ catalogSlug, routeSection }: { catalogSlug: string; routeS
           onChangeCategories={saveCategories}
           onChangeCabins={saveCabins}
           onChangeTags={saveTags}
-          onDeleteCategory={deleteCategoryFromSettings}
         />
       )}
       {screen === 'settings-design' && <DesignSettings theme={themeStore} onChange={saveTheme} />}

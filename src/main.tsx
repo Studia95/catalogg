@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { HashRouter, Route, Routes, useParams } from 'react-router-dom';
 import { App } from './app/App';
 import { CatalogAdminApp } from './pages/catalog-admin/CatalogAdminApp';
+import { ClientPlatformApp } from './pages/client-platform/ClientPlatformApp';
 import { Home } from './pages/Home';
 import { LoginPage } from './pages/login/LoginPage';
 import { PlatformAdminApp } from './pages/platform-admin/PlatformAdminApp';
@@ -76,7 +77,13 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <HashRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<ClientPlatformApp />} />
+        <Route path="/city" element={<ClientPlatformApp />} />
+        <Route path="/categories" element={<ClientPlatformApp />} />
+        <Route path="/restaurants" element={<ClientPlatformApp />} />
+        <Route path="/cart" element={<ClientPlatformApp />} />
+        <Route path="/profile/*" element={<ClientPlatformApp />} />
+        <Route path="/r/:slug/*" element={<ClientPlatformApp />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/scanner" element={<ScannerPage />} />
