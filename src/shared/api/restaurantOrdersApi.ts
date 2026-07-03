@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import type { CartItem } from '../../entities/models';
+import { buildPublicRestaurantOrderItems } from './restaurantOrderPayload';
 
 export type RestaurantOrderStatus =
   | 'new'
@@ -348,10 +349,7 @@ export async function createRestaurantOrderFromCart({
     delivery_settlement: deliverySettlement,
     client_address_comment: deliverySettlement,
     comment,
-    items: items.map((item) => ({
-      product_id: item.product.id,
-      quantity: item.quantity
-    }))
+    items: buildPublicRestaurantOrderItems(items)
   });
 
   if (error) throw error;

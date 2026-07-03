@@ -60,7 +60,7 @@ import {
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 import { cabins as demoCabins, categories as demoCategories, products as demoProducts, restaurant as demoRestaurant } from '../data/catalog';
 import type { Cabin, CatalogTag, Category, OrderMode, Product, Restaurant, ThemeSettings } from '../entities/models';
@@ -680,6 +680,7 @@ function TopBar({
   title,
   canBack,
   onBack,
+  onPlatformBack,
   onSearch,
   onCart,
   onAdmin,
@@ -690,6 +691,7 @@ function TopBar({
   title?: string;
   canBack?: boolean;
   onBack: () => void;
+  onPlatformBack?: () => void;
   onSearch?: () => void;
   onCart: () => void;
   onAdmin?: () => void;
@@ -699,11 +701,17 @@ function TopBar({
 }) {
   const items = useCartStore((state) => state.items);
   const count = selectCartCount(items);
+  const hasBackAction = Boolean(canBack || onPlatformBack);
 
   return (
     <header className="top-bar">
-      <button className="icon-button top-bar__button" type="button" onClick={canBack ? onBack : onAdmin} aria-label="Назад">
-        {canBack ? <ArrowLeft /> : <User />}
+      <button
+        className="icon-button top-bar__button"
+        type="button"
+        onClick={canBack ? onBack : onPlatformBack ?? onAdmin}
+        aria-label={hasBackAction ? 'Назад' : 'Вход администратора'}
+      >
+        {hasBackAction ? <ArrowLeft /> : <User />}
       </button>
       {title ? (
         <h1 className="screen-title">{title}</h1>
@@ -1758,9 +1766,14 @@ function CheckoutScreen({
               deliveryAddress: finalDeliveryAddress,
               comment: mode === 'hall' && selectedCabin ? `Кабинка: ${selectedCabin.title}` : ''
             })
+              .then((orderId) => {
+                if (orderId) {
+                  toast.success('Заказ создан в системе ресторана');
+                }
+              })
               .catch((error) => {
                 console.error('Order creation failed', error);
-                toast.error('Не удалось создать заказ в системе, отправляем в WhatsApp');
+                toast.warning('Заказ откроется в WhatsApp. В системе ресторана он пока не сохранён.');
               })
               .finally(() => {
                 window.open(whatsappHref, '_blank', 'noopener,noreferrer');
@@ -3910,6 +3923,7 @@ function DesignEditor({
 }
 
 function AppContent({ catalogSlug, routeSection }: { catalogSlug: string; routeSection?: string }) {
+  const navigate = useNavigate();
   const catalogQueryKey = useMemo(() => ['catalog', catalogSlug] as const, [catalogSlug]);
   const { data, isLoading } = useQuery({
     queryKey: catalogQueryKey,
@@ -4605,6 +4619,7 @@ function AppContent({ catalogSlug, routeSection }: { catalogSlug: string; routeS
             title={screen === 'product' ? undefined : title}
             canBack={screen !== 'home'}
             onBack={() => setScreen('home')}
+            onPlatformBack={() => navigate('/')}
             onSearch={screen === 'home' ? () => setScreen('catalog') : undefined}
             onCart={() => setIsCartOpen(true)}
             onAdmin={() => setShowLogin(true)}

@@ -446,8 +446,8 @@ declare
   line_total integer;
   computed_subtotal integer := 0;
 begin
-  if not public.is_catalog_published(target_catalog_id) then
-    raise exception 'Catalog is not published';
+  if not exists (select 1 from public.catalogs where id = target_catalog_id) then
+    raise exception 'Catalog does not exist';
   end if;
 
   if jsonb_typeof(items) <> 'array' or jsonb_array_length(items) = 0 then
@@ -476,7 +476,7 @@ begin
         and status = 'active'
       for update;
 
-    if product_record.id is null then
+    if not found then
       raise exception 'Product is not available';
     end if;
 

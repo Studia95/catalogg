@@ -64,7 +64,8 @@ import type {
   ClientRestaurant
 } from '../../features/client-platform/types';
 import { getClientPlatformSnapshot, saveClientSignup } from '../../shared/api/clientPlatformApi';
-import { signInPlatformAdmin } from '../../shared/api/platformAdminApi';
+import { resolveLoginRedirect } from '../../shared/api/loginRedirectApi';
+import { signOutPlatformAdmin } from '../../shared/api/platformAdminApi';
 import './client-platform.css';
 
 const clientPlatformQueryClient = new QueryClient();
@@ -1348,11 +1349,13 @@ function ProfilePage() {
   const [clientPhone, setClientPhone] = useState(profile.phone);
   const [clientMessage, setClientMessage] = useState('');
   const [clientError, setClientError] = useState('');
-  const [adminEmail, setAdminEmail] = useState('');
-  const [adminPassword, setAdminPassword] = useState('');
-  const [adminError, setAdminError] = useState('');
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [activeRole, setActiveRole] = useState<'client' | 'restaurant' | 'driver' | null>(null);
+  const [restaurantEmail, setRestaurantEmail] = useState('');
+  const [restaurantPassword, setRestaurantPassword] = useState('');
+  const [restaurantError, setRestaurantError] = useState('');
   const [isSavingClient, setIsSavingClient] = useState(false);
-  const [isSigningAdmin, setIsSigningAdmin] = useState(false);
+  const [isSigningRestaurant, setIsSigningRestaurant] = useState(false);
   const items = [
     { to: '/profile/orders', label: 'Мои заказы', Icon: ReceiptText },
     { to: '/profile/favorites', label: 'Избранное', Icon: Heart },
@@ -1390,22 +1393,36 @@ function ProfilePage() {
     }
   };
 
-  const submitPlatformAdmin = async (event: FormEvent<HTMLFormElement>) => {
+  const submitRestaurantLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setAdminError('');
-    setIsSigningAdmin(true);
+    setRestaurantError('');
+    setIsSigningRestaurant(true);
 
     try {
-      const access = await signInPlatformAdmin(adminEmail, adminPassword);
-      if (!access.isPlatformAdmin) {
-        throw new Error('Этот пользователь не добавлен в platform_admins.');
+      const redirect = await resolveLoginRedirect(restaurantEmail, restaurantPassword);
+      if (!redirect) {
+        throw new Error('Неверный email или пароль.');
       }
-      navigate('/admin/clients');
+      navigate(redirect === '/admin' ? '/admin/clients' : redirect, { replace: true });
     } catch (error) {
-      setAdminError(error instanceof Error ? error.message : 'Не удалось войти в супер-админку.');
+      setRestaurantError(error instanceof Error ? error.message : 'Не удалось войти.');
     } finally {
-      setIsSigningAdmin(false);
+      setIsSigningRestaurant(false);
     }
+  };
+
+  const logout = () => {
+    saveProfile({ name: '', phone: '' });
+    setClientName('');
+    setClientPhone('');
+    setClientMessage('');
+    setClientError('');
+    setRestaurantEmail('');
+    setRestaurantPassword('');
+    setRestaurantError('');
+    setActiveRole(null);
+    setAccountOpen(false);
+    void signOutPlatformAdmin();
   };
 
   return (
@@ -1420,63 +1437,90 @@ function ProfilePage() {
         <ChevronRight />
       </section>
 
-      <section className="plain-section profile-form-section">
-        <h2>Клиент</h2>
-        <form className="profile-inline-form" onSubmit={submitClientProfile}>
-          <label className="field-label">
-            <span>Имя</span>
-            <input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Ваше имя" />
-          </label>
-          <label className="field-label">
-            <span>Телефон</span>
-            <input value={clientPhone} onChange={(event) => setClientPhone(event.target.value)} placeholder="+7" inputMode="tel" />
-          </label>
-          {clientError && <small className="form-error">{clientError}</small>}
-          {clientMessage && <small className="form-success">{clientMessage}</small>}
-          <button className="wide-action" type="submit" disabled={isSavingClient}>
-            <UserRoundCheck />
-            {isSavingClient ? 'Сохраняем...' : 'Войти как клиент'}
-          </button>
-        </form>
-      </section>
+      <button
+        className="profile-cabinet-button"
+        type="button"
+        onClick={() => {
+          setAccountOpen((value) => !value);
+          if (!accountOpen) setActiveRole(null);
+        }}
+      >
+        <CircleUserRound />
+        <span>
+          <strong>Личный кабинет</strong>
+          <small>Вход для клиента, ресторана или водителя</small>
+        </span>
+        <ChevronRight />
+      </button>
 
-      <section className="profile-role-grid">
-        <Link to="/login">
-          <Building2 />
-          <span>
-            <strong>Войти как ресторан</strong>
-            <small>Аккаунт выдаёт супер-админ</small>
-          </span>
-          <ChevronRight />
-        </Link>
-        <Link to="/driver">
-          <Car />
-          <span>
-            <strong>Войти как водитель</strong>
-            <small>Аккаунт выдаёт супер-админ</small>
-          </span>
-          <ChevronRight />
-        </Link>
-      </section>
+      {accountOpen && (
+        <section className="profile-account-panel">
+          <div className="profile-role-grid">
+            <button className={activeRole === 'client' ? 'is-active' : ''} type="button" onClick={() => setActiveRole('client')}>
+              <UserRoundCheck />
+              <span>Клиент</span>
+            </button>
+            <button className={activeRole === 'restaurant' ? 'is-active' : ''} type="button" onClick={() => setActiveRole('restaurant')}>
+              <Building2 />
+              <span>Ресторан</span>
+            </button>
+            <button className={activeRole === 'driver' ? 'is-active' : ''} type="button" onClick={() => setActiveRole('driver')}>
+              <Car />
+              <span>Водитель</span>
+            </button>
+          </div>
 
-      <section className="plain-section profile-form-section">
-        <h2>Супер-админ</h2>
-        <form className="profile-inline-form" onSubmit={submitPlatformAdmin}>
-          <label className="field-label">
-            <span>Email</span>
-            <input value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} type="email" autoComplete="email" required />
-          </label>
-          <label className="field-label">
-            <span>Пароль</span>
-            <input value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} type="password" autoComplete="current-password" required />
-          </label>
-          {adminError && <small className="form-error">{adminError}</small>}
-          <button className="wide-action" type="submit" disabled={isSigningAdmin}>
-            <ShieldCheck />
-            {isSigningAdmin ? 'Проверяем...' : 'Войти в супер-админку'}
-          </button>
-        </form>
-      </section>
+          {activeRole === 'client' && (
+            <form className="profile-inline-form" onSubmit={submitClientProfile}>
+              <label className="field-label">
+                <span>Имя</span>
+                <input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Ваше имя" />
+              </label>
+              <label className="field-label">
+                <span>Телефон</span>
+                <input value={clientPhone} onChange={(event) => setClientPhone(event.target.value)} placeholder="+7" inputMode="tel" />
+              </label>
+              {clientError && <small className="form-error">{clientError}</small>}
+              {clientMessage && <small className="form-success">{clientMessage}</small>}
+              <button className="wide-action" type="submit" disabled={isSavingClient}>
+                <UserRoundCheck />
+                {isSavingClient ? 'Сохраняем...' : 'Войти как клиент'}
+              </button>
+            </form>
+          )}
+
+          {activeRole === 'restaurant' && (
+            <form className="profile-inline-form" onSubmit={submitRestaurantLogin}>
+              <label className="field-label">
+                <span>Email</span>
+                <input value={restaurantEmail} onChange={(event) => setRestaurantEmail(event.target.value)} type="email" autoComplete="email" required />
+              </label>
+              <label className="field-label">
+                <span>Пароль</span>
+                <input value={restaurantPassword} onChange={(event) => setRestaurantPassword(event.target.value)} type="password" autoComplete="current-password" required />
+              </label>
+              {restaurantError && <small className="form-error">{restaurantError}</small>}
+              <button className="wide-action" type="submit" disabled={isSigningRestaurant}>
+                <ShieldCheck />
+                {isSigningRestaurant ? 'Проверяем...' : 'Войти как ресторан'}
+              </button>
+            </form>
+          )}
+
+          {activeRole === 'driver' && (
+            <div className="profile-driver-entry">
+              <Car />
+              <span>
+                <strong>Водительский кабинет</strong>
+                <small>Аккаунт водителя выдаёт супер-админ</small>
+              </span>
+              <Link className="wide-action" to="/driver">
+                Открыть вход водителя
+              </Link>
+            </div>
+          )}
+        </section>
+      )}
 
       <nav className="profile-menu">
         {items.map(({ to, label, Icon }) => (
@@ -1486,7 +1530,7 @@ function ProfilePage() {
             <ChevronRight />
           </Link>
         ))}
-        <button type="button">
+        <button type="button" onClick={logout}>
           <LogOut />
           <span>Выйти</span>
           <ChevronRight />

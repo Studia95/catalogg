@@ -152,8 +152,8 @@ declare
   computed_subtotal integer := 0;
   verification_code text := lpad((floor(random() * 1000000))::int::text, 6, '0');
 begin
-  if not public.is_catalog_published(target_catalog_id) then
-    raise exception 'Catalog is not published';
+  if not exists (select 1 from public.catalogs where id = target_catalog_id) then
+    raise exception 'Catalog does not exist';
   end if;
 
   if fulfillment_type not in ('hall', 'takeaway', 'delivery') then
@@ -210,7 +210,7 @@ begin
         and status = 'active'
       for update;
 
-    if product_record.id is null then
+    if not found then
       raise exception 'Product is not available';
     end if;
 
