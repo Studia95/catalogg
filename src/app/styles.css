@@ -2270,6 +2270,35 @@ a {
   gap: 12px;
 }
 
+.checkout-location-button {
+  width: 100%;
+}
+
+.checkout-location-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.checkout-location-hint,
+.checkout-location-warning {
+  margin: 0;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.checkout-location-hint {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+
+.checkout-location-warning {
+  background: rgba(245, 166, 35, 0.12);
+  color: #f5a623;
+}
+
 .checkout-field {
   display: grid;
   gap: 8px;
