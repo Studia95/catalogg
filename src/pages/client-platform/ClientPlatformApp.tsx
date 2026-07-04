@@ -1014,6 +1014,38 @@ function AddressPage({ restaurant }: { restaurant: ClientRestaurant }) {
   const draft = selectCheckoutDraft(drafts, restaurant.slug);
   const [tab, setTab] = useState<'address' | 'map'>('address');
   const [newAddress, setNewAddress] = useState('');
+  const [geoError, setGeoError] = useState('');
+  const [isLocating, setIsLocating] = useState(false);
+
+  const locateClient = () => {
+    if (!navigator.geolocation) {
+      setGeoError('Геолокация недоступна в этом браузере.');
+      return;
+    }
+
+    setIsLocating(true);
+    setGeoError('');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextLat = Number(position.coords.latitude.toFixed(7));
+        const nextLng = Number(position.coords.longitude.toFixed(7));
+        const accuracyM = Math.round(position.coords.accuracy);
+        updateDraft(restaurant.slug, {
+          deliveryLat: nextLat,
+          deliveryLng: nextLng,
+          deliveryAccuracyM: accuracyM,
+          deliveryAddress: draft.deliveryAddress || `${nextLat}, ${nextLng}`
+        });
+        setTab('map');
+        setIsLocating(false);
+      },
+      () => {
+        setGeoError('Не удалось получить геолокацию. Проверьте разрешение браузера.');
+        setIsLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 12_000, maximumAge: 60_000 }
+    );
+  };
 
   const saveNewAddress = () => {
     if (!newAddress.trim()) return;
@@ -1023,6 +1055,12 @@ function AddressPage({ restaurant }: { restaurant: ClientRestaurant }) {
       addressLine: newAddress.trim(),
       lat: draft.deliveryLat,
       lng: draft.deliveryLng,
+      accuracyM: draft.deliveryAccuracyM,
+      entrance: draft.deliveryEntrance,
+      floor: draft.deliveryFloor,
+      apartment: draft.deliveryApartment,
+      intercomCode: draft.deliveryIntercomCode,
+      landmark: draft.deliveryLandmark,
       comment: draft.deliveryComment,
       isDefault: true
     };
@@ -1035,6 +1073,21 @@ function AddressPage({ restaurant }: { restaurant: ClientRestaurant }) {
     <>
       <RestaurantTopbar restaurant={restaurant} title="Адрес доставки" />
       <main className="restaurant-flow">
+        <section className="flow-section">
+          <button className="secondary-flow-button" type="button" onClick={locateClient} disabled={isLocating}>
+            <LocateFixed />
+            {isLocating ? 'Определяем...' : 'Определить моё местоположение'}
+          </button>
+          <small className="location-hint">
+            {draft.deliveryLat.toFixed(7)}, {draft.deliveryLng.toFixed(7)}
+            {draft.deliveryAccuracyM ? ` · точность ${draft.deliveryAccuracyM} м` : ''}
+          </small>
+          {draft.deliveryAccuracyM && draft.deliveryAccuracyM > 100 && (
+            <p className="geo-warning">Точность слабая. Проверьте точку и адрес перед оплатой.</p>
+          )}
+          {geoError && <p className="geo-warning">{geoError}</p>}
+        </section>
+
         <div className="segment-control">
           <button className={tab === 'address' ? 'is-active' : ''} type="button" onClick={() => setTab('address')}>
             Адрес
@@ -1066,6 +1119,28 @@ function AddressPage({ restaurant }: { restaurant: ClientRestaurant }) {
               <span>Добавить новый адрес</span>
               <input value={newAddress} onChange={(event) => setNewAddress(event.target.value)} placeholder="Улица, дом, квартира" />
             </label>
+            <div className="address-details-grid">
+              <label className="field-label">
+                <span>Подъезд</span>
+                <input value={draft.deliveryEntrance} onChange={(event) => updateDraft(restaurant.slug, { deliveryEntrance: event.target.value })} />
+              </label>
+              <label className="field-label">
+                <span>Этаж</span>
+                <input value={draft.deliveryFloor} onChange={(event) => updateDraft(restaurant.slug, { deliveryFloor: event.target.value })} />
+              </label>
+              <label className="field-label">
+                <span>Квартира</span>
+                <input value={draft.deliveryApartment} onChange={(event) => updateDraft(restaurant.slug, { deliveryApartment: event.target.value })} />
+              </label>
+              <label className="field-label">
+                <span>Домофон</span>
+                <input value={draft.deliveryIntercomCode} onChange={(event) => updateDraft(restaurant.slug, { deliveryIntercomCode: event.target.value })} />
+              </label>
+            </div>
+            <label className="field-label">
+              <span>Ориентир</span>
+              <input value={draft.deliveryLandmark} onChange={(event) => updateDraft(restaurant.slug, { deliveryLandmark: event.target.value })} placeholder="Например: вход со двора" />
+            </label>
             <button className="secondary-flow-button" type="button" onClick={saveNewAddress}>
               <Plus />
               Сохранить адрес
@@ -1075,24 +1150,39 @@ function AddressPage({ restaurant }: { restaurant: ClientRestaurant }) {
           <section className="map-panel">
             <div className="map-panel__canvas">
               <MapPin />
+              <span>
+                <strong>Точка доставки</strong>
+                <small>{draft.deliveryLat.toFixed(7)}, {draft.deliveryLng.toFixed(7)}</small>
+              </span>
             </div>
             <button
               className="secondary-flow-button"
               type="button"
-              onClick={() => updateDraft(restaurant.slug, { deliveryLat: 43.3184, deliveryLng: 45.6927 })}
+              onClick={locateClient}
+              disabled={isLocating}
             >
               <Navigation />
-              Поставить геолокацию
+              Подтвердить текущую точку
             </button>
           </section>
         )}
 
         <label className="field-label">
-          <span>Комментарий к адресу</span>
+          <span>Адрес</span>
+          <input
+            required
+            value={draft.deliveryAddress}
+            onChange={(event) => updateDraft(restaurant.slug, { deliveryAddress: event.target.value })}
+            placeholder="Улица, дом, квартира"
+          />
+        </label>
+
+        <label className="field-label">
+          <span>Комментарий курьеру</span>
           <textarea
             value={draft.deliveryComment}
             onChange={(event) => updateDraft(restaurant.slug, { deliveryComment: event.target.value })}
-            placeholder="Подъезд, этаж, код домофона"
+            placeholder="Позвоните перед подъездом"
           />
         </label>
         <button className="restaurant-primary-button" type="button" onClick={() => navigate(`/r/${restaurant.slug}/payment`)}>
@@ -1855,6 +1945,12 @@ function AddressesPage() {
               addressLine: addressLine.trim(),
               lat: 43.3184,
               lng: 45.6927,
+              accuracyM: 15,
+              entrance: '',
+              floor: '',
+              apartment: '',
+              intercomCode: '',
+              landmark: '',
               comment: '',
               isDefault: true
             });

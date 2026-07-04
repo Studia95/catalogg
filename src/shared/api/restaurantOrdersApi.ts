@@ -1,6 +1,11 @@
 import { supabase } from '../supabase';
 import type { CartItem } from '../../entities/models';
-import { canSendOrderToDelivery, type DeliveryStatus, type PaymentStatus } from '../../features/order/orderLifecycle';
+import {
+  buildYandexMapsRouteUrl,
+  canSendOrderToDelivery,
+  type DeliveryStatus,
+  type PaymentStatus
+} from '../../features/order/orderLifecycle';
 import {
   buildPublicRestaurantOrderItems,
   normalizeRestaurantDeliverySettingsForSave,
@@ -50,8 +55,13 @@ export type RestaurantOrder = {
   fulfillmentType: RestaurantOrderFulfillment;
   cabinLabel: string;
   deliveryAddress: string;
+  deliveryLat: number | null;
+  deliveryLng: number | null;
   deliveryCity: string;
   deliverySettlement: string;
+  restaurantAddress: string;
+  restaurantLat: number | null;
+  restaurantLng: number | null;
   comment: string;
   status: RestaurantOrderStatus;
   paymentStatus: PaymentStatus;
@@ -126,6 +136,11 @@ type OrderRow = {
   cabin_label?: string;
   table_label?: string;
   delivery_address?: string;
+  delivery_lat?: number | null;
+  delivery_lng?: number | null;
+  restaurant_address_snapshot?: string | null;
+  restaurant_lat_snapshot?: number | null;
+  restaurant_lng_snapshot?: number | null;
   delivery_city?: string;
   delivery_settlement?: string;
   comment: string;
@@ -170,8 +185,13 @@ const demoOrders: RestaurantOrder[] = [
     fulfillmentType: 'hall',
     cabinLabel: 'Кабинка №2',
     deliveryAddress: '',
+    deliveryLat: null,
+    deliveryLng: null,
     deliveryCity: '',
     deliverySettlement: '',
+    restaurantAddress: '',
+    restaurantLat: null,
+    restaurantLng: null,
     comment: 'Без лука',
     status: 'new',
     paymentStatus: 'unpaid',
@@ -206,6 +226,11 @@ const orderSelect = `
   cabin_label,
   table_label,
   delivery_address,
+  delivery_lat,
+  delivery_lng,
+  restaurant_address_snapshot,
+  restaurant_lat_snapshot,
+  restaurant_lng_snapshot,
   delivery_city,
   delivery_settlement,
   comment,
@@ -239,8 +264,13 @@ const mapOrder = (row: OrderRow): RestaurantOrder => {
     fulfillmentType: row.fulfillment_type ?? 'hall',
     cabinLabel: row.cabin_label || row.table_label || '',
     deliveryAddress: row.delivery_address ?? '',
+    deliveryLat: row.delivery_lat ?? null,
+    deliveryLng: row.delivery_lng ?? null,
     deliveryCity: row.delivery_city ?? '',
     deliverySettlement: row.delivery_settlement ?? '',
+    restaurantAddress: row.restaurant_address_snapshot ?? '',
+    restaurantLat: row.restaurant_lat_snapshot ?? null,
+    restaurantLng: row.restaurant_lng_snapshot ?? null,
     comment: row.comment,
     status: row.status,
     paymentStatus: row.payment_status ?? 'unpaid',
@@ -336,6 +366,25 @@ export async function updateRestaurantOrderStatus(
           order_id: order.id,
           delivery_provider: 'platform',
           status: 'waiting_courier',
+          route_to_restaurant_url: buildYandexMapsRouteUrl({
+            to: {
+              lat: order.restaurantLat,
+              lng: order.restaurantLng,
+              address: order.restaurantAddress
+            }
+          }),
+          route_to_client_url: buildYandexMapsRouteUrl({
+            from: {
+              lat: order.restaurantLat,
+              lng: order.restaurantLng,
+              address: order.restaurantAddress
+            },
+            to: {
+              lat: order.deliveryLat,
+              lng: order.deliveryLng,
+              address: order.deliveryAddress
+            }
+          }),
           estimated_time_min: 20,
           estimated_time_max: 40
         },

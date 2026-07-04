@@ -57,6 +57,12 @@ const defaultDraft = (): ClientCheckoutDraft => ({
   deliveryAddress: 'ул. Ленина, 123, кв. 45',
   deliveryLat: 43.3184,
   deliveryLng: 45.6927,
+  deliveryAccuracyM: 15,
+  deliveryEntrance: '2',
+  deliveryFloor: '4',
+  deliveryApartment: '45',
+  deliveryIntercomCode: '45',
+  deliveryLandmark: '',
   deliveryComment: '',
   paymentMethod: 'qr'
 });
@@ -116,6 +122,12 @@ export const useClientPlatformStore = create<ClientPlatformStore>()(
                 deliveryAddress: address.addressLine,
                 deliveryLat: address.lat,
                 deliveryLng: address.lng,
+                deliveryAccuracyM: address.accuracyM,
+                deliveryEntrance: address.entrance,
+                deliveryFloor: address.floor,
+                deliveryApartment: address.apartment,
+                deliveryIntercomCode: address.intercomCode,
+                deliveryLandmark: address.landmark,
                 deliveryComment: address.comment
               }
             }

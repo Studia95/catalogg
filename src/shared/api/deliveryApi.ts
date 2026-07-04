@@ -62,6 +62,8 @@ type DeliveryRow = {
   pickup_qr_token: string | null;
   pickup_qr_expires_at: string | null;
   assigned_at: string | null;
+  route_to_restaurant_url: string | null;
+  route_to_client_url: string | null;
   estimated_time_min: number | null;
   estimated_time_max: number | null;
   created_at: string;
@@ -73,7 +75,12 @@ type DeliveryRow = {
     client_name: string | null;
     client_phone: string | null;
     delivery_address: string | null;
+    delivery_lat: number | null;
+    delivery_lng: number | null;
     delivery_comment: string | null;
+    restaurant_address_snapshot: string | null;
+    restaurant_lat_snapshot: number | null;
+    restaurant_lng_snapshot: number | null;
     delivery_fee: number | null;
     total: number | null;
     total_amount: number | null;
@@ -83,6 +90,9 @@ type DeliveryRow = {
       logo_url: string | null;
       cover_url: string | null;
       description: string | null;
+      address_line: string | null;
+      lat: number | null;
+      lng: number | null;
     }> | null;
   }> | null;
 };
@@ -242,9 +252,13 @@ const rowToOffer = (row: DeliveryRow, viewerDriverId: string): DeliveryOffer | n
     clientName: order.client_name ?? '',
     clientPhone: order.client_phone ?? '',
     deliveryAddress: order.delivery_address ?? '',
+    deliveryLat: order.delivery_lat,
+    deliveryLng: order.delivery_lng,
     deliveryComment: order.delivery_comment ?? '',
     restaurantName: restaurant?.name ?? 'Ресторан',
-    restaurantAddress: restaurant?.description ?? '',
+    restaurantAddress: order.restaurant_address_snapshot ?? restaurant?.address_line ?? restaurant?.description ?? '',
+    restaurantLat: order.restaurant_lat_snapshot ?? restaurant?.lat ?? null,
+    restaurantLng: order.restaurant_lng_snapshot ?? restaurant?.lng ?? null,
     deliveryFee,
     distanceKm: 1.8
   };
@@ -337,7 +351,7 @@ export async function getDriverDashboard(driverId = demoDriverId): Promise<Drive
 
   const deliveriesResult = await supabase
     .from('deliveries')
-    .select('id, order_id, driver_id, status, delivery_provider, pickup_qr_token, pickup_qr_expires_at, assigned_at, estimated_time_min, estimated_time_max, created_at, orders(id, order_type, status, payment_status, client_name, client_phone, delivery_address, delivery_comment, delivery_fee, total, total_amount, created_at, restaurants(name, logo_url, cover_url, description))')
+    .select('id, order_id, driver_id, status, delivery_provider, pickup_qr_token, pickup_qr_expires_at, assigned_at, route_to_restaurant_url, route_to_client_url, estimated_time_min, estimated_time_max, created_at, orders(id, order_type, status, payment_status, client_name, client_phone, delivery_address, delivery_lat, delivery_lng, delivery_comment, restaurant_address_snapshot, restaurant_lat_snapshot, restaurant_lng_snapshot, delivery_fee, total, total_amount, created_at, restaurants(name, logo_url, cover_url, description, address_line, lat, lng))')
     .in('status', ['waiting_courier', 'waiting_driver', 'assigned', 'arrived_to_restaurant', 'handed_over', 'on_the_way'])
     .or(`driver_id.is.null,driver_id.eq.${profile.id}`)
     .order('created_at', { ascending: false });
@@ -405,9 +419,17 @@ export async function acceptDeliveryOffer(deliveryId: string, driverId: string) 
 export async function updateDeliveryProgress(deliveryId: string, status: DeliveryStatus) {
   if (!supabase) return;
 
+  const patch: Record<string, unknown> = { status };
+  if (status === 'arrived_to_restaurant') {
+    patch.driver_arrived_restaurant_at = new Date().toISOString();
+  }
+  if (status === 'arrived_to_client') {
+    patch.driver_arrived_client_at = new Date().toISOString();
+  }
+
   const { error } = await supabase
     .from('deliveries')
-    .update({ status })
+    .update(patch)
     .eq('id', deliveryId);
 
   if (error) throw error;

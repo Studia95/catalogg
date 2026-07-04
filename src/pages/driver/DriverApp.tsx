@@ -48,6 +48,7 @@ const deliveryStatusLabels: Record<DeliveryStatus, string> = {
   arrived_to_restaurant: 'На месте в ресторане',
   handed_over: 'Заказ получен',
   on_the_way: 'В пути к клиенту',
+  arrived_to_client: 'На месте у клиента',
   delivered: 'Доставлен',
   failed: 'Проблема'
 };
@@ -358,10 +359,11 @@ function DriverActiveScreen({ delivery }: { delivery: DeliveryOffer | null }) {
 
   const nextAction = useMemo(() => {
     if (!delivery) return null;
-    if (delivery.status === 'assigned') return { label: 'Я на месте', status: 'arrived_to_restaurant' as const };
+    if (delivery.status === 'assigned') return { label: 'Я на месте в ресторане', status: 'arrived_to_restaurant' as const };
     if (delivery.status === 'arrived_to_restaurant') return { label: 'Показать QR', status: 'arrived_to_restaurant' as const, to: '/driver/qr' };
     if (delivery.status === 'handed_over') return { label: 'В пути к клиенту', status: 'on_the_way' as const };
-    if (delivery.status === 'on_the_way') return { label: 'Доставлено', status: 'delivered' as const };
+    if (delivery.status === 'on_the_way') return { label: 'Я на месте у клиента', status: 'arrived_to_client' as const };
+    if (delivery.status === 'arrived_to_client') return { label: 'Заказ доставлен', status: 'delivered' as const };
     return null;
   }, [delivery]);
 
@@ -410,7 +412,14 @@ function DriverActiveScreen({ delivery }: { delivery: DeliveryOffer | null }) {
         {delivery.deliveryComment && <DriverRouteLine icon={<ShieldCheck />} label="Комментарий" value={delivery.deliveryComment} />}
         <div className="driver-action-row">
           {delivery.clientPhone && <a href={`tel:${delivery.clientPhone}`}><Phone />Позвонить</a>}
-          <Link to="/driver/map"><Navigation />Карта</Link>
+          <a href={delivery.status === 'handed_over' || delivery.status === 'on_the_way' || delivery.status === 'arrived_to_client'
+            ? delivery.routeToClientUrl ?? delivery.routeToRestaurantUrl
+            : delivery.routeToRestaurantUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Navigation />Маршрут
+          </a>
           <Link to="/driver/qr"><QrCode />QR</Link>
         </div>
         {error && <p className="driver-error">{error}</p>}
@@ -453,16 +462,22 @@ function DriverQrScreen({ delivery }: { delivery: DeliveryOffer | null }) {
 }
 
 function DriverMapScreen({ delivery }: { delivery: DeliveryOffer | null }) {
+  const routeIsToClient = delivery
+    ? delivery.status === 'handed_over' || delivery.status === 'on_the_way' || delivery.status === 'arrived_to_client'
+    : false;
+  const nextAddress = routeIsToClient ? delivery?.deliveryAddress : delivery?.restaurantAddress;
+  const routeUrl = routeIsToClient ? delivery?.routeToClientUrl ?? delivery?.routeToRestaurantUrl : delivery?.routeToRestaurantUrl;
+
   return (
     <>
       <DriverHeader title="Карта" />
       <DriverMapPreview offer={delivery} tall />
       {delivery && (
         <section className="driver-order-panel">
-          <DriverRouteLine icon={<MapPin />} label="Следующая точка" value={delivery.deliveryAddress} />
+          <DriverRouteLine icon={<MapPin />} label="Следующая точка" value={nextAddress ?? ''} />
           <DriverRouteLine icon={<Navigation />} label="Маршрут" value={`${delivery.distanceKm} км · ${delivery.routeEtaMin} мин`} />
-          <a className="driver-primary driver-link-button" href={`https://yandex.ru/maps/?text=${encodeURIComponent(delivery.deliveryAddress)}`} target="_blank" rel="noreferrer">
-            Навигатор
+          <a className="driver-primary driver-link-button" href={routeUrl} target="_blank" rel="noreferrer">
+            Построить маршрут
           </a>
         </section>
       )}

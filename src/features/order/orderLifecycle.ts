@@ -23,6 +23,7 @@ export type DeliveryStatus =
   | 'arrived_to_restaurant'
   | 'handed_over'
   | 'on_the_way'
+  | 'arrived_to_client'
   | 'delivered'
   | 'failed';
 
@@ -48,6 +49,10 @@ export type OrderLifecycleSnapshot = {
   readonly deliveryComment: string;
   readonly restaurantName: string;
   readonly restaurantAddress: string;
+  readonly restaurantLat?: number | null;
+  readonly restaurantLng?: number | null;
+  readonly deliveryLat?: number | null;
+  readonly deliveryLng?: number | null;
   readonly deliveryFee: number;
   readonly distanceKm: number;
 };
@@ -71,10 +76,23 @@ export type DriverDeliveryView = {
   readonly status: DeliveryStatus;
   readonly isAssignedToViewer: boolean;
   readonly itemsVisible: boolean;
+  readonly routeToRestaurantUrl: string;
+  readonly routeToClientUrl?: string;
   readonly clientName?: string;
   readonly clientPhone?: string;
   readonly deliveryComment?: string;
   readonly pickupQrToken?: string;
+};
+
+type RoutePoint = {
+  readonly lat?: number | null;
+  readonly lng?: number | null;
+  readonly address: string;
+};
+
+type BuildYandexMapsRouteUrlInput = {
+  readonly from?: RoutePoint;
+  readonly to: RoutePoint;
 };
 
 type CreatePickupQrTokenInput = {
@@ -113,6 +131,27 @@ export const canSendOrderToDelivery = (order: Pick<OrderLifecycleSnapshot, 'orde
 export const createPickupQrToken = ({ orderId, driverId, nonce }: CreatePickupQrTokenInput) =>
   [orderId.trim(), driverId.trim(), nonce.trim()].join(':');
 
+const hasCoordinates = (point: RoutePoint) =>
+  typeof point.lat === 'number' &&
+  Number.isFinite(point.lat) &&
+  typeof point.lng === 'number' &&
+  Number.isFinite(point.lng);
+
+const formatCoordinates = (point: RoutePoint) => `${point.lat},${point.lng}`;
+
+export const buildYandexMapsRouteUrl = ({ from, to }: BuildYandexMapsRouteUrlInput) => {
+  const params = new URLSearchParams();
+
+  if (from && hasCoordinates(from) && hasCoordinates(to)) {
+    params.set('rtext', `${formatCoordinates(from)}~${formatCoordinates(to)}`);
+    params.set('rtt', 'auto');
+    return `https://yandex.ru/maps/?${params.toString()}`;
+  }
+
+  params.set('text', hasCoordinates(to) ? formatCoordinates(to) : to.address.trim());
+  return `https://yandex.ru/maps/?${params.toString()}`;
+};
+
 export const rotatePickupQr = ({
   assignment,
   driverId,
@@ -150,6 +189,16 @@ export const buildDriverDeliveryView = ({
   viewerDriverId
 }: BuildDriverDeliveryViewInput): DriverDeliveryView => {
   const isAssignedToViewer = assignment?.driverId === viewerDriverId;
+  const restaurantPoint = {
+    lat: order.restaurantLat,
+    lng: order.restaurantLng,
+    address: order.restaurantAddress
+  };
+  const clientPoint = {
+    lat: order.deliveryLat,
+    lng: order.deliveryLng,
+    address: order.deliveryAddress
+  };
 
   return {
     orderId: order.id,
@@ -161,6 +210,10 @@ export const buildDriverDeliveryView = ({
     status: assignment?.status ?? 'waiting_courier',
     isAssignedToViewer,
     itemsVisible: false,
+    routeToRestaurantUrl: buildYandexMapsRouteUrl({ to: restaurantPoint }),
+    routeToClientUrl: isAssignedToViewer
+      ? buildYandexMapsRouteUrl({ from: restaurantPoint, to: clientPoint })
+      : undefined,
     clientName: isAssignedToViewer ? order.clientName : undefined,
     clientPhone: isAssignedToViewer ? order.clientPhone : undefined,
     deliveryComment: isAssignedToViewer ? order.deliveryComment : undefined,

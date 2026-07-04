@@ -806,6 +806,19 @@ function OrderDetails({
         <div><dt>Телефон</dt><dd>{order.clientPhone || 'Не указан'}</dd></div>
         <div><dt>Тип</dt><dd>{order.fulfillmentType === 'delivery' ? 'Доставка' : order.fulfillmentType === 'takeaway' ? 'На вынос' : 'В зале'}</dd></div>
         <div><dt>Адрес / кабинка</dt><dd>{order.deliveryAddress || order.cabinLabel || 'Не указано'}</dd></div>
+        {order.fulfillmentType === 'delivery' && (
+          <div>
+            <dt>Координаты клиента</dt>
+            <dd>
+              {order.deliveryLat !== null && order.deliveryLng !== null
+                ? `${order.deliveryLat.toFixed(7)}, ${order.deliveryLng.toFixed(7)}`
+                : 'Не указаны'}
+            </dd>
+          </div>
+        )}
+        {order.fulfillmentType === 'delivery' && order.restaurantAddress && (
+          <div><dt>Точка ресторана</dt><dd>{order.restaurantAddress}</dd></div>
+        )}
         <div><dt>Комментарий</dt><dd>{order.comment || 'Нет комментария'}</dd></div>
         <div><dt>Оплата</dt><dd>{orderPaymentStatusLabels[order.paymentStatus]}</dd></div>
         {order.fulfillmentType === 'delivery' && <div><dt>Доставка</dt><dd>{order.deliveryStatus}</dd></div>}

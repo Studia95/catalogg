@@ -30,6 +30,13 @@ type CatalogRow = {
   status: 'draft' | 'published' | 'archived';
 };
 
+type RestaurantProfileRow = {
+  catalog_id: string | null;
+  address_line: string | null;
+  lat: number | null;
+  lng: number | null;
+};
+
 type CategoryRow = {
   id: string;
   catalog_id: string;
@@ -250,7 +257,7 @@ export async function saveClientReview(input: {
 }
 
 type ClientPlatformOrderInput = {
-  restaurant: Pick<ClientRestaurant, 'id' | 'slug' | 'deliveryProvider'>;
+  restaurant: Pick<ClientRestaurant, 'id' | 'slug' | 'description' | 'addressLine' | 'lat' | 'lng' | 'deliveryProvider'>;
   profile: ClientProfile;
   draft: ClientCheckoutDraft;
   lines: ClientCartLine[];
@@ -362,6 +369,19 @@ export async function createClientPlatformOrder(input: ClientPlatformOrderInput)
       delivery_address: input.draft.orderType === 'delivery' ? input.draft.deliveryAddress : null,
       delivery_lat: input.draft.orderType === 'delivery' ? input.draft.deliveryLat : null,
       delivery_lng: input.draft.orderType === 'delivery' ? input.draft.deliveryLng : null,
+      client_accuracy_m: input.draft.orderType === 'delivery' ? input.draft.deliveryAccuracyM : null,
+      delivery_address_snapshot: input.draft.orderType === 'delivery' ? input.draft.deliveryAddress : null,
+      delivery_entrance_snapshot: input.draft.orderType === 'delivery' ? input.draft.deliveryEntrance : null,
+      delivery_floor_snapshot: input.draft.orderType === 'delivery' ? input.draft.deliveryFloor : null,
+      delivery_apartment_snapshot: input.draft.orderType === 'delivery' ? input.draft.deliveryApartment : null,
+      delivery_intercom_snapshot: input.draft.orderType === 'delivery' ? input.draft.deliveryIntercomCode : null,
+      delivery_landmark_snapshot: input.draft.orderType === 'delivery' ? input.draft.deliveryLandmark : null,
+      delivery_comment_snapshot: input.draft.orderType === 'delivery' ? input.draft.deliveryComment : null,
+      client_lat: input.draft.orderType === 'delivery' ? input.draft.deliveryLat : null,
+      client_lng: input.draft.orderType === 'delivery' ? input.draft.deliveryLng : null,
+      restaurant_address_snapshot: input.restaurant.addressLine || input.restaurant.description,
+      restaurant_lat_snapshot: input.restaurant.lat,
+      restaurant_lng_snapshot: input.restaurant.lng,
       delivery_comment: input.draft.orderType === 'delivery' ? input.draft.deliveryComment : null,
       booth_name: input.draft.orderType === 'dine_in' ? input.draft.boothName : null,
       delivery_fee: input.deliveryFee,
@@ -440,6 +460,7 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
     themeResult,
     deliveryResult,
     paymentsResult,
+    restaurantProfilesResult,
     bannersResult,
     settingsResult
   ] =
@@ -470,6 +491,10 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
         .select('restaurant_id, enable_transfer, allow_cash, require_confirmation, bank_name, phone_number, display_name, first_name, last_name, middle_name, comment, qr_image_url')
         .in('restaurant_id', catalogIds),
       supabase
+        .from('restaurants')
+        .select('catalog_id, address_line, lat, lng')
+        .in('catalog_id', catalogIds),
+      supabase
         .from('platform_banners')
         .select('id, title, subtitle, kind, image_url, link_url, is_active, sort_order')
         .eq('is_active', true)
@@ -483,6 +508,7 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
   const themes = (themeResult.data ?? []) as ThemeRow[];
   const deliverySettings = (deliveryResult.data ?? []) as DeliverySettingsRow[];
   const paymentRows = (paymentsResult.data ?? []) as PaymentRow[];
+  const restaurantProfiles = (restaurantProfilesResult.data ?? []) as RestaurantProfileRow[];
   const bannerRows = (bannersResult.data ?? []) as PlatformBannerRow[];
   const settingsRow = settingsResult.data as PlatformSettingsRow | null;
 
@@ -504,6 +530,11 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
   const themeByCatalog = new Map(themes.map((theme) => [theme.catalog_id, theme.settings]));
   const deliveryByCatalog = new Map(deliverySettings.map((settings) => [settings.catalog_id, settings]));
   const paymentByCatalog = new Map(paymentRows.map((payment) => [payment.restaurant_id, payment]));
+  const restaurantProfileByCatalog = new Map(
+    restaurantProfiles
+      .filter((profile): profile is RestaurantProfileRow & { catalog_id: string } => Boolean(profile.catalog_id))
+      .map((profile) => [profile.catalog_id, profile])
+  );
 
   const platformCategories: ClientPlatformCategory[] = unique(
     categories.filter((category) => !category.is_hidden).map((category) => category.slug)
@@ -534,6 +565,7 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
 
   const restaurants: ClientRestaurant[] = catalogs.map((catalog) => {
     const settings = deliveryByCatalog.get(catalog.id);
+    const restaurantProfile = restaurantProfileByCatalog.get(catalog.id);
     const catalogCategories = categoriesByCatalog.get(catalog.id) ?? [];
     const serviceSettlements = settings?.service_settlements ?? [];
     const preparation = Math.max(10, settings?.default_preparation_minutes ?? 30);
@@ -543,6 +575,9 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
       slug: catalog.slug,
       name: catalog.name,
       description: catalog.description,
+      addressLine: restaurantProfile?.address_line ?? catalog.description,
+      lat: restaurantProfile?.lat ?? null,
+      lng: restaurantProfile?.lng ?? null,
       cityId: getCityId(settings?.primary_city),
       serviceCityIds: serviceSettlements.map(getCityId),
       categorySlugs: unique(catalogCategories.map((category) => category.slug)),

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   buildDriverDeliveryView,
+  buildYandexMapsRouteUrl,
   canSendOrderToDelivery,
   createPickupQrToken,
   rotatePickupQr,
@@ -20,6 +21,10 @@ const order = (overrides: Partial<OrderLifecycleSnapshot> = {}): OrderLifecycleS
   deliveryComment: 'Подъезд 2',
   restaurantName: 'Rizih',
   restaurantAddress: 'пр-т Путина, 20',
+  restaurantLat: 43.322,
+  restaurantLng: 45.705,
+  deliveryLat: 43.318123,
+  deliveryLng: 45.698456,
   deliveryFee: 470,
   distanceKm: 1.8,
   ...overrides
@@ -119,5 +124,43 @@ describe('order delivery lifecycle', () => {
     assert.equal(assignedView.clientPhone, '+7 928 123-45-67');
     assert.equal(assignedView.deliveryComment, 'Подъезд 2');
     assert.equal(otherDriverView.clientName, undefined);
+  });
+
+  it('builds Yandex route links from coordinates and falls back to text search', () => {
+    assert.equal(
+      buildYandexMapsRouteUrl({
+        from: { lat: 43.322, lng: 45.705, address: 'Rizih' },
+        to: { lat: 43.318123, lng: 45.698456, address: 'ул. Ленина, 123' }
+      }),
+      'https://yandex.ru/maps/?rtext=43.322%2C45.705~43.318123%2C45.698456&rtt=auto'
+    );
+
+    assert.equal(
+      buildYandexMapsRouteUrl({ to: { lat: null, lng: null, address: 'ул. Ленина, 123' } }),
+      'https://yandex.ru/maps/?text=%D1%83%D0%BB.+%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0%2C+123'
+    );
+  });
+
+  it('gives drivers restaurant route first and client route only after assignment', () => {
+    const availableView = buildDriverDeliveryView({
+      order: order(),
+      assignment: null,
+      viewerDriverId: 'driver-1'
+    });
+    const assignedView = buildDriverDeliveryView({
+      order: order(),
+      assignment: assignment(),
+      viewerDriverId: 'driver-1'
+    });
+
+    assert.equal(
+      availableView.routeToRestaurantUrl,
+      'https://yandex.ru/maps/?text=43.322%2C45.705'
+    );
+    assert.equal(availableView.routeToClientUrl, undefined);
+    assert.equal(
+      assignedView.routeToClientUrl,
+      'https://yandex.ru/maps/?rtext=43.322%2C45.705~43.318123%2C45.698456&rtt=auto'
+    );
   });
 });

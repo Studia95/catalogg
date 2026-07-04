@@ -43,6 +43,9 @@ export type ClientRestaurant = {
   slug: string;
   name: string;
   description: string;
+  addressLine: string;
+  lat: number | null;
+  lng: number | null;
   cityId: string;
   serviceCityIds?: string[];
   categorySlugs: string[];
@@ -109,6 +112,12 @@ export type ClientAddress = {
   addressLine: string;
   lat: number;
   lng: number;
+  accuracyM: number | null;
+  entrance: string;
+  floor: string;
+  apartment: string;
+  intercomCode: string;
+  landmark: string;
   comment: string;
   isDefault: boolean;
 };
@@ -127,6 +136,12 @@ export type ClientCheckoutDraft = {
   deliveryAddress: string;
   deliveryLat: number;
   deliveryLng: number;
+  deliveryAccuracyM: number | null;
+  deliveryEntrance: string;
+  deliveryFloor: string;
+  deliveryApartment: string;
+  deliveryIntercomCode: string;
+  deliveryLandmark: string;
   deliveryComment: string;
   paymentMethod: ClientPaymentMethod;
 };

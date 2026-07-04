@@ -55,6 +55,10 @@ create table if not exists public.restaurants (
   updated_at timestamptz not null default now()
 );
 
+alter table public.restaurants add column if not exists address_line text not null default '';
+alter table public.restaurants add column if not exists lat numeric(10,7);
+alter table public.restaurants add column if not exists lng numeric(10,7);
+
 create table if not exists public.restaurant_socials (
   id uuid primary key default gen_random_uuid(),
   restaurant_id uuid not null references public.restaurants(id) on delete cascade,
@@ -172,6 +176,14 @@ create table if not exists public.client_addresses (
   created_at timestamptz not null default now()
 );
 
+alter table public.client_addresses add column if not exists accuracy_m numeric(10,2);
+alter table public.client_addresses add column if not exists entrance text not null default '';
+alter table public.client_addresses add column if not exists floor text not null default '';
+alter table public.client_addresses add column if not exists apartment text not null default '';
+alter table public.client_addresses add column if not exists intercom_code text not null default '';
+alter table public.client_addresses add column if not exists landmark text not null default '';
+alter table public.client_addresses add column if not exists updated_at timestamptz not null default now();
+
 create table if not exists public.restaurant_payment_settings (
   id uuid primary key default gen_random_uuid(),
   restaurant_id uuid not null references public.restaurants(id) on delete cascade,
@@ -205,6 +217,20 @@ alter table public.orders add column if not exists delivery_address text;
 alter table public.orders add column if not exists delivery_lat numeric(10,7);
 alter table public.orders add column if not exists delivery_lng numeric(10,7);
 alter table public.orders add column if not exists delivery_comment text;
+alter table public.orders add column if not exists client_accuracy_m numeric(10,2);
+alter table public.orders add column if not exists delivery_address_id uuid references public.client_addresses(id) on delete set null;
+alter table public.orders add column if not exists delivery_address_snapshot text;
+alter table public.orders add column if not exists delivery_entrance_snapshot text;
+alter table public.orders add column if not exists delivery_floor_snapshot text;
+alter table public.orders add column if not exists delivery_apartment_snapshot text;
+alter table public.orders add column if not exists delivery_intercom_snapshot text;
+alter table public.orders add column if not exists delivery_landmark_snapshot text;
+alter table public.orders add column if not exists delivery_comment_snapshot text;
+alter table public.orders add column if not exists client_lat numeric(10,7);
+alter table public.orders add column if not exists client_lng numeric(10,7);
+alter table public.orders add column if not exists restaurant_lat_snapshot numeric(10,7);
+alter table public.orders add column if not exists restaurant_lng_snapshot numeric(10,7);
+alter table public.orders add column if not exists restaurant_address_snapshot text;
 alter table public.orders add column if not exists booth_name text;
 alter table public.orders add column if not exists subtotal_amount numeric(12,2) not null default 0;
 alter table public.orders add column if not exists total_amount numeric(12,2) not null default 0;
@@ -251,6 +277,26 @@ create table if not exists public.deliveries (
   updated_at timestamptz not null default now(),
   unique (order_id)
 );
+
+alter table public.deliveries add column if not exists route_to_restaurant_url text;
+alter table public.deliveries add column if not exists route_to_client_url text;
+alter table public.deliveries add column if not exists driver_arrived_restaurant_at timestamptz;
+alter table public.deliveries add column if not exists driver_arrived_client_at timestamptz;
+alter table public.deliveries drop constraint if exists deliveries_status_check;
+alter table public.deliveries add constraint deliveries_status_check
+  check (status in (
+    'waiting_driver',
+    'waiting_courier',
+    'assigned',
+    'arrived_to_restaurant',
+    'handed_over',
+    'on_the_way',
+    'arrived_to_client',
+    'delivered',
+    'failed',
+    'canceled',
+    'cancelled'
+  ));
 
 create table if not exists public.favorites_restaurants (
   id uuid primary key default gen_random_uuid(),

@@ -1095,10 +1095,33 @@
   gap: 12px;
 }
 
+.location-hint {
+  display: block;
+  color: #667085;
+  font-weight: 800;
+}
+
+.geo-warning {
+  margin: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.address-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .map-panel__canvas {
   display: grid;
   min-height: 220px;
   place-items: center;
+  gap: 10px;
   border: 1px solid color-mix(in srgb, var(--restaurant-accent) 14%, #d9e0ea);
   border-radius: 8px;
   background:
@@ -1107,11 +1130,22 @@
     #f8fafc;
   background-size: 32px 32px;
   color: var(--restaurant-button);
+  text-align: center;
 }
 
 .map-panel__canvas svg {
   width: 42px;
   height: 42px;
+}
+
+.map-panel__canvas strong,
+.map-panel__canvas small {
+  display: block;
+}
+
+.map-panel__canvas small {
+  margin-top: 4px;
+  color: #667085;
 }
 
 .payment-method {
