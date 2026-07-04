@@ -7,10 +7,13 @@ export type ClientPaymentMethod = 'qr' | 'bank_transfer' | 'cash';
 export type ClientOrderStatus =
   | 'new'
   | 'waiting_payment_confirmation'
+  | 'payment_confirmed'
   | 'accepted'
   | 'cooking'
   | 'ready'
   | 'waiting_driver'
+  | 'assigned_driver'
+  | 'picked_up'
   | 'on_the_way'
   | 'completed'
   | 'canceled';

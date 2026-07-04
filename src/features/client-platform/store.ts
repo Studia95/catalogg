@@ -7,8 +7,10 @@ import type {
   ClientCheckoutDraft,
   ClientOrder,
   ClientOrderItem,
+  ClientOrderStatus,
   ClientOrderType,
   ClientPaymentMethod,
+  ClientPaymentStatus,
   ClientProfile
 } from './types';
 
@@ -34,6 +36,13 @@ type ClientPlatformStore = {
   removeDish: (restaurantSlug: string, dishId: string) => void;
   clearCart: (restaurantSlug: string) => void;
   submitOrder: (order: ClientOrder) => void;
+  syncOrderPatch: (
+    orderId: string,
+    patch: Partial<Pick<ClientOrder, 'driverName' | 'driverPhone'>> & {
+      status?: ClientOrderStatus;
+      paymentStatus?: ClientPaymentStatus;
+    }
+  ) => void;
   repeatOrder: (order: ClientOrder) => void;
   toggleFavoriteRestaurant: (restaurantId: string) => void;
   toggleFavoriteDish: (dishId: string) => void;
@@ -167,6 +176,17 @@ export const useClientPlatformStore = create<ClientPlatformStore>()(
         set((state) => ({
           orders: [order, ...state.orders.filter((item) => item.id !== order.id)],
           carts: { ...state.carts, [order.restaurantSlug]: [] }
+        })),
+      syncOrderPatch: (orderId, patch) =>
+        set((state) => ({
+          orders: state.orders.map((order) =>
+            order.id === orderId
+              ? {
+                  ...order,
+                  ...patch
+                }
+              : order
+          )
         })),
       repeatOrder: (order) =>
         set((state) => ({

@@ -39,7 +39,7 @@ import {
 } from 'lucide-react';
 import type { CSSProperties, FormEvent } from 'react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { buildOrderAfterClientPaymentNotice, buildRestaurantPublicPath, buildSupportWhatsappUrl, buildYandexMapsUrl, calculateCartSummary, filterRestaurants, getDeliveryProviderLabel } from '../../features/client-platform/clientPlatformLogic';
 import { clientPlatformSnapshot, fallbackPaymentSettings } from '../../features/client-platform/mockData';
@@ -63,7 +63,13 @@ import type {
   ClientPlatformSnapshot,
   ClientRestaurant
 } from '../../features/client-platform/types';
-import { getClientPlatformSnapshot, saveClientReview, saveClientSignup } from '../../shared/api/clientPlatformApi';
+import {
+  createClientPlatformOrder,
+  getClientPlatformSnapshot,
+  saveClientReview,
+  saveClientSignup,
+  subscribeClientOrderRealtime
+} from '../../shared/api/clientPlatformApi';
 import { resolveLoginRedirect } from '../../shared/api/loginRedirectApi';
 import { signOutPlatformAdmin } from '../../shared/api/platformAdminApi';
 import './client-platform.css';
@@ -87,13 +93,43 @@ const paymentMethodLabels: Record<ClientPaymentMethod, string> = {
 const statusLabels: Record<ClientOrderStatus, string> = {
   new: 'Новый',
   waiting_payment_confirmation: 'Ожидает подтверждения оплаты',
+  payment_confirmed: 'Оплата подтверждена',
   accepted: 'Принят',
   cooking: 'Готовится',
   ready: 'Готов',
   waiting_driver: 'Ожидает курьера',
+  assigned_driver: 'Курьер назначен',
+  picked_up: 'Заказ забран',
   on_the_way: 'В пути',
   completed: 'Доставлен',
   canceled: 'Отменён'
+};
+
+const toClientOrderStatus = (status: string | undefined): ClientOrderStatus | undefined => {
+  if (!status) return undefined;
+  if (status === 'preparing') return 'cooking';
+  if (status === 'confirmed') return 'accepted';
+  if (status === 'driver_assigned') return 'assigned_driver';
+  if (status === 'delivered') return 'completed';
+  if (status === 'cancelled') return 'canceled';
+  if (
+    status === 'new' ||
+    status === 'waiting_payment_confirmation' ||
+    status === 'payment_confirmed' ||
+    status === 'accepted' ||
+    status === 'cooking' ||
+    status === 'ready' ||
+    status === 'waiting_driver' ||
+    status === 'assigned_driver' ||
+    status === 'picked_up' ||
+    status === 'on_the_way' ||
+    status === 'completed' ||
+    status === 'canceled'
+  ) {
+    return status;
+  }
+
+  return undefined;
 };
 
 const providerIcons: Record<ClientDeliveryProvider, typeof Truck> = {
@@ -1148,6 +1184,8 @@ function PaymentConfirmPage({
   const paymentSettings = getPaymentSettings(snapshot, restaurant.slug);
   const lines = useClientPlatformStore((state) => selectRestaurantCart(state.carts, restaurant.slug));
   const dishes = getRestaurantDishes(snapshot, restaurant.slug);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderError, setOrderError] = useState('');
   const summaryWithoutDelivery = calculateCartSummary(lines, dishes, 0);
   const deliveryFee = getDeliveryFee(restaurant, draft, summaryWithoutDelivery);
   const summary = { ...summaryWithoutDelivery, deliveryFee, total: summaryWithoutDelivery.subtotal + deliveryFee };
@@ -1156,9 +1194,33 @@ function PaymentConfirmPage({
     return dish ? [{ dishId: dish.id, name: dish.name, price: dish.price, quantity: line.quantity }] : [];
   });
 
-  const confirmPayment = () => {
+  const confirmPayment = async () => {
+    setIsSubmitting(true);
+    setOrderError('');
+    const fallbackOrderId = `WC-${Math.floor(10000 + Math.random() * 89999)}`;
+    let orderId = fallbackOrderId;
+
+    try {
+      const remoteOrderId = await createClientPlatformOrder({
+        restaurant,
+        profile,
+        draft,
+        lines,
+        dishes,
+        subtotal: summary.subtotal,
+        deliveryFee: summary.deliveryFee,
+        total: summary.total
+      });
+      orderId = remoteOrderId ?? fallbackOrderId;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'неизвестная ошибка';
+      setOrderError(`Заказ сохранён на устройстве. Supabase: ${message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+
     const order = buildOrderAfterClientPaymentNotice({
-      id: `WC-${Math.floor(10000 + Math.random() * 89999)}`,
+      id: orderId,
       restaurantSlug: restaurant.slug,
       restaurantName: restaurant.name,
       orderType: draft.orderType,
@@ -1192,8 +1254,9 @@ function PaymentConfirmPage({
             <small>{paymentSettings.paymentComment}</small>
           </section>
         )}
-        <button className="restaurant-primary-button" type="button" onClick={confirmPayment} disabled={summary.quantity === 0}>
-          {draft.paymentMethod === 'cash' ? 'Подтвердить заказ' : 'Я оплатил(а) заказ'}
+        {orderError && <small className="form-error">{orderError}</small>}
+        <button className="restaurant-primary-button" type="button" onClick={() => void confirmPayment()} disabled={summary.quantity === 0 || isSubmitting}>
+          {isSubmitting ? 'Отправляем заказ...' : draft.paymentMethod === 'cash' ? 'Подтвердить заказ' : 'Я оплатил(а) заказ'}
         </button>
       </main>
     </>
@@ -1210,8 +1273,22 @@ function OrderStatusPage({
   orderId?: string;
 }) {
   const orders = useClientPlatformStore((state) => state.orders);
+  const syncOrderPatch = useClientPlatformStore((state) => state.syncOrderPatch);
   const order = orders.find((item) => item.id === orderId) ?? orders.find((item) => item.restaurantSlug === restaurant.slug);
   const restaurantImage = snapshot.restaurants.find((item) => item.slug === restaurant.slug)?.coverUrl;
+
+  useEffect(() => {
+    if (!order?.id) return undefined;
+
+    return subscribeClientOrderRealtime(order.id, (patch) => {
+      syncOrderPatch(order.id, {
+        status: toClientOrderStatus(patch.status),
+        paymentStatus: patch.paymentStatus,
+        driverName: patch.driverName,
+        driverPhone: patch.driverPhone
+      });
+    });
+  }, [order?.id, syncOrderPatch]);
 
   if (!order) {
     return (
@@ -1289,10 +1366,13 @@ function OrderProgress({ status }: { status: ClientOrderStatus }) {
     { id: 'accepted', label: 'Принят' },
     { id: 'cooking', label: 'Готовится' },
     { id: 'ready', label: 'Подтверждён' },
+    { id: 'assigned_driver', label: 'Курьер' },
+    { id: 'picked_up', label: 'Забран' },
     { id: 'on_the_way', label: 'В пути' },
     { id: 'completed', label: 'Доставлен' }
   ];
-  const statusIndex = steps.findIndex((step) => step.id === status);
+  const normalizedStatus = status === 'payment_confirmed' ? 'accepted' : status === 'waiting_driver' ? 'ready' : status;
+  const statusIndex = steps.findIndex((step) => step.id === normalizedStatus);
   const activeIndex = status === 'waiting_payment_confirmation' || status === 'new' ? 0 : Math.max(statusIndex, 0);
 
   return (

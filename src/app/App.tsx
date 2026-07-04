@@ -2037,16 +2037,22 @@ function SettingsHome({ onOpen }: { onOpen: (screen: SettingsScreen) => void }) 
 
 const adminOrderStatusLabels: Record<RestaurantOrderStatus, string> = {
   new: 'Новый',
+  waiting_payment_confirmation: 'Ждет оплату',
+  payment_confirmed: 'Оплата подтверждена',
   accepted: 'Принят',
   confirmed: 'Принят',
   preparing: 'Готовится',
+  cooking: 'Готовится',
   ready: 'Готов',
   waiting_driver: 'Ждет водителя',
   driver_assigned: 'Водитель назначен',
+  assigned_driver: 'Водитель назначен',
+  picked_up: 'Забран',
   on_the_way: 'В пути',
   delivered: 'Доставлен',
   completed: 'Выполнен',
-  cancelled: 'Отменен'
+  cancelled: 'Отменен',
+  canceled: 'Отменен'
 };
 
 const adminOrderStatusFilters: Array<{ status: 'all' | RestaurantOrderStatus; label: string }> = [
@@ -2379,6 +2385,7 @@ function OrderDetailsScreen({
       <section className="admin-section-card admin-payment-status">
         <h2>Оплата</h2>
         <p>Статус оплаты: <strong>{paymentStatusLabels[paymentStatus]}</strong></p>
+        <p>Статус в заказе: <strong>{order.paymentStatus}</strong></p>
         {paymentSettings.transferEnabled && (
           <div className="admin-payment-requisites">
             <span>Способ: перевод ресторану</span>
@@ -2403,7 +2410,13 @@ function OrderDetailsScreen({
           <button type="button" onClick={() => onStatus('preparing')}>Готовится</button>
         )}
         {order.status === 'preparing' && (
-          <button type="button" onClick={() => onStatus(order.fulfillmentType === 'delivery' ? 'waiting_driver' : 'ready')}>Готово</button>
+          <button
+            type="button"
+            disabled={order.fulfillmentType === 'delivery' && order.paymentStatus !== 'confirmed'}
+            onClick={() => onStatus(order.fulfillmentType === 'delivery' ? 'waiting_driver' : 'ready')}
+          >
+            Готово
+          </button>
         )}
         {order.status === 'ready' && order.fulfillmentType !== 'delivery' && (
           <button type="button" onClick={() => onStatus('completed')}>Завершить</button>

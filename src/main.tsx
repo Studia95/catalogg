@@ -5,7 +5,7 @@ import { HashRouter, Route, Routes, useParams } from 'react-router-dom';
 import { App } from './app/App';
 import { CatalogAdminApp } from './pages/catalog-admin/CatalogAdminApp';
 import { ClientPlatformApp } from './pages/client-platform/ClientPlatformApp';
-import { Home } from './pages/Home';
+import { DriverApp } from './pages/driver/DriverApp';
 import { LoginPage } from './pages/login/LoginPage';
 import { PlatformAdminApp } from './pages/platform-admin/PlatformAdminApp';
 import { PrivacyPage } from './pages/privacy/PrivacyPage';
@@ -69,10 +69,6 @@ function CatalogAdminRoute() {
   return <CatalogAdminApp slug={decodeURIComponent(slug)} />;
 }
 
-function DriverRoute() {
-  return <Home />;
-}
-
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <HashRouter>
@@ -91,7 +87,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
         <Route path="/admin/catalogs/:slug" element={<CatalogAdminRoute />} />
         <Route path="/admin/payments" element={<PaymentsPage />} />
         <Route path="/admin/*" element={<PlatformAdminApp />} />
-        <Route path="/driver/*" element={<DriverRoute />} />
+        <Route path="/driver/*" element={<DriverApp />} />
         <Route path="/:slug/*" element={<App />} />
         <Route path="/:slug" element={<App />} />
       </Routes>

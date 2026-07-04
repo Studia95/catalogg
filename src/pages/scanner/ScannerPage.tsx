@@ -1,21 +1,29 @@
 import { Camera, Flashlight, QrCode, RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { confirmDeliveryPickupQr } from '../../shared/api/deliveryApi';
 import './scanner.css';
 
 type ParsedQr =
   | { kind: 'restaurant'; slug: string }
   | { kind: 'order'; orderId: string }
-  | { kind: 'delivery'; orderId: string }
+  | { kind: 'delivery'; orderId?: string; deliveryId?: string; token?: string }
   | { kind: 'payment'; orderId?: string }
   | { kind: 'unknown'; raw: string };
 
 function parseQr(raw: string): ParsedQr {
   const text = raw.trim();
   try {
-    const parsed = JSON.parse(text) as { type?: string; orderId?: string };
+    const parsed = JSON.parse(text) as { type?: string; orderId?: string; deliveryId?: string; token?: string };
     if (parsed.type === 'order' && parsed.orderId) return { kind: 'order', orderId: parsed.orderId };
-    if (parsed.type === 'delivery' && parsed.orderId) return { kind: 'delivery', orderId: parsed.orderId };
+    if (parsed.type === 'delivery' && (parsed.orderId || parsed.deliveryId)) {
+      return {
+        kind: 'delivery',
+        orderId: parsed.orderId,
+        deliveryId: parsed.deliveryId,
+        token: parsed.token
+      };
+    }
     if (parsed.type === 'payment') return { kind: 'payment', orderId: parsed.orderId };
   } catch {
     // Plain links are handled below.
@@ -49,7 +57,7 @@ export function ScannerPage() {
     setIsCameraActive(false);
   };
 
-  const handleParsed = useCallback((parsed: ParsedQr) => {
+  const handleParsed = useCallback(async (parsed: ParsedQr) => {
     if (parsed.kind === 'restaurant') {
       navigate(`/${parsed.slug}`);
       return;
@@ -59,6 +67,19 @@ export function ScannerPage() {
       return;
     }
     if (parsed.kind === 'delivery') {
+      if (parsed.deliveryId && parsed.token) {
+        try {
+          const confirmed = await confirmDeliveryPickupQr(parsed.deliveryId, parsed.token);
+          setMessage(confirmed ? 'Выдача подтверждена. Заказ передан водителю.' : 'QR недействителен, устарел или уже отменён.');
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'Не удалось подтвердить выдачу.');
+        }
+        return;
+      }
+      if (!parsed.orderId) {
+        setMessage('В QR доставки нет номера заказа или токена выдачи.');
+        return;
+      }
       navigate(`/${slug || 'mangal'}/dashboard?delivery=${encodeURIComponent(parsed.orderId)}`);
       return;
     }
@@ -70,7 +91,7 @@ export function ScannerPage() {
   }, [navigate, slug]);
 
   const scanManual = () => {
-    handleParsed(parseQr(rawValue));
+    void handleParsed(parseQr(rawValue));
   };
 
   useEffect(() => {
@@ -105,7 +126,7 @@ export function ScannerPage() {
             const value = codes[0]?.rawValue;
             if (value) {
               stopCamera();
-              handleParsed(parseQr(value));
+              void handleParsed(parseQr(value));
               return;
             }
           } catch {

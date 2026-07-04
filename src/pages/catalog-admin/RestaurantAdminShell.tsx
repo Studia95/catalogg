@@ -37,10 +37,12 @@ import type { CatalogTag, Category, Product, Restaurant, ThemeSettings } from '.
 import { categories as demoCategories, products as demoProducts, restaurant as demoRestaurant, themeSettings as demoTheme } from '../../data/catalog';
 import {
   getRestaurantOrders,
+  updateRestaurantOrderPaymentStatus,
   updateRestaurantOrderStatus,
   type RestaurantOrder,
   type RestaurantOrderStatus
 } from '../../shared/api/restaurantOrdersApi';
+import type { PaymentStatus as RestaurantPaymentStatus } from '../../features/order/orderLifecycle';
 import { copyText, getCatalogPublicUrl } from '../../shared/platformUrls';
 import { loadCatalog } from '../../shared/supabase';
 import type { CatalogAdminAccess } from '../../shared/api/catalogAdminApi';
@@ -105,16 +107,22 @@ const orderTabs: Array<{ id: 'all' | RestaurantOrderStatus; label: string }> = [
 
 const orderStatusLabels: Record<RestaurantOrderStatus, string> = {
   new: 'Новый',
+  waiting_payment_confirmation: 'Ждёт оплату',
+  payment_confirmed: 'Оплата подтверждена',
   accepted: 'Принят',
   confirmed: 'Подтверждён',
   preparing: 'Готовится',
+  cooking: 'Готовится',
   ready: 'Готов',
   waiting_driver: 'Ждёт курьера',
   driver_assigned: 'Курьер назначен',
+  assigned_driver: 'Курьер назначен',
+  picked_up: 'Выдан курьеру',
   on_the_way: 'В пути',
   delivered: 'Доставлен',
   completed: 'Завершён',
-  cancelled: 'Отменён'
+  cancelled: 'Отменён',
+  canceled: 'Отменён'
 };
 
 const paymentStatusLabels: Record<PaymentStatus, string> = {
@@ -124,6 +132,27 @@ const paymentStatusLabels: Record<PaymentStatus, string> = {
   client_marked_paid: 'Клиент нажал "Я оплатил"',
   confirmed: 'Подтверждён рестораном',
   declined: 'Отклонён'
+};
+
+const orderPaymentStatusLabels: Record<RestaurantPaymentStatus, string> = {
+  unpaid: 'Не оплачен',
+  waiting_confirmation: 'Ждёт подтверждения ресторана',
+  confirmed: 'Подтверждён рестораном',
+  rejected: 'Отклонён'
+};
+
+const toLocalPaymentStatus = (status: RestaurantPaymentStatus): PaymentStatus => {
+  if (status === 'confirmed') return 'confirmed';
+  if (status === 'rejected') return 'declined';
+  if (status === 'waiting_confirmation') return 'client_marked_paid';
+  return 'awaiting_transfer';
+};
+
+const toRestaurantPaymentStatus = (status: PaymentStatus): RestaurantPaymentStatus => {
+  if (status === 'confirmed') return 'confirmed';
+  if (status === 'declined') return 'rejected';
+  if (status === 'client_marked_paid' || status === 'awaiting_transfer') return 'waiting_confirmation';
+  return 'unpaid';
 };
 
 const defaultPaymentSettings: PaymentSettings = {
@@ -304,9 +333,37 @@ export function RestaurantAdminShell({
     }
   };
 
-  const setPaymentStatus = (orderId: string, status: PaymentStatus) => {
+  const setPaymentStatus = async (orderId: string, status: PaymentStatus) => {
+    const order = orders.find((item) => item.id === orderId);
+    const restaurantPaymentStatus = toRestaurantPaymentStatus(status);
+
     setPaymentStatuses((current) => ({ ...current, [orderId]: status }));
-    toast.success('Статус оплаты обновлён');
+
+    if (!order) {
+      toast.success('Статус оплаты обновлён');
+      return;
+    }
+
+    try {
+      await updateRestaurantOrderPaymentStatus(order, restaurantPaymentStatus);
+      setOrders((current) =>
+        current.map((item) =>
+          item.id === orderId
+            ? {
+                ...item,
+                paymentStatus: restaurantPaymentStatus,
+                status:
+                  restaurantPaymentStatus === 'confirmed' && item.status === 'waiting_payment_confirmation'
+                    ? 'payment_confirmed'
+                    : item.status
+              }
+            : item
+        )
+      );
+      toast.success('Статус оплаты обновлён');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Не удалось обновить оплату');
+    }
   };
 
   const onQrChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -713,7 +770,7 @@ function OrdersPage({
         <OrderDetails
           order={selectedOrder}
           paymentSettings={paymentSettings}
-          paymentStatus={paymentStatuses[selectedOrder.id] ?? (paymentSettings.enabled ? 'awaiting_transfer' : 'not_required')}
+          paymentStatus={paymentStatuses[selectedOrder.id] ?? toLocalPaymentStatus(selectedOrder.paymentStatus)}
           onStatusChange={onStatusChange}
           onPaymentStatusChange={onPaymentStatusChange}
         />
@@ -750,6 +807,9 @@ function OrderDetails({
         <div><dt>Тип</dt><dd>{order.fulfillmentType === 'delivery' ? 'Доставка' : order.fulfillmentType === 'takeaway' ? 'На вынос' : 'В зале'}</dd></div>
         <div><dt>Адрес / кабинка</dt><dd>{order.deliveryAddress || order.cabinLabel || 'Не указано'}</dd></div>
         <div><dt>Комментарий</dt><dd>{order.comment || 'Нет комментария'}</dd></div>
+        <div><dt>Оплата</dt><dd>{orderPaymentStatusLabels[order.paymentStatus]}</dd></div>
+        {order.fulfillmentType === 'delivery' && <div><dt>Доставка</dt><dd>{order.deliveryStatus}</dd></div>}
+        {order.driverName && <div><dt>Водитель</dt><dd>{order.driverName} · {order.driverPhone || 'телефон не указан'}</dd></div>}
       </dl>
       <div className="ra-order-items">
         {order.items.map((item) => (
@@ -759,7 +819,7 @@ function OrderDetails({
       <div className="ra-order-total"><span>Итого</span><strong>{formatPrice(order.total)}</strong></div>
       <section className="ra-payment-box">
         <h3><WalletCards />Оплата</h3>
-        <p>{paymentStatusLabels[paymentStatus]}</p>
+        <p>{paymentStatusLabels[paymentStatus]} · {orderPaymentStatusLabels[order.paymentStatus]}</p>
         <dl>
           <div><dt>Способ</dt><dd>Перевод ресторану</dd></div>
           <div><dt>Получатель</dt><dd>{paymentSettings.displayName}</dd></div>
@@ -770,11 +830,27 @@ function OrderDetails({
           <button type="button" onClick={() => onPaymentStatusChange(order.id, 'declined')}>Отклонить</button>
         </div>
       </section>
+      {order.fulfillmentType === 'delivery' && (
+        <section className="ra-payment-box">
+          <h3><QrCode />Выдача водителю</h3>
+          <p>{order.driverName ? `${order.driverName} назначен на заказ` : 'Водитель ещё не назначен'}</p>
+          <dl>
+            <div><dt>QR</dt><dd>{order.qrToken ? 'Будет проверен сканером' : 'Создаётся при назначении доставки'}</dd></div>
+            <div><dt>Статус</dt><dd>{order.deliveryStatus}</dd></div>
+          </dl>
+        </section>
+      )}
       <div className="ra-order-actions">
         <button type="button" onClick={() => onStatusChange(order, 'accepted')}>Принять</button>
         <button type="button" onClick={() => onStatusChange(order, 'preparing')}>Готовится</button>
         <button type="button" onClick={() => onStatusChange(order, 'ready')}>Готово</button>
-        <button type="button" onClick={() => onStatusChange(order, 'on_the_way')}>В доставку</button>
+        <button
+          type="button"
+          disabled={order.fulfillmentType === 'delivery' && order.paymentStatus !== 'confirmed'}
+          onClick={() => onStatusChange(order, order.fulfillmentType === 'delivery' ? 'waiting_driver' : 'on_the_way')}
+        >
+          В доставку
+        </button>
         <button type="button" onClick={() => onStatusChange(order, 'completed')}>Завершить</button>
         <button type="button" onClick={() => onStatusChange(order, 'cancelled')}>Отклонить</button>
       </div>

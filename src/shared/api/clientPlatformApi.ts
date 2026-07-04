@@ -2,10 +2,13 @@ import { buildClientReviewPayload } from '../../features/client-platform/clientP
 import { clientPlatformSnapshot, fallbackPaymentSettings } from '../../features/client-platform/mockData';
 import type {
   ClientCity,
+  ClientCartLine,
+  ClientCheckoutDraft,
   ClientDeliveryProvider,
   ClientDish,
   ClientOrderType,
   ClientPaymentMethod,
+  ClientPaymentStatus,
   ClientPlatformCategory,
   ClientPlatformSnapshot,
   ClientProfile,
@@ -160,6 +163,7 @@ const slugifyCity = (value: string) => {
 const unique = <T,>(values: T[]) => Array.from(new Set(values));
 
 const fallbackCityName = 'Грозный';
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
 
 const getCityId = (value?: string | null) => slugifyCity(value?.trim() || fallbackCityName);
 
@@ -243,6 +247,176 @@ export async function saveClientReview(input: {
   });
 
   if (error) throw error;
+}
+
+type ClientPlatformOrderInput = {
+  restaurant: Pick<ClientRestaurant, 'id' | 'slug' | 'deliveryProvider'>;
+  profile: ClientProfile;
+  draft: ClientCheckoutDraft;
+  lines: ClientCartLine[];
+  dishes: ClientDish[];
+  subtotal: number;
+  deliveryFee: number;
+  total: number;
+};
+
+type PublicOrderItemPayload = {
+  readonly product_id: string;
+  readonly quantity: number;
+  readonly options: readonly [];
+};
+
+const buildClientOrderItems = (lines: ClientCartLine[]): PublicOrderItemPayload[] =>
+  lines.map((line) => ({
+    product_id: line.dishId,
+    quantity: Math.max(1, line.quantity),
+    options: []
+  }));
+
+const resolveClientOrderRpcName = (items: readonly PublicOrderItemPayload[]) =>
+  items.every((item) => uuidPattern.test(item.product_id))
+    ? 'create_public_restaurant_order'
+    : 'create_legacy_public_restaurant_order';
+
+const fulfillmentTypeByOrderType: Record<ClientOrderType, 'hall' | 'takeaway' | 'delivery'> = {
+  dine_in: 'hall',
+  pickup: 'takeaway',
+  delivery: 'delivery'
+};
+
+const deliveryProviderForOrder = (
+  orderType: ClientOrderType,
+  restaurantProvider: ClientDeliveryProvider
+): ClientDeliveryProvider => {
+  if (orderType === 'dine_in') return 'dine_in';
+  if (orderType === 'pickup') return 'pickup';
+  return restaurantProvider;
+};
+
+const initialPaymentStatus = (
+  orderType: ClientOrderType,
+  paymentMethod: ClientPaymentMethod
+): ClientPaymentStatus => {
+  if (paymentMethod === 'cash') return 'unpaid';
+  if (orderType === 'delivery') return 'waiting_confirmation';
+  return 'waiting_confirmation';
+};
+
+const initialOrderStatus = (orderType: ClientOrderType, paymentMethod: ClientPaymentMethod) => {
+  if (orderType === 'delivery' && paymentMethod !== 'cash') return 'waiting_payment_confirmation';
+  return 'new';
+};
+
+export async function createClientPlatformOrder(input: ClientPlatformOrderInput): Promise<string | null> {
+  if (!supabase) return null;
+
+  const catalogResult = await supabase
+    .from('catalogs')
+    .select('id')
+    .eq('slug', input.restaurant.slug)
+    .maybeSingle();
+
+  if (catalogResult.error) throw catalogResult.error;
+  const catalogId = catalogResult.data?.id as string | undefined;
+  if (!catalogId) return null;
+
+  const items = buildClientOrderItems(input.lines);
+  if (items.length === 0) return null;
+
+  const clientName = (input.draft.clientName || input.profile.name).trim();
+  const clientPhone = (input.draft.clientPhone || input.profile.phone).trim();
+  const deliveryCity = input.draft.orderType === 'delivery' ? '' : '';
+  const deliverySettlement = '';
+  const addressComment = input.draft.orderType === 'delivery' ? input.draft.deliveryComment : '';
+
+  const { data, error } = await supabase.rpc(resolveClientOrderRpcName(items), {
+    target_catalog_id: catalogId,
+    customer_name: clientName,
+    customer_phone: clientPhone,
+    fulfillment_type: fulfillmentTypeByOrderType[input.draft.orderType],
+    cabin_label: input.draft.orderType === 'dine_in' ? input.draft.boothName : '',
+    delivery_address: input.draft.orderType === 'delivery' ? input.draft.deliveryAddress : '',
+    delivery_city: deliveryCity,
+    delivery_settlement: deliverySettlement,
+    client_address_comment: addressComment,
+    comment: input.draft.deliveryComment,
+    items
+  });
+
+  if (error) throw error;
+  const orderId = String(data);
+  const deliveryProvider = deliveryProviderForOrder(input.draft.orderType, input.restaurant.deliveryProvider);
+  const paymentStatus = initialPaymentStatus(input.draft.orderType, input.draft.paymentMethod);
+  const status = initialOrderStatus(input.draft.orderType, input.draft.paymentMethod);
+
+  const updateResult = await supabase
+    .from('orders')
+    .update({
+      restaurant_id: input.restaurant.id,
+      order_type: input.draft.orderType,
+      status,
+      payment_status: paymentStatus,
+      delivery_provider: deliveryProvider,
+      client_name: clientName,
+      client_phone: clientPhone,
+      delivery_address: input.draft.orderType === 'delivery' ? input.draft.deliveryAddress : null,
+      delivery_lat: input.draft.orderType === 'delivery' ? input.draft.deliveryLat : null,
+      delivery_lng: input.draft.orderType === 'delivery' ? input.draft.deliveryLng : null,
+      delivery_comment: input.draft.orderType === 'delivery' ? input.draft.deliveryComment : null,
+      booth_name: input.draft.orderType === 'dine_in' ? input.draft.boothName : null,
+      delivery_fee: input.deliveryFee,
+      subtotal_amount: input.subtotal,
+      total_amount: input.total,
+      total: input.total
+    })
+    .eq('id', orderId);
+
+  if (updateResult.error) throw updateResult.error;
+  return orderId;
+}
+
+export type ClientOrderRealtimePatch = {
+  readonly id: string;
+  readonly status?: string;
+  readonly paymentStatus?: ClientPaymentStatus;
+  readonly driverName?: string;
+  readonly driverPhone?: string;
+};
+
+export function subscribeClientOrderRealtime(orderId: string, onChange: (patch: ClientOrderRealtimePatch) => void) {
+  const client = supabase;
+  if (!client) return () => undefined;
+
+  const fetchOrder = async () => {
+    const { data, error } = await client
+      .from('orders')
+      .select('id, status, payment_status, deliveries(driver_id, drivers(name, phone))')
+      .eq('id', orderId)
+      .maybeSingle();
+
+    if (error || !data) return;
+    const delivery = Array.isArray(data.deliveries) ? data.deliveries[0] : data.deliveries;
+    const driver = Array.isArray(delivery?.drivers) ? delivery?.drivers[0] : delivery?.drivers;
+    onChange({
+      id: String(data.id),
+      status: String(data.status),
+      paymentStatus: data.payment_status as ClientPaymentStatus,
+      driverName: driver?.name ? String(driver.name) : undefined,
+      driverPhone: driver?.phone ? String(driver.phone) : undefined
+    });
+  };
+
+  void fetchOrder();
+
+  const channel = client
+    .channel(`client-order-${orderId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` }, fetchOrder)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries', filter: `order_id=eq.${orderId}` }, fetchOrder)
+    .subscribe();
+
+  return () => {
+    void client.removeChannel(channel);
+  };
 }
 
 export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapshot> {

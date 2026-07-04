@@ -1,23 +1,35 @@
 import { supabase } from '../supabase';
 import type { CartItem } from '../../entities/models';
+import { canSendOrderToDelivery, type DeliveryStatus, type PaymentStatus } from '../../features/order/orderLifecycle';
 import {
   buildPublicRestaurantOrderItems,
   normalizeRestaurantDeliverySettingsForSave,
   resolvePublicOrderRpcName
 } from './restaurantOrderPayload';
 
+type MaybeArray<T> = T | T[];
+
+const firstRelation = <T,>(value: MaybeArray<T> | null | undefined): T | null =>
+  Array.isArray(value) ? value[0] ?? null : value ?? null;
+
 export type RestaurantOrderStatus =
   | 'new'
+  | 'waiting_payment_confirmation'
+  | 'payment_confirmed'
   | 'accepted'
   | 'confirmed'
   | 'preparing'
+  | 'cooking'
   | 'ready'
   | 'waiting_driver'
   | 'driver_assigned'
+  | 'assigned_driver'
+  | 'picked_up'
   | 'on_the_way'
   | 'delivered'
   | 'completed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'canceled';
 
 export type RestaurantOrderFulfillment = 'hall' | 'takeaway' | 'delivery';
 
@@ -42,6 +54,11 @@ export type RestaurantOrder = {
   deliverySettlement: string;
   comment: string;
   status: RestaurantOrderStatus;
+  paymentStatus: PaymentStatus;
+  deliveryStatus: DeliveryStatus;
+  deliveryId: string | null;
+  driverName: string | null;
+  driverPhone: string | null;
   subtotal: number;
   deliveryFee: number;
   total: number;
@@ -113,6 +130,7 @@ type OrderRow = {
   delivery_settlement?: string;
   comment: string;
   status: RestaurantOrderStatus;
+  payment_status?: PaymentStatus;
   subtotal: number;
   delivery_fee: number;
   total: number;
@@ -124,6 +142,15 @@ type OrderRow = {
   qr_token?: string | null;
   qr_expires_at?: string | null;
   verification_code?: string | null;
+  deliveries?: Array<{
+    id: string;
+    status: DeliveryStatus | 'waiting_driver';
+    driver_id: string | null;
+    drivers?: MaybeArray<{
+      name: string | null;
+      phone: string | null;
+    }> | null;
+  }>;
   order_items?: Array<{
     id: string;
     title: string;
@@ -147,6 +174,11 @@ const demoOrders: RestaurantOrder[] = [
     deliverySettlement: '',
     comment: 'Без лука',
     status: 'new',
+    paymentStatus: 'unpaid',
+    deliveryStatus: 'not_required',
+    deliveryId: null,
+    driverName: null,
+    driverPhone: null,
     subtotal: 1180,
     deliveryFee: 0,
     total: 1180,
@@ -189,41 +221,56 @@ const orderSelect = `
   qr_token,
   qr_expires_at,
   verification_code,
+  payment_status,
+  deliveries(id, status, driver_id, drivers(name, phone)),
   order_items(id, title, quantity, unit_price, line_total)
 `;
 
-const mapOrder = (row: OrderRow): RestaurantOrder => ({
-  id: row.id,
-  orderNumber: row.id.slice(0, 8).toUpperCase(),
-  catalogId: row.catalog_id,
-  clientName: row.customer_name,
-  clientPhone: row.customer_phone,
-  fulfillmentType: row.fulfillment_type ?? 'hall',
-  cabinLabel: row.cabin_label || row.table_label || '',
-  deliveryAddress: row.delivery_address ?? '',
-  deliveryCity: row.delivery_city ?? '',
-  deliverySettlement: row.delivery_settlement ?? '',
-  comment: row.comment,
-  status: row.status,
-  subtotal: row.subtotal,
-  deliveryFee: row.delivery_fee,
-  total: row.total,
-  createdAt: row.created_at,
-  acceptedAt: row.accepted_at ?? null,
-  readyAt: row.ready_at ?? null,
-  completedAt: row.completed_at ?? null,
-  cancellationReason: row.cancellation_reason ?? '',
-  qrToken: row.qr_token ?? null,
-  qrExpiresAt: row.qr_expires_at ?? null,
-  verificationCode: row.verification_code ?? null,
-  items: (row.order_items ?? []).map((item) => ({
-    id: item.id,
-    title: item.title,
-    quantity: item.quantity,
-    unitPrice: item.unit_price,
-    lineTotal: item.line_total
-  }))
-});
+const mapOrder = (row: OrderRow): RestaurantOrder => {
+  const delivery = row.deliveries?.[0];
+  const driver = firstRelation(delivery?.drivers);
+
+  return {
+    id: row.id,
+    orderNumber: row.id.slice(0, 8).toUpperCase(),
+    catalogId: row.catalog_id,
+    clientName: row.customer_name,
+    clientPhone: row.customer_phone,
+    fulfillmentType: row.fulfillment_type ?? 'hall',
+    cabinLabel: row.cabin_label || row.table_label || '',
+    deliveryAddress: row.delivery_address ?? '',
+    deliveryCity: row.delivery_city ?? '',
+    deliverySettlement: row.delivery_settlement ?? '',
+    comment: row.comment,
+    status: row.status,
+    paymentStatus: row.payment_status ?? 'unpaid',
+    deliveryStatus:
+      delivery?.status === 'waiting_driver'
+        ? 'waiting_courier'
+        : delivery?.status ?? (row.fulfillment_type === 'delivery' ? 'waiting_courier' : 'not_required'),
+    deliveryId: delivery?.id ?? null,
+    driverName: driver?.name ?? null,
+    driverPhone: driver?.phone ?? null,
+    subtotal: row.subtotal,
+    deliveryFee: row.delivery_fee,
+    total: row.total,
+    createdAt: row.created_at,
+    acceptedAt: row.accepted_at ?? null,
+    readyAt: row.ready_at ?? null,
+    completedAt: row.completed_at ?? null,
+    cancellationReason: row.cancellation_reason ?? '',
+    qrToken: row.qr_token ?? null,
+    qrExpiresAt: row.qr_expires_at ?? null,
+    verificationCode: row.verification_code ?? null,
+    items: (row.order_items ?? []).map((item) => ({
+      id: item.id,
+      title: item.title,
+      quantity: item.quantity,
+      unitPrice: item.unit_price,
+      lineTotal: item.line_total
+    }))
+  };
+};
 
 export async function getCatalogIdBySlug(slug: string) {
   if (!supabase) return null;
@@ -244,7 +291,7 @@ export async function getRestaurantOrders(slug: string): Promise<RestaurantOrder
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return ((data ?? []) as OrderRow[]).map(mapOrder);
+  return ((data ?? []) as unknown as OrderRow[]).map(mapOrder);
 }
 
 export async function updateRestaurantOrderStatus(
@@ -253,13 +300,23 @@ export async function updateRestaurantOrderStatus(
   reason = ''
 ) {
   if (!supabase) return;
+  if (
+    status === 'waiting_driver' &&
+    !canSendOrderToDelivery({
+      orderType: order.fulfillmentType === 'delivery' ? 'delivery' : order.fulfillmentType === 'takeaway' ? 'pickup' : 'dine_in',
+      status: 'ready',
+      paymentStatus: order.paymentStatus
+    })
+  ) {
+    throw new Error('Подтвердите оплату перед отправкой заказа водителю.');
+  }
 
   const now = new Date().toISOString();
   const patch: Record<string, unknown> = { status };
   if (status === 'accepted' || status === 'confirmed') patch.accepted_at = order.acceptedAt ?? now;
   if (status === 'ready' || status === 'waiting_driver') patch.ready_at = order.readyAt ?? now;
   if (status === 'completed' || status === 'delivered') patch.completed_at = order.completedAt ?? now;
-  if (status === 'cancelled') patch.cancellation_reason = reason || 'restaurant_cancelled';
+  if (status === 'cancelled' || status === 'canceled') patch.cancellation_reason = reason || 'restaurant_cancelled';
 
   const { error } = await supabase.from('orders').update(patch).eq('id', order.id).eq('catalog_id', order.catalogId);
   if (error) throw error;
@@ -273,6 +330,19 @@ export async function updateRestaurantOrderStatus(
   });
 
   if ((status === 'ready' || status === 'waiting_driver') && order.fulfillmentType === 'delivery') {
+    if (status === 'waiting_driver') {
+      await supabase.from('deliveries').upsert(
+        {
+          order_id: order.id,
+          delivery_provider: 'platform',
+          status: 'waiting_courier',
+          estimated_time_min: 20,
+          estimated_time_max: 40
+        },
+        { onConflict: 'order_id' }
+      );
+    }
+
     await supabase.from('delivery_tasks').upsert(
       {
         catalog_id: order.catalogId,
@@ -286,6 +356,29 @@ export async function updateRestaurantOrderStatus(
       { onConflict: 'order_id' }
     );
   }
+}
+
+export async function updateRestaurantOrderPaymentStatus(
+  order: RestaurantOrder,
+  paymentStatus: PaymentStatus
+) {
+  if (!supabase) return;
+
+  const patch: Record<string, unknown> = { payment_status: paymentStatus };
+  if (paymentStatus === 'confirmed') {
+    patch.restaurant_payment_confirmed_at = new Date().toISOString();
+    if (order.status === 'waiting_payment_confirmation') {
+      patch.status = 'payment_confirmed';
+    }
+  }
+
+  const { error } = await supabase
+    .from('orders')
+    .update(patch)
+    .eq('id', order.id)
+    .eq('catalog_id', order.catalogId);
+
+  if (error) throw error;
 }
 
 export async function getRestaurantDeliverySettings(slug: string): Promise<RestaurantDeliverySettings> {
