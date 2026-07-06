@@ -19,7 +19,6 @@ import {
   MapPin,
   MessageCircle,
   Minus,
-  Navigation,
   PackageCheck,
   Phone,
   Plus,
@@ -70,6 +69,7 @@ import {
   saveClientSignup,
   subscribeClientOrderRealtime
 } from '../../shared/api/clientPlatformApi';
+import { DeliveryMapPicker } from '../../shared/DeliveryMapPicker';
 import { resolveLoginRedirect } from '../../shared/api/loginRedirectApi';
 import { signOutPlatformAdmin } from '../../shared/api/platformAdminApi';
 import './client-platform.css';
@@ -1047,6 +1047,18 @@ function AddressPage({ restaurant }: { restaurant: ClientRestaurant }) {
     );
   };
 
+  const selectMapPoint = ({ lat, lng }: { lat: number; lng: number }) => {
+    const nextLat = Number(lat.toFixed(7));
+    const nextLng = Number(lng.toFixed(7));
+    setGeoError('');
+    updateDraft(restaurant.slug, {
+      deliveryLat: nextLat,
+      deliveryLng: nextLng,
+      deliveryAccuracyM: null,
+      deliveryAddress: draft.deliveryAddress || `${nextLat}, ${nextLng}`
+    });
+  };
+
   const saveNewAddress = () => {
     if (!newAddress.trim()) return;
     const address: ClientAddress = {
@@ -1148,22 +1160,15 @@ function AddressPage({ restaurant }: { restaurant: ClientRestaurant }) {
           </section>
         ) : (
           <section className="map-panel">
-            <div className="map-panel__canvas">
-              <MapPin />
-              <span>
-                <strong>Точка доставки</strong>
-                <small>{draft.deliveryLat.toFixed(7)}, {draft.deliveryLng.toFixed(7)}</small>
-              </span>
-            </div>
-            <button
-              className="secondary-flow-button"
-              type="button"
-              onClick={locateClient}
-              disabled={isLocating}
-            >
-              <Navigation />
-              Подтвердить текущую точку
-            </button>
+            <DeliveryMapPicker
+              lat={draft.deliveryLat}
+              lng={draft.deliveryLng}
+              accuracyM={draft.deliveryAccuracyM}
+              isLocating={isLocating}
+              error={geoError}
+              onLocate={locateClient}
+              onChange={selectMapPoint}
+            />
           </section>
         )}
 

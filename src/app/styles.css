@@ -9,6 +9,121 @@
   text-rendering: optimizeLegibility;
 }
 
+.modal-backdrop.delivery-map-backdrop {
+  place-items: end center;
+  padding: 0 12px;
+}
+
+.delivery-map-sheet {
+  position: relative;
+  place-self: end center;
+  width: min(100%, 430px);
+  max-height: min(88vh, 760px);
+  overflow: auto;
+  border-radius: 28px 28px 0 0;
+  background: #fffaf1;
+  padding: 26px 20px 22px;
+  box-shadow: 0 -24px 60px rgba(24, 21, 16, 0.22);
+}
+
+.delivery-map-sheet h2 {
+  margin: 0 0 16px;
+  color: #181510;
+  font-size: 24px;
+}
+
+.delivery-map-picker {
+  display: grid;
+  gap: 14px;
+}
+
+.delivery-map-picker__canvas {
+  position: relative;
+  width: min(100%, 320px);
+  height: 320px;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(232, 162, 58, 0.28);
+  border-radius: 22px;
+  background: #e9efe5;
+  touch-action: none;
+  cursor: crosshair;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+.delivery-map-picker__canvas img {
+  position: absolute;
+  width: 256px;
+  height: 256px;
+  user-select: none;
+}
+
+.delivery-map-picker__marker {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, #ef4444, #f97316);
+  border: 3px solid #fff;
+  border-radius: 999px 999px 999px 4px;
+  box-shadow: 0 14px 32px rgba(185, 28, 28, 0.32);
+  transform: translate(-50%, -86%) rotate(-45deg);
+  pointer-events: none;
+}
+
+.delivery-map-picker__marker svg {
+  width: 21px;
+  height: 21px;
+  transform: rotate(45deg);
+}
+
+.delivery-map-picker__meta {
+  display: grid;
+  gap: 4px;
+  color: #181510;
+  text-align: center;
+}
+
+.delivery-map-picker__meta small {
+  color: #766d62;
+}
+
+.delivery-map-picker__meta p {
+  margin: 4px 0 0;
+  color: #b45309;
+  font-weight: 700;
+}
+
+.delivery-map-picker__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.delivery-map-picker__actions button {
+  display: inline-flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #ffd082, #e8a23a);
+  color: #1b1408;
+  font-weight: 800;
+}
+
+.delivery-map-picker__actions button:disabled {
+  opacity: 0.68;
+}
+
+.map-panel .delivery-map-picker__actions {
+  grid-template-columns: 1fr;
+}
+
 .app-shell--restaurant-admin {
   --bg: #f4f7fb;
   --text: #111827;

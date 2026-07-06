@@ -140,6 +140,13 @@ type ClientSignupRow = {
   created_at: string;
 };
 
+type ProfileSignupRow = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  created_at: string;
+};
+
 type PlatformBannerRow = {
   id: string;
   title: string;
@@ -180,6 +187,14 @@ const mapClientSignup = (row: ClientSignupRow): ClientSignup => ({
   name: row.name,
   phone: row.phone,
   source: row.source,
+  createdAt: row.created_at
+});
+
+const mapProfileSignup = (row: ProfileSignupRow): ClientSignup => ({
+  id: `profile-${row.id}`,
+  name: row.full_name || row.email || 'Пользователь',
+  phone: row.email ?? '',
+  source: 'auth_user',
   createdAt: row.created_at
 });
 
@@ -282,15 +297,34 @@ export async function getPlatformStats(): Promise<PlatformStats> {
 export async function getClientSignups(): Promise<ClientSignup[]> {
   if (!supabase) return demoClientSignups;
 
-  const { data, error } = await supabase
+  const signupsResult = await supabase
     .from('client_signups')
     .select('id, name, phone, source, created_at')
     .order('created_at', { ascending: false })
     .limit(100);
 
-  if (error) throw error;
+  if (signupsResult.error) throw signupsResult.error;
 
-  return ((data ?? []) as ClientSignupRow[]).map(mapClientSignup);
+  const profilesResult = await supabase
+    .from('profiles')
+    .select('id, email, full_name, created_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  const signups = ((signupsResult.data ?? []) as ClientSignupRow[]).map(mapClientSignup);
+  const profileSignups = profilesResult.error
+    ? []
+    : ((profilesResult.data ?? []) as ProfileSignupRow[]).map(mapProfileSignup);
+  const seen = new Set(signups.map((signup) => signup.phone || signup.name));
+
+  return [
+    ...signups,
+    ...profileSignups.filter((signup) => {
+      const key = signup.phone || signup.name;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+  ];
 }
 
 export async function deleteClientSignup(id: string) {

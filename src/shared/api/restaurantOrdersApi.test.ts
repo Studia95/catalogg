@@ -152,6 +152,40 @@ describe('public restaurant order payload', () => {
       'Позвонить заранее\nКоординаты клиента: 43.3181235, 45.6987654 (точность 18 м)'
     );
   });
+
+  it('falls back to the legacy public order RPC when the restaurant RPC is missing in Supabase', async () => {
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const client: PublicRestaurantOrderClient = {
+      async rpc(name, args) {
+        calls.push({ name, args });
+        if (name === 'create_public_restaurant_order') {
+          return { data: null, error: { code: 'PGRST202', message: 'Could not find the function' } };
+        }
+        return { data: 'order-fallback', error: null };
+      },
+      from() {
+        return {
+          update() {
+            return {
+              async eq() {
+                return { error: null };
+              }
+            };
+          }
+        };
+      }
+    };
+
+    const orderId = await createRestaurantOrderWithClient(client, 'catalog-1', orderInput());
+
+    assert.equal(orderId, 'order-fallback');
+    assert.deepEqual(
+      calls.map((call) => call.name),
+      ['create_public_restaurant_order', 'create_public_order']
+    );
+    assert.equal(calls[1].args.table_label, '');
+    assert.equal(calls[1].args.comment, 'Координаты клиента: 43.3181235, 45.6987654 (точность 18 м)');
+  });
 });
 
 const orderInput = (

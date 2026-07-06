@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { cabins, categories, products, restaurant, themeSettings } from '../data/catalog';
 import type { Cabin, CatalogTag, Category, Product, Restaurant, ThemeSettings } from '../entities/models';
+import { catalogAccessAllowsAdmin } from './adminSession';
 
 type SupabaseConfig = {
   url?: string;
@@ -14,7 +15,16 @@ const config: SupabaseConfig = {
 };
 
 export const supabase: SupabaseClient | null =
-  config.url && config.anonKey ? createClient(config.url, config.anonKey) : null;
+  config.url && config.anonKey
+    ? createClient(config.url, config.anonKey, {
+        auth: {
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          persistSession: true,
+          storageKey: 'waycatalog-auth'
+        }
+      })
+    : null;
 
 const legacyCatalogSlug = 'mangal';
 let activePlatformCatalogId: string | null = null;
@@ -238,19 +248,20 @@ export async function hasAdminSession(catalogSlug?: string) {
   const { data } = await supabase.auth.getSession();
   if (!data.session) return false;
 
-  if (!isLegacyCatalog(catalogSlug)) {
-    const catalogId = await getPlatformCatalogId(normalizeCatalogSlug(catalogSlug));
-    if (!catalogId) return false;
+  const normalizedSlug = normalizeCatalogSlug(catalogSlug);
+  const platformCatalogId = await getPlatformCatalogId(normalizedSlug);
+  let hasPlatformClientAccess = false;
 
+  if (platformCatalogId) {
     const { data: client } = await supabase
       .from('clients')
       .select('id')
-      .eq('catalog_id', catalogId)
+      .eq('catalog_id', platformCatalogId)
       .eq('owner_user_id', data.session.user.id)
       .eq('email', data.session.user.email?.toLowerCase() ?? '')
       .maybeSingle();
 
-    return Boolean(client);
+    hasPlatformClientAccess = Boolean(client);
   }
 
   const { data: adminUser } = await supabase
@@ -258,7 +269,12 @@ export async function hasAdminSession(catalogSlug?: string) {
     .select('user_id')
     .eq('user_id', data.session.user.id)
     .maybeSingle();
-  return Boolean(adminUser);
+
+  return catalogAccessAllowsAdmin({
+    isLegacyCatalogSlug: isLegacyCatalog(normalizedSlug),
+    hasPlatformClientAccess,
+    hasLegacyAdminAccess: Boolean(adminUser)
+  });
 }
 
 export function onAdminSessionChange(callback: (isAdmin: boolean) => void, catalogSlug?: string) {

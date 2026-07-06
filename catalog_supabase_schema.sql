@@ -591,6 +591,71 @@ begin
 end;
 $$;
 
+create or replace function public.create_public_restaurant_order(
+  target_catalog_id uuid,
+  customer_name text,
+  customer_phone text,
+  fulfillment_type text,
+  cabin_label text,
+  delivery_address text,
+  delivery_city text,
+  delivery_settlement text,
+  client_address_comment text,
+  comment text,
+  items jsonb
+)
+returns uuid
+language sql
+security definer
+set search_path = public
+as $$
+  select public.create_public_order(
+    target_catalog_id,
+    customer_name,
+    customer_phone,
+    coalesce(comment, ''),
+    case when fulfillment_type = 'hall' then coalesce(cabin_label, '') else '' end,
+    items
+  );
+$$;
+
+create or replace function public.create_legacy_public_restaurant_order(
+  target_catalog_id uuid,
+  customer_name text,
+  customer_phone text,
+  fulfillment_type text,
+  cabin_label text,
+  delivery_address text,
+  delivery_city text,
+  delivery_settlement text,
+  client_address_comment text,
+  comment text,
+  items jsonb
+)
+returns uuid
+language sql
+security definer
+set search_path = public
+as $$
+  select public.create_public_restaurant_order(
+    target_catalog_id,
+    customer_name,
+    customer_phone,
+    fulfillment_type,
+    cabin_label,
+    delivery_address,
+    delivery_city,
+    delivery_settlement,
+    client_address_comment,
+    comment,
+    items
+  );
+$$;
+
+grant execute on function public.create_public_order(uuid, text, text, text, text, jsonb) to anon, authenticated;
+grant execute on function public.create_public_restaurant_order(uuid, text, text, text, text, text, text, text, text, text, jsonb) to anon, authenticated;
+grant execute on function public.create_legacy_public_restaurant_order(uuid, text, text, text, text, text, text, text, text, text, jsonb) to anon, authenticated;
+
 insert into public.templates (key, name, business_type, description)
 values
   ('restaurant-modern', 'Restaurant Modern', 'restaurant', 'Modern restaurant and cafe catalog template.'),
@@ -707,11 +772,42 @@ create table if not exists public.client_subscriptions (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.client_signups (
+  id uuid primary key default gen_random_uuid(),
+  name text not null default '',
+  phone text not null default '',
+  source text not null default 'client_profile',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.drivers (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  email text,
+  name text,
+  phone text,
+  vehicle_info text,
+  car_number text,
+  photo_url text,
+  city_name text,
+  is_active boolean not null default true,
+  is_online boolean not null default false,
+  status text not null default 'offline',
+  rating numeric(3,2) not null default 5,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.drivers add column if not exists email text;
+alter table public.drivers add column if not exists city_name text;
+
 create index if not exists clients_status_created_idx on public.clients(status, created_at desc);
 create index if not exists clients_catalog_id_idx on public.clients(catalog_id);
 create index if not exists clients_owner_first_login_idx on public.clients(owner_user_id, first_login);
 create index if not exists client_subscriptions_client_id_idx on public.client_subscriptions(client_id);
 create index if not exists client_subscriptions_status_ends_idx on public.client_subscriptions(status, ends_at);
+create index if not exists client_signups_created_idx on public.client_signups(created_at desc);
+create index if not exists drivers_created_idx on public.drivers(created_at desc);
 
 create or replace function public.mark_client_personal_data_consent()
 returns public.clients
@@ -750,6 +846,8 @@ for each row execute function public.set_updated_at();
 alter table public.platform_admins enable row level security;
 alter table public.clients enable row level security;
 alter table public.client_subscriptions enable row level security;
+alter table public.client_signups enable row level security;
+alter table public.drivers enable row level security;
 
 drop policy if exists "platform admins read own row" on public.platform_admins;
 create policy "platform admins read own row" on public.platform_admins
@@ -780,3 +878,51 @@ for select using (
       and client.owner_user_id = auth.uid()
   )
 );
+
+drop policy if exists "platform admins manage client signups" on public.client_signups;
+create policy "platform admins manage client signups" on public.client_signups
+for all using (public.is_platform_admin())
+with check (public.is_platform_admin());
+
+drop policy if exists "anon insert client signups" on public.client_signups;
+create policy "anon insert client signups" on public.client_signups
+for insert with check (true);
+
+drop policy if exists "platform admins manage drivers" on public.drivers;
+create policy "platform admins manage drivers" on public.drivers
+for all using (public.is_platform_admin())
+with check (public.is_platform_admin());
+
+drop policy if exists "drivers read own record" on public.drivers;
+create policy "drivers read own record" on public.drivers
+for select using (public.is_platform_admin() or user_id = auth.uid());
+
+drop policy if exists "platform admins read profiles" on public.profiles;
+create policy "platform admins read profiles" on public.profiles
+for select using (public.is_platform_admin() or auth.uid() = id);
+
+create or replace function public.handle_new_auth_user_profile()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, email, full_name)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', '')
+  )
+  on conflict (id) do update
+    set email = excluded.email,
+        full_name = coalesce(nullif(excluded.full_name, ''), public.profiles.full_name),
+        updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created_profile on auth.users;
+create trigger on_auth_user_created_profile
+after insert or update on auth.users
+for each row execute function public.handle_new_auth_user_profile();

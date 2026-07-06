@@ -4,11 +4,13 @@ import type { CreateDriverPayload, CreateDriverResult, PlatformDriver } from './
 type DriverRow = {
   id: string;
   user_id: string | null;
+  email?: string | null;
   name: string | null;
   phone: string | null;
   vehicle_info: string | null;
   car_number: string | null;
   photo_url: string | null;
+  city_name?: string | null;
   is_active: boolean | null;
   is_online: boolean | null;
   status: string | null;
@@ -46,11 +48,11 @@ const mapDriver = (row: DriverRow): PlatformDriver => ({
   userId: row.user_id ?? '',
   name: row.name ?? '',
   phone: row.phone ?? '',
-  email: row.users?.email ?? '',
+  email: row.email ?? row.users?.email ?? '',
   vehicleInfo: row.vehicle_info ?? '',
   carNumber: row.car_number ?? '',
   photoUrl: row.photo_url ?? '',
-  cityName: row.cities?.name ?? '',
+  cityName: row.city_name ?? row.cities?.name ?? '',
   isActive: row.is_active ?? true,
   isOnline: row.is_online ?? false,
   status: row.status ?? 'offline',
@@ -77,13 +79,22 @@ async function getFunctionErrorMessage(error: unknown) {
 export async function getDrivers(): Promise<PlatformDriver[]> {
   if (!supabase) return demoDrivers;
 
-  const { data, error } = await supabase
+  const result = await supabase
     .from('drivers')
     .select('id, user_id, name, phone, vehicle_info, car_number, photo_url, is_active, is_online, status, rating, created_at, users(email), cities(name)')
     .order('created_at', { ascending: false });
 
-  if (error) throw error;
-  return ((data ?? []) as unknown as DriverRow[]).map(mapDriver);
+  if (!result.error) {
+    return ((result.data ?? []) as unknown as DriverRow[]).map(mapDriver);
+  }
+
+  const fallback = await supabase
+    .from('drivers')
+    .select('id, user_id, email, name, phone, vehicle_info, car_number, photo_url, city_name, is_active, is_online, status, rating, created_at')
+    .order('created_at', { ascending: false });
+
+  if (fallback.error) throw fallback.error;
+  return ((fallback.data ?? []) as unknown as DriverRow[]).map(mapDriver);
 }
 
 export async function createDriver(payload: CreateDriverPayload): Promise<CreateDriverResult> {

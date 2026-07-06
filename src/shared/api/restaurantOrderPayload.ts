@@ -63,6 +63,24 @@ const throwSupabaseError = (error: unknown) => {
   throw new Error(typeof error === 'string' ? error : 'Supabase request failed');
 };
 
+const errorText = (error: unknown) => {
+  if (!error) return '';
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object') {
+    const value = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+    return [value.code, value.message, value.details, value.hint]
+      .filter((part): part is string => typeof part === 'string')
+      .join(' ');
+  }
+  return '';
+};
+
+const rpcIsMissing = (error: unknown) => {
+  const text = errorText(error).toLowerCase();
+  return text.includes('pgrst202') || text.includes('could not find the function') || text.includes('function not found');
+};
+
 const buildLocationPatch = ({
   fulfillmentType,
   deliveryLat = null,
@@ -100,7 +118,7 @@ export async function createRestaurantOrderWithClient(
     fulfillmentType === 'delivery'
       ? formatDeliveryLocationNote(deliveryLat, deliveryLng, deliveryAccuracyM)
       : '';
-  const { data, error } = await client.rpc(resolvePublicOrderRpcName(items), {
+  const restaurantRpcArgs = {
     target_catalog_id: catalogId,
     customer_name: customerName,
     customer_phone: customerPhone,
@@ -112,7 +130,22 @@ export async function createRestaurantOrderWithClient(
     client_address_comment: joinCommentParts(deliverySettlement, locationNote),
     comment: joinCommentParts(comment, locationNote),
     items: buildPublicRestaurantOrderItems(items)
-  });
+  };
+  let { data, error } = await client.rpc(resolvePublicOrderRpcName(items), restaurantRpcArgs);
+
+  if (error && rpcIsMissing(error)) {
+    const fallbackArgs = {
+      target_catalog_id: catalogId,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      comment: restaurantRpcArgs.comment,
+      table_label: fulfillmentType === 'hall' ? cabinLabel ?? '' : '',
+      items: restaurantRpcArgs.items
+    };
+    const fallbackResult = await client.rpc('create_public_order', fallbackArgs);
+    data = fallbackResult.data;
+    error = fallbackResult.error;
+  }
 
   if (error) throwSupabaseError(error);
   const orderId = String(data);

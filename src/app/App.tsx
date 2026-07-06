@@ -112,6 +112,7 @@ import {
   normalizeDeliveryCoordinates,
   type DeliveryCoordinates
 } from '../shared/deliveryLocation';
+import { DeliveryMapPicker } from '../shared/DeliveryMapPicker';
 import {
   loadPaymentSettings,
   loadPaymentStatus,
@@ -126,6 +127,7 @@ const queryClient = new QueryClient();
 const formatPrice = (value: number) => `${new Intl.NumberFormat('ru-RU').format(value)} ₽`;
 const DELIVERY_TARGET_ACCURACY_M = 35;
 const DELIVERY_LOCATION_TIMEOUT_MS = 15_000;
+const DEFAULT_DELIVERY_LOCATION = { lat: 43.3184, lng: 45.6927 };
 const parseSettlementList = (value: string) =>
   Array.from(
     new Set(
@@ -1523,6 +1525,9 @@ function CheckoutScreen({
   const selectedCabin = activeCabins.find((cabin) => cabin.id === cabinId);
   const [isLocating, setIsLocating] = useState(false);
   const [geoError, setGeoError] = useState('');
+  const [isDeliveryMapOpen, setIsDeliveryMapOpen] = useState(false);
+  const selectedDeliveryLat = deliveryLat ?? DEFAULT_DELIVERY_LOCATION.lat;
+  const selectedDeliveryLng = deliveryLng ?? DEFAULT_DELIVERY_LOCATION.lng;
   const locationSessionRef = useRef<{ watchId: number | null; timeoutId: number | null }>({
     watchId: null,
     timeoutId: null
@@ -1552,6 +1557,21 @@ function CheckoutScreen({
       if (accuracyM > DELIVERY_TARGET_ACCURACY_M) {
         setGeoError('Получили лучшее доступное местоположение, но точность ниже желаемой. Проверьте адрес.');
       }
+    },
+    [deliveryAddress, setOrder]
+  );
+
+  const applyManualDeliveryPoint = useCallback(
+    ({ lat, lng }: { lat: number; lng: number }) => {
+      const nextLat = Number(lat.toFixed(7));
+      const nextLng = Number(lng.toFixed(7));
+      setGeoError('');
+      setOrder({
+        deliveryLat: nextLat,
+        deliveryLng: nextLng,
+        deliveryAccuracyM: null,
+        deliveryAddress: deliveryAddress || `${nextLat}, ${nextLng}`
+      });
     },
     [deliveryAddress, setOrder]
   );
@@ -1751,10 +1771,14 @@ function CheckoutScreen({
             <LocateFixed />
             <span>{isLocating ? 'Определяем...' : 'Определить моё местоположение'}</span>
           </button>
+          <button className="map-link-button checkout-location-button" type="button" onClick={() => setIsDeliveryMapOpen(true)}>
+            <MapPin />
+            <span>Уточнить точку на карте</span>
+          </button>
           {(deliveryLat !== null && deliveryLng !== null) && (
             <p className="checkout-location-hint">
               Координаты: {deliveryLat.toFixed(7)}, {deliveryLng.toFixed(7)}
-              {deliveryAccuracyM ? ` · точность ${deliveryAccuracyM} м` : ''}
+              {deliveryAccuracyM ? ` · точность ${deliveryAccuracyM} м` : ' · выбрано вручную'}
             </p>
           )}
           {deliveryAccuracyM && deliveryAccuracyM > 100 && (
@@ -1823,6 +1847,31 @@ function CheckoutScreen({
               />
             </label>
           </div>
+          {isDeliveryMapOpen && (
+            <div className="modal-backdrop delivery-map-backdrop">
+              <div className="delivery-map-sheet">
+                <button
+                  className="flow-modal__close"
+                  type="button"
+                  onClick={() => setIsDeliveryMapOpen(false)}
+                  aria-label="Закрыть карту"
+                >
+                  <X />
+                </button>
+                <h2>Точка доставки</h2>
+                <DeliveryMapPicker
+                  lat={selectedDeliveryLat}
+                  lng={selectedDeliveryLng}
+                  accuracyM={deliveryAccuracyM}
+                  isLocating={isLocating}
+                  error={geoError}
+                  onLocate={locateDeliveryAddress}
+                  onChange={applyManualDeliveryPoint}
+                  onDone={() => setIsDeliveryMapOpen(false)}
+                />
+              </div>
+            </div>
+          )}
         </section>
       )}
 
