@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import { clearPwaResumePath } from '../pwaSession';
 
 export type CatalogAdminAccess = {
   hasSession: boolean;
@@ -159,6 +160,7 @@ export async function signInCatalogAdmin(slug: string, email: string, password: 
 }
 
 export async function signOutCatalogAdmin() {
+  clearPwaResumePath();
   if (!supabase) return;
   await supabase.auth.signOut();
 }

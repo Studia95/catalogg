@@ -2595,6 +2595,10 @@ a {
   opacity: 0.55;
 }
 
+.public-order-status .checkout-order-card {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 @media (max-width: 720px) {
   .checkout-delivery-fields {
     grid-template-columns: 1fr;

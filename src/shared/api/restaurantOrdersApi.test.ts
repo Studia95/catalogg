@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import type { CartItem, Product } from '../../entities/models';
 import {
   createRestaurantOrderWithClient,
+  buildOrderStatusShareUrl,
   buildPublicRestaurantOrderItems,
   normalizeRestaurantDeliverySettingsForSave,
   resolvePublicOrderRpcName,
@@ -67,6 +68,35 @@ describe('public restaurant order payload', () => {
         options: []
       }
     ]);
+  });
+
+  it('sends an idempotency key with public restaurant order RPC calls', async () => {
+    let rpcArgs: Record<string, unknown> = {};
+    const client: PublicRestaurantOrderClient = {
+      async rpc(_name, args) {
+        rpcArgs = args;
+        return { data: 'order-123', error: null };
+      },
+      from() {
+        return {
+          update() {
+            return {
+              async eq() {
+                return { error: null };
+              }
+            };
+          }
+        };
+      }
+    };
+
+    await createRestaurantOrderWithClient(
+      client,
+      'catalog-1',
+      orderInput({ idempotencyKey: 'checkout-attempt-1' })
+    );
+
+    assert.equal(rpcArgs.idempotency_key, 'checkout-attempt-1');
   });
 
   it('keeps the order created when only the post-create location update is rejected', async () => {
@@ -185,6 +215,18 @@ describe('public restaurant order payload', () => {
     );
     assert.equal(calls[1].args.table_label, '');
     assert.equal(calls[1].args.comment, 'Координаты клиента: 43.3181235, 45.6987654 (точность 18 м)');
+  });
+
+  it('builds a WhatsApp-safe link to the already-created order status page', () => {
+    assert.equal(
+      buildOrderStatusShareUrl({
+        origin: 'https://studia95.github.io',
+        basePath: '/catalogg/',
+        restaurantSlug: 'mangal',
+        orderId: '83ec0369'
+      }),
+      'https://studia95.github.io/catalogg/#/mangal/order/83ec0369'
+    );
   });
 });
 

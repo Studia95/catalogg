@@ -11,7 +11,8 @@ const sqlFiles = [
   'supabase/restaurant_orders.sql',
   'supabase/delivery_settlements.sql',
   'supabase/fix_legacy_public_restaurant_order.sql',
-  'supabase/waycatalog_delivery.sql'
+  'supabase/waycatalog_delivery.sql',
+  'supabase/order_idempotency.sql'
 ];
 
 const extractFunctionBlocks = (sql) => {

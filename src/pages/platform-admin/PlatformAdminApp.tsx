@@ -195,10 +195,12 @@ function navigateToRoute(route: PlatformRoute, setRoute: (route: PlatformRoute) 
 
 function PlatformSidebar({
   route,
-  onNavigate
+  onNavigate,
+  onSignOut
 }: {
   route: PlatformRoute;
   onNavigate: (route: PlatformRoute) => void;
+  onSignOut: () => void;
 }) {
   return (
     <aside className="platform-sidebar">
@@ -225,7 +227,7 @@ function PlatformSidebar({
           </button>
         ))}
       </nav>
-      <button className="platform-sidebar__logout" type="button" onClick={() => void signOutPlatformAdmin()}>
+      <button className="platform-sidebar__logout" type="button" onClick={onSignOut}>
         <LogOut />
         <span>Выйти</span>
       </button>
@@ -235,10 +237,12 @@ function PlatformSidebar({
 
 function PlatformMobileNav({
   route,
-  onNavigate
+  onNavigate,
+  onSignOut
 }: {
   route: PlatformRoute;
   onNavigate: (route: PlatformRoute) => void;
+  onSignOut: () => void;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreItems = navItems.filter((item) => !mobilePrimaryRoutes.includes(item.route));
@@ -267,7 +271,7 @@ function PlatformMobileNav({
                 {label}
               </button>
             ))}
-            <button type="button" onClick={() => void signOutPlatformAdmin()}>
+            <button type="button" onClick={onSignOut}>
               <LogOut />
               Выйти
             </button>
@@ -2088,7 +2092,15 @@ function PlatformAdminContent() {
   return (
     <div className="platform-admin-shell">
       <Toaster richColors position="top-center" />
-      <PlatformSidebar route={route} onNavigate={(nextRoute) => navigateToRoute(nextRoute, setRoute)} />
+      <PlatformSidebar
+        route={route}
+        onNavigate={(nextRoute) => navigateToRoute(nextRoute, setRoute)}
+        onSignOut={() => {
+          void signOutPlatformAdmin().then(() => {
+            void platformAdminQuery.refetch();
+          });
+        }}
+      />
       <section className="platform-workspace">
         <header className="platform-topbar">
           <button type="button" aria-label="Меню">
@@ -2101,7 +2113,15 @@ function PlatformAdminContent() {
         </header>
         {content}
       </section>
-      <PlatformMobileNav route={route} onNavigate={(nextRoute) => navigateToRoute(nextRoute, setRoute)} />
+      <PlatformMobileNav
+        route={route}
+        onNavigate={(nextRoute) => navigateToRoute(nextRoute, setRoute)}
+        onSignOut={() => {
+          void signOutPlatformAdmin().then(() => {
+            void platformAdminQuery.refetch();
+          });
+        }}
+      />
       {(createOpen || editingClient) && (
         <div
           className="platform-modal-backdrop"

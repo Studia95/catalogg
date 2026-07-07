@@ -95,20 +95,29 @@ import {
 } from '../shared/supabase';
 import {
   createRestaurantOrderFromCart,
+  getPublicRestaurantOrderStatus,
   getCatalogIdBySlug,
   getRestaurantDeliverySettings,
   getRestaurantOrders,
   saveRestaurantDeliverySettings,
   updateRestaurantOrderStatus,
+  type PublicRestaurantOrderStatus,
   type RestaurantDeliverySettings,
   type RestaurantOrder,
   type RestaurantOrderStatus
 } from '../shared/api/restaurantOrdersApi';
 import { getRestaurantPaymentsBySlug, saveRestaurantPayments } from '../shared/api/restaurantPaymentsApi';
+import {
+  buildOrderStatusShareUrl,
+  buildRestaurantOrderFingerprint,
+  createRestaurantOrderIdempotencyKey,
+  type CreateRestaurantOrderFromCartInput
+} from '../shared/api/restaurantOrderPayload';
 import { imageFileToDataUrl } from '../shared/images';
 import {
   chooseMoreAccuratePosition,
   deliveryPositionIsAccurateEnough,
+  getDeliveryGeolocationErrorMessage,
   normalizeDeliveryCoordinates,
   type DeliveryCoordinates
 } from '../shared/deliveryLocation';
@@ -140,6 +149,25 @@ const parseSettlementList = (value: string) =>
 const formatSettlementList = (values: string[]) => values.join('\n');
 const buildDeliveryAddress = (city: string, settlement: string, address: string) =>
   [city.trim(), settlement.trim(), address.trim()].filter(Boolean).join(', ');
+const publicOrderStatusLabels: Record<RestaurantOrderStatus, string> = {
+  new: 'Новый',
+  waiting_payment_confirmation: 'Ожидает подтверждения оплаты',
+  payment_confirmed: 'Оплата подтверждена',
+  accepted: 'В работе',
+  confirmed: 'В работе',
+  preparing: 'Готовится',
+  cooking: 'Готовится',
+  ready: 'Готов',
+  waiting_driver: 'Ожидает курьера',
+  driver_assigned: 'Курьер назначен',
+  assigned_driver: 'Курьер назначен',
+  picked_up: 'Заказ забран',
+  on_the_way: 'В пути',
+  delivered: 'Доставлен',
+  completed: 'Выполнен',
+  cancelled: 'Отменён',
+  canceled: 'Отменён'
+};
 type SettingsScreen = 'settings' | 'settings-profile' | 'settings-categories' | 'settings-design' | 'settings-stock' | 'settings-payments' | 'settings-backup' | 'settings-delete';
 type RestaurantAdminScreen = 'admin-home';
 type Screen = 'home' | 'catalog' | 'drinks' | 'product' | 'checkout' | RestaurantAdminScreen | SettingsScreen;
@@ -1524,6 +1552,7 @@ function CheckoutScreen({
   const finalDeliveryAddress = buildDeliveryAddress(effectiveDeliveryCity, deliverySettlement, deliveryAddress);
   const selectedCabin = activeCabins.find((cabin) => cabin.id === cabinId);
   const [isLocating, setIsLocating] = useState(false);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [geoError, setGeoError] = useState('');
   const [isDeliveryMapOpen, setIsDeliveryMapOpen] = useState(false);
   const selectedDeliveryLat = deliveryLat ?? DEFAULT_DELIVERY_LOCATION.lat;
@@ -1532,6 +1561,8 @@ function CheckoutScreen({
     watchId: null,
     timeoutId: null
   });
+  const submitLockRef = useRef(false);
+  const orderAttemptRef = useRef<{ fingerprint: string; idempotencyKey: string } | null>(null);
 
   const clearLocationSession = useCallback(() => {
     const { watchId, timeoutId } = locationSessionRef.current;
@@ -1611,12 +1642,12 @@ function CheckoutScreen({
       }
     };
 
-    const handleError = () => {
+    const handleError = (error: GeolocationPositionError) => {
       if (bestCoordinates) {
         finish(bestCoordinates);
         return;
       }
-      finish(null, 'Не удалось получить геолокацию. Проверьте разрешение браузера.');
+      finish(null, getDeliveryGeolocationErrorMessage(error));
     };
 
     try {
@@ -1682,10 +1713,38 @@ function CheckoutScreen({
     'Комментарий:',
     'Пожалуйста, подтвердите заказ.'
   ];
-  const whatsappText = encodeURIComponent(orderLines.join('\n'));
-  const whatsappHref = restaurant.whatsapp
-    ? `https://wa.me/${restaurant.whatsapp.replace(/\D/g, '')}?text=${whatsappText}`
-    : '#';
+  const getOrderIdempotencyKey = (payload: CreateRestaurantOrderFromCartInput) => {
+    const fingerprint = buildRestaurantOrderFingerprint(payload);
+
+    if (orderAttemptRef.current?.fingerprint !== fingerprint) {
+      orderAttemptRef.current = {
+        fingerprint,
+        idempotencyKey: createRestaurantOrderIdempotencyKey(fingerprint)
+      };
+    }
+
+    return orderAttemptRef.current.idempotencyKey;
+  };
+  const buildWhatsappHref = (orderId?: string) => {
+    if (!restaurant.whatsapp) return '#';
+
+    const lines = orderId
+      ? [
+          ...orderLines,
+          '',
+          'Ссылка на статус заказа:',
+          buildOrderStatusShareUrl({
+            origin: window.location.origin,
+            basePath: import.meta.env.BASE_URL,
+            restaurantSlug: catalogSlug,
+            orderId
+          })
+        ]
+      : orderLines;
+
+    return `https://wa.me/${restaurant.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(lines.join('\n'))}`;
+  };
+  const whatsappHref = buildWhatsappHref();
   const openRestaurantMap = () => {
     if (!restaurant.mapLink) {
       alert('Карта не указана');
@@ -1936,24 +1995,25 @@ function CheckoutScreen({
           target="_blank"
           rel="noreferrer"
           onClick={(event) => {
+            event.preventDefault();
             if (!restaurant.whatsapp) {
-              event.preventDefault();
+              return;
+            }
+            if (submitLockRef.current) {
+              toast.info('Заказ уже отправляется. Подождите несколько секунд.');
               return;
             }
             if (mode === 'delivery') {
               if (!clientName.trim() || !clientPhone.trim()) {
-                event.preventDefault();
                 toast.error('Введите имя и номер телефона для доставки');
                 return;
               }
               if (!effectiveDeliveryCity || !deliverySettlement || !deliveryAddress.trim()) {
-                event.preventDefault();
                 toast.error('Укажите город, населенный пункт и адрес доставки');
                 return;
               }
             }
-            event.preventDefault();
-            void createRestaurantOrderFromCart({
+            const orderPayload: CreateRestaurantOrderFromCartInput = {
               slug: catalogSlug,
               items,
               fulfillmentType: mode,
@@ -1967,25 +2027,132 @@ function CheckoutScreen({
               comment: mode === 'hall' && selectedCabin ? `Кабинка: ${selectedCabin.title}` : '',
               customerName: mode === 'delivery' ? clientName.trim() : 'Гость',
               customerPhone: mode === 'delivery' ? clientPhone.trim() : ''
+            };
+            submitLockRef.current = true;
+            setIsSubmittingOrder(true);
+            void createRestaurantOrderFromCart({
+              ...orderPayload,
+              idempotencyKey: getOrderIdempotencyKey(orderPayload)
             })
               .then((orderId) => {
                 if (orderId) {
                   toast.success('Заказ создан в системе ресторана');
+                  window.open(buildWhatsappHref(orderId), '_blank', 'noopener,noreferrer');
+                  window.setTimeout(onSubmitOrder, 500);
+                  return;
                 }
+                window.open(whatsappHref, '_blank', 'noopener,noreferrer');
+                window.setTimeout(onSubmitOrder, 500);
               })
               .catch((error) => {
                 console.error('Order creation failed', error);
                 toast.warning('Заказ откроется в WhatsApp. В системе ресторана он пока не сохранён.');
-              })
-              .finally(() => {
                 window.open(whatsappHref, '_blank', 'noopener,noreferrer');
                 window.setTimeout(onSubmitOrder, 500);
+              })
+              .finally(() => {
+                submitLockRef.current = false;
+                setIsSubmittingOrder(false);
               });
           }}
+          aria-disabled={isSubmittingOrder || !restaurant.whatsapp}
         >
-          Отправить заказ
+          {isSubmittingOrder ? 'Отправляем заказ...' : 'Отправить заказ'}
         </a>
       </section>
+    </main>
+  );
+}
+
+function PublicOrderStatusScreen({
+  catalogSlug,
+  orderId
+}: {
+  catalogSlug: string;
+  orderId: string;
+}) {
+  const navigate = useNavigate();
+  const statusQuery = useQuery({
+    queryKey: ['public-order-status', orderId],
+    queryFn: () => getPublicRestaurantOrderStatus(orderId),
+    refetchInterval: 15_000
+  });
+  const order = statusQuery.data;
+
+  const renderOrder = (value: PublicRestaurantOrderStatus) => (
+    <>
+      <section className="checkout-summary public-order-status">
+        <div>
+          <span>Заказ №{value.id.slice(0, 8).toUpperCase()}</span>
+          <h2>{publicOrderStatusLabels[value.status] ?? value.status}</h2>
+          <p>
+            {value.fulfillmentType === 'delivery'
+              ? value.deliveryAddress || 'Адрес доставки не указан'
+              : value.fulfillmentType === 'takeaway'
+                ? 'Самовывоз'
+                : 'Заказ в зале'}
+          </p>
+        </div>
+        <div className="checkout-summary__list">
+          {value.items.map((item) => (
+            <article className="checkout-order-card" key={item.id}>
+              <div className="checkout-order-card__body">
+                <div>
+                  <h3>{item.title}</h3>
+                  <p>{item.quantity} x {formatPrice(item.unitPrice)}</p>
+                </div>
+                <div className="checkout-order-card__bottom">
+                  <strong>{formatPrice(item.lineTotal)}</strong>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+        {value.driverName && (
+          <div className="checkout-summary__total">
+            <span>Курьер</span>
+            <strong>{value.driverName}</strong>
+          </div>
+        )}
+        <div className="checkout-summary__total">
+          <span>Итого</span>
+          <strong>{formatPrice(value.total)}</strong>
+        </div>
+      </section>
+      <button className="ghost-wide" type="button" onClick={() => navigate(`/${catalogSlug}`)}>
+        Вернуться в ресторан
+      </button>
+    </>
+  );
+
+  return (
+    <main className="screen checkout-screen">
+      {statusQuery.isLoading ? (
+        <section className="checkout-summary">
+          <div>
+            <span>Статус заказа</span>
+            <h2>Загружаем...</h2>
+          </div>
+        </section>
+      ) : statusQuery.error ? (
+        <section className="checkout-summary">
+          <div>
+            <span>Статус заказа</span>
+            <h2>Не удалось загрузить заказ</h2>
+            <p>Проверьте ссылку или откройте ресторан заново.</p>
+          </div>
+        </section>
+      ) : order ? (
+        renderOrder(order)
+      ) : (
+        <section className="checkout-summary">
+          <div>
+            <span>Статус заказа</span>
+            <h2>Заказ не найден</h2>
+            <p>Проверьте ссылку или откройте ресторан заново.</p>
+          </div>
+        </section>
+      )}
     </main>
   );
 }
@@ -4167,7 +4334,15 @@ function DesignEditor({
   );
 }
 
-function AppContent({ catalogSlug, routeSection }: { catalogSlug: string; routeSection?: string }) {
+function AppContent({
+  catalogSlug,
+  routeSection,
+  routeOrderId
+}: {
+  catalogSlug: string;
+  routeSection?: string;
+  routeOrderId?: string;
+}) {
   const navigate = useNavigate();
   const catalogQueryKey = useMemo(() => ['catalog', catalogSlug] as const, [catalogSlug]);
   const { data, isLoading } = useQuery({
@@ -4848,6 +5023,27 @@ function AppContent({ catalogSlug, routeSection }: { catalogSlug: string; routeS
     />
   );
 
+  if (routeSection === 'order' && routeOrderId) {
+    return (
+      <div className="app-shell" style={applyTheme(themeStore)}>
+        <Toaster richColors position="top-center" />
+        <TopBar
+          title="Статус заказа"
+          canBack
+          onBack={() => navigate(`/${catalogSlug}`)}
+          onPlatformBack={() => navigate('/')}
+          onCart={() => navigate(`/${catalogSlug}`)}
+          onAdmin={() => setShowLogin(true)}
+          logoUrl={catalog.restaurant.logo_url}
+          restaurantName={catalog.restaurant.name}
+          restaurantSubtitle={catalog.restaurant.subtitle}
+        />
+        <PublicOrderStatusScreen catalogSlug={catalogSlug} orderId={routeOrderId} />
+        <SiteCredit />
+      </div>
+    );
+  }
+
   return (
     <div
       className={
@@ -5048,7 +5244,9 @@ function AppContent({ catalogSlug, routeSection }: { catalogSlug: string; routeS
 export function App() {
   const { slug } = useParams();
   const location = useLocation();
-  const routeSection = location.pathname.split('/').filter(Boolean)[1];
+  const pathParts = location.pathname.split('/').filter(Boolean);
+  const routeSection = pathParts[1];
+  const routeOrderId = routeSection === 'order' ? pathParts[2] : undefined;
 
   if (!slug) {
     return null;
@@ -5056,7 +5254,7 @@ export function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppContent catalogSlug={slug} routeSection={routeSection} />
+      <AppContent catalogSlug={slug} routeSection={routeSection} routeOrderId={routeOrderId} />
     </QueryClientProvider>
   );
 }

@@ -1,9 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
-import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
-import { App } from './app/App';
-import { CatalogAdminApp } from './pages/catalog-admin/CatalogAdminApp';
+import { HashRouter, Route, Routes } from 'react-router-dom';
 import { ClientPlatformApp } from './pages/client-platform/ClientPlatformApp';
 import { DriverApp } from './pages/driver/DriverApp';
 import { LoginPage } from './pages/login/LoginPage';
@@ -11,6 +9,13 @@ import { PlatformAdminApp } from './pages/platform-admin/PlatformAdminApp';
 import { PrivacyPage } from './pages/privacy/PrivacyPage';
 import { PaymentsPage } from './pages/payments/PaymentsPage';
 import { ScannerPage } from './pages/scanner/ScannerPage';
+import {
+  CatalogAdminRoute,
+  PwaHomeRoute,
+  PwaResumeTracker,
+  RestaurantPublicRoute,
+  RestaurantRouteRedirect
+} from './PwaRoutes';
 import './app/styles.css';
 import './features/dish-editor/styles.css';
 
@@ -64,21 +69,12 @@ const restoreGitHubPagesRedirect = () => {
 
 restoreGitHubPagesRedirect();
 
-function CatalogAdminRoute() {
-  const { slug = '' } = useParams();
-  return <CatalogAdminApp slug={decodeURIComponent(slug)} />;
-}
-
-function RestaurantRouteRedirect() {
-  const { slug = '' } = useParams();
-  return <Navigate replace to={`/${decodeURIComponent(slug)}`} />;
-}
-
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <HashRouter>
+      <PwaResumeTracker />
       <Routes>
-        <Route path="/" element={<ClientPlatformApp />} />
+        <Route path="/" element={<PwaHomeRoute />} />
         <Route path="/city" element={<ClientPlatformApp />} />
         <Route path="/categories" element={<ClientPlatformApp />} />
         <Route path="/restaurants" element={<ClientPlatformApp />} />
@@ -93,8 +89,8 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
         <Route path="/admin/payments" element={<PaymentsPage />} />
         <Route path="/admin/*" element={<PlatformAdminApp />} />
         <Route path="/driver/*" element={<DriverApp />} />
-        <Route path="/:slug/*" element={<App />} />
-        <Route path="/:slug" element={<App />} />
+        <Route path="/:slug/*" element={<RestaurantPublicRoute />} />
+        <Route path="/:slug" element={<RestaurantPublicRoute />} />
       </Routes>
     </HashRouter>
   </React.StrictMode>

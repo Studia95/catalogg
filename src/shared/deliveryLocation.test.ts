@@ -4,6 +4,7 @@ import {
   chooseMoreAccuratePosition,
   deliveryPositionIsAccurateEnough,
   formatDeliveryLocationNote,
+  getDeliveryGeolocationErrorMessage,
   normalizeDeliveryCoordinates,
   type DeliveryCoordinates
 } from './deliveryLocation';
@@ -42,6 +43,13 @@ describe('delivery location precision', () => {
     assert.equal(
       formatDeliveryLocationNote(43.3181235, 45.6987654, 18),
       'Координаты клиента: 43.3181235, 45.6987654 (точность 18 м)'
+    );
+  });
+
+  it('explains how to retry when browser location permission was blocked', () => {
+    assert.equal(
+      getDeliveryGeolocationErrorMessage({ code: 1 }),
+      'Геолокация заблокирована. Разрешите доступ к местоположению в настройках сайта браузера и нажмите кнопку ещё раз.'
     );
   });
 });

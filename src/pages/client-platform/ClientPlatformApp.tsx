@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 import type { CSSProperties, FormEvent } from 'react';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { buildOrderAfterClientPaymentNotice, buildRestaurantPublicPath, buildSupportWhatsappUrl, buildYandexMapsUrl, calculateCartSummary, filterRestaurants, getDeliveryProviderLabel, requireSavedRestaurantOrderId } from '../../features/client-platform/clientPlatformLogic';
 import { clientPlatformSnapshot, fallbackPaymentSettings } from '../../features/client-platform/mockData';
@@ -72,6 +72,9 @@ import {
 import { DeliveryMapPicker } from '../../shared/DeliveryMapPicker';
 import { resolveLoginRedirect } from '../../shared/api/loginRedirectApi';
 import { signOutPlatformAdmin } from '../../shared/api/platformAdminApi';
+import { createRestaurantOrderIdempotencyKey } from '../../shared/api/restaurantOrderPayload';
+import { getDeliveryGeolocationErrorMessage } from '../../shared/deliveryLocation';
+import { clearPwaResumePath } from '../../shared/pwaSession';
 import './client-platform.css';
 
 const clientPlatformQueryClient = new QueryClient();
@@ -1039,8 +1042,8 @@ function AddressPage({ restaurant }: { restaurant: ClientRestaurant }) {
         setTab('map');
         setIsLocating(false);
       },
-      () => {
-        setGeoError('Не удалось получить геолокацию. Проверьте разрешение браузера.');
+      (error) => {
+        setGeoError(getDeliveryGeolocationErrorMessage(error));
         setIsLocating(false);
       },
       { enableHighAccuracy: true, timeout: 12_000, maximumAge: 60_000 }
@@ -1281,6 +1284,8 @@ function PaymentConfirmPage({
   const dishes = getRestaurantDishes(snapshot, restaurant.slug);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderError, setOrderError] = useState('');
+  const submitLockRef = useRef(false);
+  const orderAttemptRef = useRef<{ fingerprint: string; idempotencyKey: string } | null>(null);
   const summaryWithoutDelivery = calculateCartSummary(lines, dishes, 0);
   const deliveryFee = getDeliveryFee(restaurant, draft, summaryWithoutDelivery);
   const summary = { ...summaryWithoutDelivery, deliveryFee, total: summaryWithoutDelivery.subtotal + deliveryFee };
@@ -1288,8 +1293,33 @@ function PaymentConfirmPage({
     const dish = dishes.find((item) => item.id === line.dishId);
     return dish ? [{ dishId: dish.id, name: dish.name, price: dish.price, quantity: line.quantity }] : [];
   });
+  const getOrderIdempotencyKey = () => {
+    const fingerprint = JSON.stringify({
+      restaurantSlug: restaurant.slug,
+      orderType: draft.orderType,
+      paymentMethod: draft.paymentMethod,
+      clientName: (draft.clientName || profile.name).trim(),
+      clientPhone: (draft.clientPhone || profile.phone).replace(/\D/g, ''),
+      deliveryAddress: draft.orderType === 'delivery' ? draft.deliveryAddress.trim() : '',
+      boothName: draft.orderType === 'dine_in' ? draft.boothName.trim() : '',
+      lines: lines
+        .map((line) => ({ dishId: line.dishId, quantity: Math.max(1, line.quantity) }))
+        .sort((left, right) => left.dishId.localeCompare(right.dishId))
+    });
+
+    if (orderAttemptRef.current?.fingerprint !== fingerprint) {
+      orderAttemptRef.current = {
+        fingerprint,
+        idempotencyKey: createRestaurantOrderIdempotencyKey(fingerprint)
+      };
+    }
+
+    return orderAttemptRef.current.idempotencyKey;
+  };
 
   const confirmPayment = async () => {
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     setIsSubmitting(true);
     setOrderError('');
     let orderId = '';
@@ -1303,7 +1333,8 @@ function PaymentConfirmPage({
         dishes,
         subtotal: summary.subtotal,
         deliveryFee: summary.deliveryFee,
-        total: summary.total
+        total: summary.total,
+        idempotencyKey: getOrderIdempotencyKey()
       });
       orderId = requireSavedRestaurantOrderId(remoteOrderId);
     } catch (error) {
@@ -1311,6 +1342,7 @@ function PaymentConfirmPage({
       setOrderError(`Заказ не создан в системе ресторана. Supabase: ${message}`);
       return;
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
 
@@ -1621,6 +1653,7 @@ function ProfilePage() {
   };
 
   const logout = () => {
+    clearPwaResumePath();
     saveProfile({ name: '', phone: '' });
     setClientName('');
     setClientPhone('');

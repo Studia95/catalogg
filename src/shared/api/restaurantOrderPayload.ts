@@ -13,6 +13,7 @@ export type CreateRestaurantOrderFromCartInput = {
   slug: string;
   items: CartItem[];
   fulfillmentType: 'hall' | 'takeaway' | 'delivery';
+  idempotencyKey?: string;
   cabinLabel?: string;
   deliveryCity?: string;
   deliverySettlement?: string;
@@ -54,6 +55,59 @@ export const normalizeRestaurantDeliverySettingsForSave = <T extends DeliverySet
   delivery_hours_start: settings.delivery_hours_start?.trim() || null,
   delivery_hours_end: settings.delivery_hours_end?.trim() || null
 });
+
+export const buildOrderStatusShareUrl = ({
+  origin,
+  basePath,
+  restaurantSlug,
+  orderId
+}: {
+  origin: string;
+  basePath: string;
+  restaurantSlug: string;
+  orderId: string;
+}) => {
+  const normalizedOrigin = origin.replace(/\/+$/, '');
+  const normalizedBase = `/${basePath.replace(/^\/+|\/+$/g, '')}`.replace(/^\/$/, '');
+  return `${normalizedOrigin}${normalizedBase}/#/${encodeURIComponent(restaurantSlug)}/order/${encodeURIComponent(orderId)}`;
+};
+
+export const buildRestaurantOrderFingerprint = ({
+  slug,
+  items,
+  fulfillmentType,
+  cabinLabel = '',
+  deliveryCity = '',
+  deliverySettlement = '',
+  deliveryAddress = '',
+  customerName = '',
+  customerPhone = ''
+}: CreateRestaurantOrderFromCartInput) =>
+  JSON.stringify({
+    slug: slug.trim().toLowerCase(),
+    fulfillmentType,
+    cabinLabel: cabinLabel.trim(),
+    deliveryCity: deliveryCity.trim(),
+    deliverySettlement: deliverySettlement.trim(),
+    deliveryAddress: deliveryAddress.trim(),
+    customerName: customerName.trim(),
+    customerPhone: customerPhone.replace(/\D/g, ''),
+    items: items
+      .map((item) => ({
+        productId: item.product.id,
+        quantity: Math.max(1, item.quantity)
+      }))
+      .sort((left, right) => left.productId.localeCompare(right.productId))
+  });
+
+export const createRestaurantOrderIdempotencyKey = (fingerprint: string) => {
+  const randomPart =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+  return `restaurant-order:${randomPart}:${fingerprint.length}`;
+};
 
 const joinCommentParts = (...parts: Array<string | undefined>) =>
   parts.map((part) => part?.trim()).filter(Boolean).join('\n');
@@ -111,7 +165,8 @@ export async function createRestaurantOrderWithClient(
     deliveryAccuracyM = null,
     comment = '',
     customerName = 'Гость',
-    customerPhone = ''
+    customerPhone = '',
+    idempotencyKey
   }: CreateRestaurantOrderFromCartInput
 ) {
   const locationNote =
@@ -129,9 +184,19 @@ export async function createRestaurantOrderWithClient(
     delivery_settlement: deliverySettlement,
     client_address_comment: joinCommentParts(deliverySettlement, locationNote),
     comment: joinCommentParts(comment, locationNote),
+    idempotency_key: idempotencyKey?.trim() || null,
     items: buildPublicRestaurantOrderItems(items)
   };
-  let { data, error } = await client.rpc(resolvePublicOrderRpcName(items), restaurantRpcArgs);
+  const rpcName = resolvePublicOrderRpcName(items);
+  let { data, error } = await client.rpc(rpcName, restaurantRpcArgs);
+
+  if (error && restaurantRpcArgs.idempotency_key && rpcIsMissing(error)) {
+    const argsWithoutIdempotencyKey: Record<string, unknown> = { ...restaurantRpcArgs };
+    delete argsWithoutIdempotencyKey.idempotency_key;
+    const retryResult = await client.rpc(rpcName, argsWithoutIdempotencyKey);
+    data = retryResult.data;
+    error = retryResult.error;
+  }
 
   if (error && rpcIsMissing(error)) {
     const fallbackArgs = {

@@ -128,6 +128,7 @@
 .driver-earnings-summary,
 .driver-profile-menu article,
 .driver-profile-menu a,
+.driver-profile-menu button,
 .driver-delivery-card,
 .driver-history-row {
   border: 1px solid #e4e7ec;
@@ -536,13 +537,17 @@
 }
 
 .driver-profile-menu article,
-.driver-profile-menu a {
+.driver-profile-menu a,
+.driver-profile-menu button {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   min-height: 54px;
   padding: 0 12px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
 .driver-profile-menu b {

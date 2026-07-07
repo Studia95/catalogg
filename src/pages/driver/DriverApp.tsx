@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Headphones,
   Home,
+  LogOut,
   MapPin,
   Navigation,
   Phone,
@@ -31,6 +32,7 @@ import {
   completeDeliveryProgress,
   getAuthenticatedDriverId,
   getDriverDashboard,
+  signOutDriver,
   setDriverAvailability,
   subscribeToDriverRealtime,
   updateDeliveryProgress,
@@ -329,6 +331,10 @@ function DriverOrdersScreen({
   const { deliveryId } = useParams();
   const selectedOffer = offers.find((offer) => offer.deliveryId === deliveryId) ?? null;
 
+  if (deliveryId && activeDelivery?.deliveryId === deliveryId) {
+    return <DriverActiveScreen delivery={activeDelivery} />;
+  }
+
   if (selectedOffer) return <DriverNewOrderScreen driverId={driverId} offer={selectedOffer} />;
 
   return (
@@ -620,6 +626,9 @@ function DriverProfileRow({ icon, label, value }: { icon: ReactNode; label: stri
 }
 
 function DriverSettingsScreen({ profile }: { profile: DriverProfile }) {
+  const navigate = useNavigate();
+  const clearLocalActiveDelivery = useDriverStore((state) => state.clearLocalActiveDelivery);
+
   return (
     <>
       <DriverHeader title="Настройки" />
@@ -628,6 +637,19 @@ function DriverSettingsScreen({ profile }: { profile: DriverProfile }) {
         <DriverProfileRow icon={<Phone />} label="Телефон" value={profile.phone} />
         <DriverProfileRow icon={<Car />} label="Авто" value={profile.vehicleInfo} />
         <DriverProfileRow icon={<WalletCards />} label="Вывод средств" value="Карта / счёт" />
+        <button
+          type="button"
+          onClick={() => {
+            void signOutDriver().then(() => {
+              clearLocalActiveDelivery();
+              navigate('/login', { replace: true });
+            });
+          }}
+        >
+          <LogOut />
+          <span>Выйти</span>
+          <ChevronRight />
+        </button>
       </div>
     </>
   );

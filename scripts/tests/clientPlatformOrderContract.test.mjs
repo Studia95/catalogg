@@ -11,12 +11,14 @@ describe('client platform restaurant order contract', () => {
     const apiSource = readFileSync(resolve(repoRoot, 'src/shared/api/clientPlatformApi.ts'), 'utf8');
     const mockSource = readFileSync(resolve(repoRoot, 'src/features/client-platform/mockData.ts'), 'utf8');
     const mainSource = readFileSync(resolve(repoRoot, 'src/main.tsx'), 'utf8');
+    const routeSource = readFileSync(resolve(repoRoot, 'src/PwaRoutes.tsx'), 'utf8');
 
     assert.match(apiSource, /publicPath:\s*`\/\$\{catalog\.slug\}`/);
     assert.doesNotMatch(apiSource, /publicPath:\s*`\/r\/\$\{catalog\.slug\}`/);
     assert.doesNotMatch(mockSource, /publicPath:\s*'\/r\//);
     assert.doesNotMatch(mainSource, /path="\/r\/:slug\/\*" element=\{<ClientPlatformApp \/>}/);
-    assert.match(mainSource, /function RestaurantRouteRedirect/);
+    assert.match(mainSource, /path="\/r\/:slug\/\*" element=\{<RestaurantRouteRedirect \/>}/);
+    assert.match(routeSource, /function RestaurantRouteRedirect/);
   });
 
   it('does not write catalog ids into the platform restaurant foreign key', () => {

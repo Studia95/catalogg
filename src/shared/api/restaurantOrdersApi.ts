@@ -82,6 +82,27 @@ export type RestaurantOrder = {
   items: RestaurantOrderItem[];
 };
 
+export type PublicRestaurantOrderStatus = {
+  id: string;
+  clientName: string;
+  clientPhone: string;
+  fulfillmentType: RestaurantOrderFulfillment;
+  deliveryAddress: string;
+  status: RestaurantOrderStatus;
+  paymentStatus: PaymentStatus;
+  deliveryStatus: DeliveryStatus;
+  driverName: string;
+  driverPhone: string;
+  subtotal: number;
+  deliveryFee: number;
+  total: number;
+  createdAt: string;
+  acceptedAt: string | null;
+  readyAt: string | null;
+  completedAt: string | null;
+  items: RestaurantOrderItem[];
+};
+
 export type RestaurantDeliverySettings = {
   enable_orders: boolean;
   enable_delivery: boolean;
@@ -172,6 +193,35 @@ type OrderRow = {
     unit_price: number;
     line_total: number;
   }>;
+};
+
+type PublicRestaurantOrderStatusRow = {
+  id?: unknown;
+  customer_name?: unknown;
+  customer_phone?: unknown;
+  fulfillment_type?: unknown;
+  delivery_address?: unknown;
+  status?: unknown;
+  payment_status?: unknown;
+  delivery_status?: unknown;
+  driver_name?: unknown;
+  driver_phone?: unknown;
+  subtotal?: unknown;
+  delivery_fee?: unknown;
+  total?: unknown;
+  created_at?: unknown;
+  accepted_at?: unknown;
+  ready_at?: unknown;
+  completed_at?: unknown;
+  items?: unknown;
+};
+
+type PublicRestaurantOrderStatusItemRow = {
+  id?: unknown;
+  title?: unknown;
+  quantity?: unknown;
+  unit_price?: unknown;
+  line_total?: unknown;
 };
 
 const demoOrders: RestaurantOrder[] = [
@@ -301,6 +351,40 @@ const mapOrder = (row: OrderRow): RestaurantOrder => {
   };
 };
 
+const stringValue = (value: unknown, fallback = '') => (typeof value === 'string' ? value : fallback);
+const nullableStringValue = (value: unknown) => (typeof value === 'string' ? value : null);
+const numberValue = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : Number(value) || 0);
+
+const mapPublicOrderStatus = (row: PublicRestaurantOrderStatusRow): PublicRestaurantOrderStatus => ({
+  id: stringValue(row.id),
+  clientName: stringValue(row.customer_name, 'Гость'),
+  clientPhone: stringValue(row.customer_phone),
+  fulfillmentType: stringValue(row.fulfillment_type, 'hall') as RestaurantOrderFulfillment,
+  deliveryAddress: stringValue(row.delivery_address),
+  status: stringValue(row.status, 'new') as RestaurantOrderStatus,
+  paymentStatus: stringValue(row.payment_status, 'unpaid') as PaymentStatus,
+  deliveryStatus: stringValue(row.delivery_status, 'not_required') as DeliveryStatus,
+  driverName: stringValue(row.driver_name),
+  driverPhone: stringValue(row.driver_phone),
+  subtotal: numberValue(row.subtotal),
+  deliveryFee: numberValue(row.delivery_fee),
+  total: numberValue(row.total),
+  createdAt: stringValue(row.created_at, new Date().toISOString()),
+  acceptedAt: nullableStringValue(row.accepted_at),
+  readyAt: nullableStringValue(row.ready_at),
+  completedAt: nullableStringValue(row.completed_at),
+  items: (Array.isArray(row.items) ? row.items : []).map((item) => {
+    const orderItem = item as PublicRestaurantOrderStatusItemRow;
+    return {
+      id: stringValue(orderItem.id),
+      title: stringValue(orderItem.title),
+      quantity: numberValue(orderItem.quantity),
+      unitPrice: numberValue(orderItem.unit_price),
+      lineTotal: numberValue(orderItem.line_total)
+    };
+  })
+});
+
 export async function getCatalogIdBySlug(slug: string) {
   if (!supabase) return null;
   const { data, error } = await supabase.from('catalogs').select('id').eq('slug', slug).maybeSingle();
@@ -321,6 +405,21 @@ export async function getRestaurantOrders(slug: string): Promise<RestaurantOrder
 
   if (error) throw error;
   return ((data ?? []) as unknown as OrderRow[]).map(mapOrder);
+}
+
+export async function getPublicRestaurantOrderStatus(orderId: string): Promise<PublicRestaurantOrderStatus | null> {
+  if (!supabase) return null;
+  const normalizedOrderId = orderId.trim();
+  if (!normalizedOrderId) return null;
+
+  const { data, error } = await supabase.rpc('get_public_restaurant_order_status', {
+    target_order_id: normalizedOrderId
+  });
+
+  if (error) throw error;
+  if (!data || typeof data !== 'object') return null;
+
+  return mapPublicOrderStatus(data as PublicRestaurantOrderStatusRow);
 }
 
 export async function updateRestaurantOrderStatus(

@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { cabins, categories, products, restaurant, themeSettings } from '../data/catalog';
 import type { Cabin, CatalogTag, Category, Product, Restaurant, ThemeSettings } from '../entities/models';
 import { catalogAccessAllowsAdmin } from './adminSession';
+import { clearPwaResumePath } from './pwaSession';
 
 type SupabaseConfig = {
   url?: string;
@@ -239,6 +240,7 @@ export async function signInAdmin(email: string, password: string, catalogSlug?:
 }
 
 export async function signOutAdmin() {
+  clearPwaResumePath();
   if (!supabase) return;
   await supabase.auth.signOut();
 }

@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import { clearPwaResumePath } from '../pwaSession';
 
 export type PlatformAdminAccess = {
   hasSession: boolean;
@@ -47,6 +48,7 @@ export async function signInPlatformAdmin(email: string, password: string) {
 }
 
 export async function signOutPlatformAdmin() {
+  clearPwaResumePath();
   if (!supabase) return;
   await supabase.auth.signOut();
 }

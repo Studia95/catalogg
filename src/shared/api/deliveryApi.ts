@@ -6,6 +6,7 @@ import {
   type DriverStatus,
   type OrderLifecycleSnapshot
 } from '../../features/order/orderLifecycle';
+import { clearPwaResumePath } from '../pwaSession';
 import { supabase } from '../supabase';
 
 export type DriverProfile = {
@@ -407,6 +408,12 @@ export async function setDriverAvailability(driverId: string, isOnline: boolean)
     .eq('id', driverId);
 
   if (error) throw error;
+}
+
+export async function signOutDriver() {
+  clearPwaResumePath();
+  if (!supabase) return;
+  await supabase.auth.signOut();
 }
 
 export async function acceptDeliveryOffer(deliveryId: string, driverId: string) {

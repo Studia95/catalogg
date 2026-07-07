@@ -34,3 +34,11 @@ export const formatDeliveryLocationNote = (
 
   return `Координаты клиента: ${lat.toFixed(7)}, ${lng.toFixed(7)}${accuracyNote}`;
 };
+
+export const deliveryGeolocationPermissionDeniedMessage =
+  'Геолокация заблокирована. Разрешите доступ к местоположению в настройках сайта браузера и нажмите кнопку ещё раз.';
+
+export const getDeliveryGeolocationErrorMessage = (
+  error: Pick<GeolocationPositionError, 'code'> | null | undefined,
+  fallback = 'Не удалось получить геолокацию. Проверьте разрешение браузера.'
+) => (error?.code === 1 ? deliveryGeolocationPermissionDeniedMessage : fallback);

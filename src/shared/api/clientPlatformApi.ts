@@ -317,6 +317,7 @@ type ClientPlatformOrderInput = {
   subtotal: number;
   deliveryFee: number;
   total: number;
+  idempotencyKey?: string;
 };
 
 type PublicOrderItemPayload = {
@@ -366,6 +367,24 @@ const initialOrderStatus = (orderType: ClientOrderType, paymentMethod: ClientPay
   return 'new';
 };
 
+const errorText = (error: unknown) => {
+  if (!error) return '';
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object') {
+    const value = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+    return [value.code, value.message, value.details, value.hint]
+      .filter((part): part is string => typeof part === 'string')
+      .join(' ');
+  }
+  return '';
+};
+
+const rpcIsMissing = (error: unknown) => {
+  const text = errorText(error).toLowerCase();
+  return text.includes('pgrst202') || text.includes('could not find the function') || text.includes('function not found');
+};
+
 export async function createClientPlatformOrder(input: ClientPlatformOrderInput): Promise<string | null> {
   if (!supabase) return null;
 
@@ -388,7 +407,8 @@ export async function createClientPlatformOrder(input: ClientPlatformOrderInput)
   const deliverySettlement = '';
   const addressComment = input.draft.orderType === 'delivery' ? input.draft.deliveryComment : '';
 
-  const { data, error } = await supabase.rpc(resolveClientOrderRpcName(items), {
+  const rpcName = resolveClientOrderRpcName(items);
+  const rpcArgs = {
     target_catalog_id: catalogId,
     customer_name: clientName,
     customer_phone: clientPhone,
@@ -399,8 +419,18 @@ export async function createClientPlatformOrder(input: ClientPlatformOrderInput)
     delivery_settlement: deliverySettlement,
     client_address_comment: addressComment,
     comment: input.draft.deliveryComment,
+    idempotency_key: input.idempotencyKey?.trim() || null,
     items
-  });
+  };
+  let { data, error } = await supabase.rpc(rpcName, rpcArgs);
+
+  if (error && rpcArgs.idempotency_key && rpcIsMissing(error)) {
+    const argsWithoutIdempotencyKey: Record<string, unknown> = { ...rpcArgs };
+    delete argsWithoutIdempotencyKey.idempotency_key;
+    const retryResult = await supabase.rpc(rpcName, argsWithoutIdempotencyKey);
+    data = retryResult.data;
+    error = retryResult.error;
+  }
 
   if (error) throw error;
   const orderId = String(data);
