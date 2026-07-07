@@ -1,6 +1,5 @@
 import {
   ArrowLeft,
-  Bike,
   CalendarDays,
   Car,
   ChevronRight,
@@ -22,7 +21,7 @@ import {
   WalletCards,
   X
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useDriverStore } from '../../features/driver/store';
@@ -40,10 +39,35 @@ import {
   type DriverDashboardSnapshot,
   type DriverProfile
 } from '../../shared/api/deliveryApi';
+import { formatOrderTime, groupOrdersByDate } from '../../shared/orderListGroups';
 import { supabase } from '../../shared/supabase';
 import './driver.css';
 
 const formatPrice = (value: number) => `${new Intl.NumberFormat('ru-RU').format(value)} ₽`;
+
+function playDriverNewOrderSound() {
+  try {
+    const audioWindow = window as typeof window & { webkitAudioContext?: typeof AudioContext };
+    const AudioContextCtor = window.AudioContext ?? audioWindow.webkitAudioContext;
+    if (!AudioContextCtor) return;
+
+    const audio = new AudioContextCtor();
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = 740;
+    gain.gain.setValueAtTime(0.001, audio.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.14, audio.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.24);
+    oscillator.connect(gain);
+    gain.connect(audio.destination);
+    oscillator.start();
+    oscillator.stop(audio.currentTime + 0.26);
+    window.setTimeout(() => void audio.close(), 340);
+  } catch {
+    // Browsers may block audio until the first user gesture.
+  }
+}
 
 const deliveryStatusLabels: Record<DeliveryStatus, string> = {
   not_required: 'Не требуется',
@@ -55,6 +79,18 @@ const deliveryStatusLabels: Record<DeliveryStatus, string> = {
   arrived_to_client: 'На месте у клиента',
   delivered: 'Доставлен',
   failed: 'Проблема'
+};
+
+const driverDeliveryStatusTones: Record<DeliveryStatus, 'new' | 'work' | 'ready' | 'delivery' | 'done'> = {
+  not_required: 'done',
+  waiting_courier: 'new',
+  assigned: 'work',
+  arrived_to_restaurant: 'work',
+  handed_over: 'ready',
+  on_the_way: 'delivery',
+  arrived_to_client: 'delivery',
+  delivered: 'done',
+  failed: 'done'
 };
 
 const emptySnapshot: DriverDashboardSnapshot = {
@@ -92,10 +128,36 @@ export function DriverApp() {
   const [error, setError] = useState('');
   const [authChecked, setAuthChecked] = useState(!supabase);
   const [hasDriverAccess, setHasDriverAccess] = useState(!supabase);
+  const [recentDeliveryIds, setRecentDeliveryIds] = useState<Set<string>>(() => new Set());
+  const knownDeliveryIdsRef = useRef<Set<string>>(new Set());
+  const hasLoadedDeliveriesRef = useRef(false);
 
   const loadDashboard = useCallback(async () => {
     try {
       const nextSnapshot = await getDriverDashboard(selectedDriverId);
+      const visibleDeliveries = [
+        nextSnapshot.activeDelivery,
+        ...nextSnapshot.availableDeliveries
+      ].filter((offer): offer is DeliveryOffer => Boolean(offer));
+      const knownIds = knownDeliveryIdsRef.current;
+      const newDeliveryIds = hasLoadedDeliveriesRef.current
+        ? visibleDeliveries
+            .filter((offer) => offer.status === 'waiting_courier' && !knownIds.has(offer.deliveryId))
+            .map((offer) => offer.deliveryId)
+        : [];
+      if (newDeliveryIds.length > 0) {
+        setRecentDeliveryIds((current) => new Set([...current, ...newDeliveryIds]));
+        playDriverNewOrderSound();
+        window.setTimeout(() => {
+          setRecentDeliveryIds((current) => {
+            const next = new Set(current);
+            newDeliveryIds.forEach((id) => next.delete(id));
+            return next;
+          });
+        }, 9000);
+      }
+      knownDeliveryIdsRef.current = new Set(visibleDeliveries.map((offer) => offer.deliveryId));
+      hasLoadedDeliveriesRef.current = true;
       setSnapshot(nextSnapshot);
       setError('');
     } catch (loadError) {
@@ -173,6 +235,7 @@ export function DriverApp() {
             driverId={effectiveDriverId}
             offers={availableDeliveries}
             activeDelivery={activeDelivery}
+            recentDeliveryIds={recentDeliveryIds}
             error={error}
           />
         ) : route === 'active' ? (
@@ -301,18 +364,42 @@ function DriverSectionTitle({ title, to }: { title: string; to: string }) {
   );
 }
 
-function DriverDeliveryCard({ offer, compact = false }: { offer: DeliveryOffer; compact?: boolean }) {
+function DriverDeliveryCard({
+  offer,
+  compact = false,
+  highlighted = false
+}: {
+  offer: DeliveryOffer;
+  compact?: boolean;
+  highlighted?: boolean;
+}) {
+  const statusTone = driverDeliveryStatusTones[offer.status];
+  const price = offer.orderTotal > 0 ? offer.orderTotal : offer.deliveryFee;
+
   return (
-    <Link className="driver-delivery-card" to={offer.isAssignedToViewer ? '/driver/active' : `/driver/orders/${offer.deliveryId}`}>
-      <span className="driver-delivery-icon">
-        <Bike />
+    <Link
+      className="driver-delivery-card driver-order-summary-card"
+      data-compact={compact}
+      data-highlighted={highlighted}
+      to={offer.isAssignedToViewer ? '/driver/active' : `/driver/orders/${offer.deliveryId}`}
+    >
+      <span className="driver-order-summary-card__head">
+        <strong>#{offer.orderNumber}</strong>
+        <time dateTime={offer.createdAt}>{formatOrderTime(offer.createdAt)}</time>
       </span>
-      <span>
-        <strong>Заказ №{offer.orderNumber}</strong>
-        <small>{offer.restaurantName}</small>
-        <small>{compact ? offer.deliveryAddress : `${offer.distanceKm} км от вас`}</small>
+      <span className="driver-order-summary-card__meta">
+        Доставка • {offer.itemsCount} поз.
       </span>
-      <b>{formatPrice(offer.deliveryFee)}</b>
+      <span className="driver-order-summary-card__address">
+        {compact ? offer.deliveryAddress : offer.deliveryAddress || `${offer.distanceKm} км от вас`}
+      </span>
+      <span className="driver-order-summary-card__foot">
+        <strong>{formatPrice(price)}</strong>
+        <em data-tone={statusTone}>
+          {offer.status === 'waiting_courier' && <span aria-hidden="true" />}
+          {deliveryStatusLabels[offer.status]}
+        </em>
+      </span>
     </Link>
   );
 }
@@ -321,15 +408,25 @@ function DriverOrdersScreen({
   driverId,
   offers,
   activeDelivery,
+  recentDeliveryIds,
   error
 }: {
   driverId: string;
   offers: readonly DeliveryOffer[];
   activeDelivery: DeliveryOffer | null;
+  recentDeliveryIds: Set<string>;
   error: string;
 }) {
   const { deliveryId } = useParams();
   const selectedOffer = offers.find((offer) => offer.deliveryId === deliveryId) ?? null;
+  const visibleOffers = useMemo(
+    () =>
+      activeDelivery
+        ? [activeDelivery, ...offers.filter((offer) => offer.deliveryId !== activeDelivery.deliveryId)]
+        : [...offers],
+    [activeDelivery, offers]
+  );
+  const offerGroups = useMemo(() => groupOrdersByDate(visibleOffers), [visibleOffers]);
 
   if (deliveryId && activeDelivery?.deliveryId === deliveryId) {
     return <DriverActiveScreen delivery={activeDelivery} />;
@@ -341,13 +438,24 @@ function DriverOrdersScreen({
     <>
       <DriverHeader title="Заказы" />
       {error && <p className="driver-error">{error}</p>}
-      {activeDelivery && <DriverDeliveryCard offer={activeDelivery} compact />}
-      <div className="driver-list">
-        {offers.map((offer) => (
-          <DriverDeliveryCard offer={offer} key={offer.deliveryId} />
+      <div className="driver-list driver-order-groups">
+        {offerGroups.map((group) => (
+          <section className="driver-order-group" key={group.key}>
+            <h2>{group.label}</h2>
+            <div>
+              {group.orders.map((offer) => (
+                <DriverDeliveryCard
+                  offer={offer}
+                  compact={offer.isAssignedToViewer}
+                  highlighted={recentDeliveryIds.has(offer.deliveryId)}
+                  key={offer.deliveryId}
+                />
+              ))}
+            </div>
+          </section>
         ))}
       </div>
-      {offers.length === 0 && (
+      {visibleOffers.length === 0 && (
         <section className="driver-empty-block">
           <ClipboardList />
           <strong>Нет доступных заказов</strong>
@@ -387,8 +495,8 @@ function DriverNewOrderScreen({ driverId, offer }: { driverId: string; offer: De
         <DriverRouteLine icon={<Home />} label={offer.restaurantName} value={offer.restaurantAddress} />
         <DriverRouteLine icon={<MapPin />} label="Клиент" value={offer.deliveryAddress} />
         <DriverRouteLine icon={<Navigation />} label="Расстояние" value={`${offer.distanceKm} км от вас`} />
-        <strong>{formatPrice(offer.deliveryFee)}</strong>
-        <small>{offer.paymentLabel}</small>
+        <strong>{formatPrice(offer.orderTotal > 0 ? offer.orderTotal : offer.deliveryFee)}</strong>
+        <small>{offer.paymentLabel} · доставка водителю {formatPrice(offer.deliveryFee)}</small>
         {error && <p className="driver-error">{error}</p>}
         <button className="driver-primary" type="button" onClick={() => void accept()} disabled={isAccepting}>
           {isAccepting ? 'Принимаем...' : 'Принять заказ'}

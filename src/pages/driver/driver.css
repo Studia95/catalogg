@@ -244,6 +244,134 @@
   white-space: nowrap;
 }
 
+.driver-order-groups {
+  gap: 14px;
+}
+
+.driver-order-group {
+  display: grid;
+  gap: 8px;
+}
+
+.driver-order-group h2 {
+  margin: 0;
+  color: #475467;
+  font-size: 13px;
+}
+
+.driver-order-group > div {
+  display: grid;
+  gap: 10px;
+}
+
+.driver-order-summary-card.driver-delivery-card {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+  min-height: 0;
+  padding: 14px;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.driver-order-summary-card[data-highlighted='true'] {
+  animation: driver-new-order-glow 1.4s ease-in-out 3;
+  border-color: #12b76a;
+  background: #f6fef9;
+}
+
+.driver-order-summary-card__head,
+.driver-order-summary-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.driver-order-summary-card__head strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+.driver-order-summary-card__head time {
+  flex: 0 0 auto;
+  color: #475467;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.driver-order-summary-card__meta,
+.driver-order-summary-card__address {
+  overflow: hidden;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.driver-order-summary-card__address {
+  color: #111827;
+}
+
+.driver-order-summary-card__foot strong {
+  font-size: 16px;
+}
+
+.driver-order-summary-card em {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.driver-order-summary-card em span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.driver-order-summary-card em[data-tone='new'] {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.driver-order-summary-card em[data-tone='work'] {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.driver-order-summary-card em[data-tone='ready'] {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.driver-order-summary-card em[data-tone='delivery'] {
+  background: #f4f3ff;
+  color: #5b3df4;
+}
+
+.driver-order-summary-card em[data-tone='done'] {
+  background: #f2f4f7;
+  color: #475467;
+}
+
+@keyframes driver-new-order-glow {
+  0%,
+  100% {
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+  }
+
+  50% {
+    box-shadow: 0 18px 36px rgba(18, 183, 106, 0.24);
+  }
+}
+
 .driver-empty-block {
   display: grid;
   min-height: 150px;

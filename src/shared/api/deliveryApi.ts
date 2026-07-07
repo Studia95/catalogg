@@ -25,6 +25,8 @@ export type DeliveryOffer = DriverDeliveryView & {
   readonly deliveryId: string;
   readonly orderNumber: string;
   readonly createdAt: string;
+  readonly itemsCount: number;
+  readonly orderTotal: number;
   readonly paymentLabel: string;
   readonly restaurantLogoUrl: string;
   readonly routeEtaMin: number;
@@ -86,6 +88,9 @@ type DeliveryRow = {
     total: number | null;
     total_amount: number | null;
     created_at: string;
+    order_items?: Array<{
+      quantity: number | null;
+    }> | null;
     restaurants?: MaybeArray<{
       name: string | null;
       logo_url: string | null;
@@ -174,6 +179,8 @@ const demoOffers: readonly DeliveryOffer[] = [
     deliveryId: 'delivery-demo-1',
     orderNumber: '12347',
     createdAt: new Date().toISOString(),
+    itemsCount: 3,
+    orderTotal: 1640,
     paymentLabel: 'Оплата онлайн',
     restaurantLogoUrl: '',
     routeEtaMin: 15
@@ -194,6 +201,8 @@ const demoOffers: readonly DeliveryOffer[] = [
     deliveryId: 'delivery-demo-2',
     orderNumber: '12346',
     createdAt: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
+    itemsCount: 2,
+    orderTotal: 1180,
     paymentLabel: 'Оплата онлайн',
     restaurantLogoUrl: '',
     routeEtaMin: 12
@@ -279,6 +288,8 @@ const rowToOffer = (row: DeliveryRow, viewerDriverId: string): DeliveryOffer | n
     deliveryId: row.id,
     orderNumber: orderNumber(row.order_id),
     createdAt: order.created_at,
+    itemsCount: (order.order_items ?? []).reduce((sum, item) => sum + Math.max(1, Number(item.quantity ?? 1)), 0),
+    orderTotal: Number(order.total ?? order.total_amount ?? 0),
     paymentLabel: order.payment_status === 'confirmed' ? 'Оплата подтверждена' : 'Оплата ожидает',
     restaurantLogoUrl: restaurant?.logo_url ?? restaurant?.cover_url ?? '',
     routeEtaMin: row.estimated_time_min ?? 20
@@ -356,7 +367,7 @@ export async function getDriverDashboard(driverId = demoDriverId): Promise<Drive
 
   const deliveriesResult = await supabase
     .from('deliveries')
-    .select('id, order_id, driver_id, status, delivery_provider, pickup_qr_token, pickup_qr_expires_at, assigned_at, route_to_restaurant_url, route_to_client_url, estimated_time_min, estimated_time_max, created_at, orders(id, order_type, status, payment_status, client_name, client_phone, delivery_address, delivery_lat, delivery_lng, delivery_comment, restaurant_address_snapshot, restaurant_lat_snapshot, restaurant_lng_snapshot, delivery_fee, total, total_amount, created_at, restaurants(name, logo_url, cover_url, description, address_line, lat, lng))')
+    .select('id, order_id, driver_id, status, delivery_provider, pickup_qr_token, pickup_qr_expires_at, assigned_at, route_to_restaurant_url, route_to_client_url, estimated_time_min, estimated_time_max, created_at, orders(id, order_type, status, payment_status, client_name, client_phone, delivery_address, delivery_lat, delivery_lng, delivery_comment, restaurant_address_snapshot, restaurant_lat_snapshot, restaurant_lng_snapshot, delivery_fee, total, total_amount, created_at, order_items(quantity), restaurants(name, logo_url, cover_url, description, address_line, lat, lng))')
     .in('status', ['waiting_courier', 'waiting_driver', 'assigned', 'arrived_to_restaurant', 'handed_over', 'on_the_way'])
     .or(`driver_id.is.null,driver_id.eq.${profile.id}`)
     .order('created_at', { ascending: false });

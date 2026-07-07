@@ -1,6 +1,5 @@
 import {
   Bell,
-  ChevronRight,
   Clock,
   Copy,
   CreditCard,
@@ -31,17 +30,19 @@ import {
   UtensilsCrossed,
   WalletCards
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { toast } from 'sonner';
 import type { CatalogTag, Category, Product, Restaurant, ThemeSettings } from '../../entities/models';
 import { categories as demoCategories, products as demoProducts, restaurant as demoRestaurant, themeSettings as demoTheme } from '../../data/catalog';
 import {
   getRestaurantOrders,
+  subscribeToRestaurantOrdersRealtime,
   updateRestaurantOrderPaymentStatus,
   updateRestaurantOrderStatus,
   type RestaurantOrder,
   type RestaurantOrderStatus
 } from '../../shared/api/restaurantOrdersApi';
+import { formatOrderTime, groupOrdersByDate } from '../../shared/orderListGroups';
 import type { PaymentStatus as RestaurantPaymentStatus } from '../../features/order/orderLifecycle';
 import { copyText, getCatalogPublicUrl } from '../../shared/platformUrls';
 import { loadCatalog } from '../../shared/supabase';
@@ -141,6 +142,32 @@ const orderPaymentStatusLabels: Record<RestaurantPaymentStatus, string> = {
   rejected: 'Отклонён'
 };
 
+const fulfillmentTypeLabels: Record<RestaurantOrder['fulfillmentType'], string> = {
+  delivery: 'Доставка',
+  takeaway: 'На вынос',
+  hall: 'В зале'
+};
+
+const orderStatusTones: Record<RestaurantOrderStatus, 'new' | 'work' | 'ready' | 'delivery' | 'done'> = {
+  new: 'new',
+  waiting_payment_confirmation: 'work',
+  payment_confirmed: 'work',
+  accepted: 'work',
+  confirmed: 'work',
+  preparing: 'work',
+  cooking: 'work',
+  ready: 'ready',
+  waiting_driver: 'delivery',
+  driver_assigned: 'delivery',
+  assigned_driver: 'delivery',
+  picked_up: 'delivery',
+  on_the_way: 'delivery',
+  delivered: 'done',
+  completed: 'done',
+  cancelled: 'done',
+  canceled: 'done'
+};
+
 const toLocalPaymentStatus = (status: RestaurantPaymentStatus): PaymentStatus => {
   if (status === 'confirmed') return 'confirmed';
   if (status === 'rejected') return 'declined';
@@ -175,6 +202,44 @@ const defaultPaymentSettings: PaymentSettings = {
 const formatPrice = (value: number) => `${new Intl.NumberFormat('ru-RU').format(value)} ₽`;
 const paymentStorageKey = (slug: string) => `waycatalog:${slug}:payment-settings`;
 const paymentStatusStorageKey = (slug: string) => `waycatalog:${slug}:payment-statuses`;
+
+function playNewOrderSound() {
+  try {
+    const audioWindow = window as typeof window & { webkitAudioContext?: typeof AudioContext };
+    const AudioContextCtor = window.AudioContext ?? audioWindow.webkitAudioContext;
+    if (!AudioContextCtor) return;
+
+    const audio = new AudioContextCtor();
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = 880;
+    gain.gain.setValueAtTime(0.001, audio.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.16, audio.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.22);
+    oscillator.connect(gain);
+    gain.connect(audio.destination);
+    oscillator.start();
+    oscillator.stop(audio.currentTime + 0.24);
+    window.setTimeout(() => void audio.close(), 320);
+  } catch {
+    // Browsers may block audio until the first user gesture.
+  }
+}
+
+function getOrderItemsCount(order: RestaurantOrder) {
+  return order.items.reduce((sum, item) => sum + Math.max(1, item.quantity), 0);
+}
+
+function getOrderLocationLabel(order: RestaurantOrder) {
+  return (
+    order.deliverySettlement ||
+    order.deliveryCity ||
+    order.deliveryAddress ||
+    order.cabinLabel ||
+    (order.fulfillmentType === 'takeaway' ? 'Самовывоз' : 'В зале')
+  );
+}
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -254,6 +319,7 @@ export function RestaurantAdminShell({
   const [orderQuery, setOrderQuery] = useState('');
   const [orderTab, setOrderTab] = useState<'all' | RestaurantOrderStatus>('all');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [recentOrderIds, setRecentOrderIds] = useState<Set<string>>(() => new Set());
   const [stockDrafts, setStockDrafts] = useState<Record<string, number>>({});
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(() =>
     readJson(paymentStorageKey(access.catalog?.slug ?? 'demo'), defaultPaymentSettings)
@@ -261,6 +327,8 @@ export function RestaurantAdminShell({
   const [paymentStatuses, setPaymentStatuses] = useState<Record<string, PaymentStatus>>(() =>
     readJson(paymentStatusStorageKey(access.catalog?.slug ?? 'demo'), {})
   );
+  const knownOrderIdsRef = useRef<Set<string>>(new Set());
+  const hasLoadedOrdersRef = useRef(false);
 
   const slug = access.catalog?.slug ?? 'demo';
   const publicUrl = useMemo(() => (access.catalog ? getCatalogPublicUrl(access.catalog.slug) : '#'), [access.catalog]);
@@ -276,6 +344,26 @@ export function RestaurantAdminShell({
         tags: catalog.tags,
         theme: catalog.theme
       });
+      const knownIds = knownOrderIdsRef.current;
+      const newOrderIds = hasLoadedOrdersRef.current
+        ? restaurantOrders
+            .filter((order) => order.status === 'new' && !knownIds.has(order.id))
+            .map((order) => order.id)
+        : [];
+      if (newOrderIds.length > 0) {
+        setRecentOrderIds((current) => new Set([...current, ...newOrderIds]));
+        toast.success(newOrderIds.length === 1 ? 'Новый заказ' : `Новых заказов: ${newOrderIds.length}`);
+        playNewOrderSound();
+        window.setTimeout(() => {
+          setRecentOrderIds((current) => {
+            const next = new Set(current);
+            newOrderIds.forEach((id) => next.delete(id));
+            return next;
+          });
+        }, 9000);
+      }
+      knownOrderIdsRef.current = new Set(restaurantOrders.map((order) => order.id));
+      hasLoadedOrdersRef.current = true;
       setOrders(restaurantOrders);
       setSelectedOrderId((current) => current ?? restaurantOrders[0]?.id ?? null);
     } catch (error) {
@@ -288,6 +376,11 @@ export function RestaurantAdminShell({
   useEffect(() => {
     void refreshData();
   }, [refreshData]);
+
+  useEffect(
+    () => subscribeToRestaurantOrdersRealtime(access.catalog?.id, () => void refreshData()),
+    [access.catalog?.id, refreshData]
+  );
 
   useEffect(() => {
     localStorage.setItem(paymentStorageKey(slug), JSON.stringify(paymentSettings));
@@ -468,6 +561,7 @@ export function RestaurantAdminShell({
               tab={orderTab}
               paymentSettings={paymentSettings}
               paymentStatuses={paymentStatuses}
+              recentOrderIds={recentOrderIds}
               onQueryChange={setOrderQuery}
               onTabChange={setOrderTab}
               onSelectOrder={setSelectedOrderId}
@@ -723,6 +817,7 @@ function OrdersPage({
   tab,
   paymentSettings,
   paymentStatuses,
+  recentOrderIds,
   onQueryChange,
   onTabChange,
   onSelectOrder,
@@ -735,12 +830,15 @@ function OrdersPage({
   tab: 'all' | RestaurantOrderStatus;
   paymentSettings: PaymentSettings;
   paymentStatuses: Record<string, PaymentStatus>;
+  recentOrderIds: Set<string>;
   onQueryChange: (query: string) => void;
   onTabChange: (tab: 'all' | RestaurantOrderStatus) => void;
   onSelectOrder: (id: string) => void;
   onStatusChange: (order: RestaurantOrder, status: RestaurantOrderStatus) => void;
   onPaymentStatusChange: (orderId: string, status: PaymentStatus) => void;
 }) {
+  const orderGroups = useMemo(() => groupOrdersByDate(orders), [orders]);
+
   return (
     <div className="ra-orders-layout">
       <section className="ra-page-stack">
@@ -750,20 +848,29 @@ function OrdersPage({
         <div className="ra-tabs">
           {orderTabs.map((item) => <button key={item.id} type="button" data-active={tab === item.id} onClick={() => onTabChange(item.id)}>{item.label}</button>)}
         </div>
-        <section className="ra-table ra-orders-table">
-          <div className="ra-table__head">
-            <span>Заказ</span><span>Клиент</span><span>Тип</span><span>Сумма</span><span>Статус</span><span />
-          </div>
-          {orders.map((order) => (
-            <article key={order.id} data-active={selectedOrder?.id === order.id} onClick={() => onSelectOrder(order.id)}>
-              <span><strong>#{order.orderNumber}</strong><small>{new Date(order.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</small></span>
-              <span><strong>{order.clientName}</strong><small>{order.clientPhone}</small></span>
-              <span>{order.fulfillmentType === 'delivery' ? 'Доставка' : order.fulfillmentType === 'takeaway' ? 'На вынос' : 'В зале'}</span>
-              <span>{formatPrice(order.total)}</span>
-              <span><em data-status={order.status}>{orderStatusLabels[order.status]}</em></span>
-              <span><ChevronRight /></span>
-            </article>
+        <section className="ra-orders-feed">
+          {orderGroups.map((group) => (
+            <div className="ra-order-group" key={group.key}>
+              <h3>{group.label}</h3>
+              <div>
+                {group.orders.map((order) => (
+                  <OrderSummaryCard
+                    key={order.id}
+                    order={order}
+                    active={selectedOrder?.id === order.id}
+                    highlighted={recentOrderIds.has(order.id)}
+                    onSelect={onSelectOrder}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
+          {orders.length === 0 && (
+            <section className="ra-empty-orders">
+              <ShoppingBag />
+              <strong>Заказов нет</strong>
+            </section>
+          )}
         </section>
       </section>
       {selectedOrder && (
@@ -776,6 +883,46 @@ function OrdersPage({
         />
       )}
     </div>
+  );
+}
+
+function OrderSummaryCard({
+  order,
+  active,
+  highlighted,
+  onSelect
+}: {
+  order: RestaurantOrder;
+  active: boolean;
+  highlighted: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const statusTone = orderStatusTones[order.status];
+
+  return (
+    <button
+      className="ra-order-summary-card"
+      type="button"
+      data-active={active}
+      data-highlighted={highlighted}
+      onClick={() => onSelect(order.id)}
+    >
+      <span className="ra-order-summary-card__head">
+        <strong>#{order.orderNumber}</strong>
+        <time dateTime={order.createdAt}>{formatOrderTime(order.createdAt)}</time>
+      </span>
+      <span className="ra-order-summary-card__meta">
+        {fulfillmentTypeLabels[order.fulfillmentType]} • {getOrderItemsCount(order)} поз.
+      </span>
+      <span className="ra-order-summary-card__address">{getOrderLocationLabel(order)}</span>
+      <span className="ra-order-summary-card__foot">
+        <strong>{formatPrice(order.total)}</strong>
+        <em data-tone={statusTone}>
+          {order.status === 'new' && <span aria-hidden="true" />}
+          {orderStatusLabels[order.status]}
+        </em>
+      </span>
+    </button>
   );
 }
 
@@ -799,7 +946,7 @@ function OrderDetails({
           <small>Заказ</small>
           <h2>#{order.orderNumber}</h2>
         </div>
-        <em data-status={order.status}>{orderStatusLabels[order.status]}</em>
+        <em data-tone={orderStatusTones[order.status]}>{orderStatusLabels[order.status]}</em>
       </header>
       <dl>
         <div><dt>Клиент</dt><dd>{order.clientName}</dd></div>

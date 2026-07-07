@@ -407,6 +407,22 @@ export async function getRestaurantOrders(slug: string): Promise<RestaurantOrder
   return ((data ?? []) as unknown as OrderRow[]).map(mapOrder);
 }
 
+export function subscribeToRestaurantOrdersRealtime(catalogId: string | null | undefined, onChange: () => void) {
+  if (!supabase || !catalogId) return () => undefined;
+
+  const channel = supabase
+    .channel(`restaurant-orders-${catalogId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `catalog_id=eq.${catalogId}` }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'order_status_history', filter: `catalog_id=eq.${catalogId}` }, onChange)
+    .subscribe();
+
+  return () => {
+    void supabase?.removeChannel(channel);
+  };
+}
+
 export async function getPublicRestaurantOrderStatus(orderId: string): Promise<PublicRestaurantOrderStatus | null> {
   if (!supabase) return null;
   const normalizedOrderId = orderId.trim();
