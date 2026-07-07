@@ -385,6 +385,11 @@ const rpcIsMissing = (error: unknown) => {
   return text.includes('pgrst202') || text.includes('could not find the function') || text.includes('function not found');
 };
 
+const rpcShouldRetryWithoutIdempotencyKey = (error: unknown) => {
+  const text = errorText(error).toLowerCase();
+  return rpcIsMissing(error) || (text.includes('42702') && text.includes('idempotency_key') && text.includes('ambiguous'));
+};
+
 export async function createClientPlatformOrder(input: ClientPlatformOrderInput): Promise<string | null> {
   if (!supabase) return null;
 
@@ -424,7 +429,7 @@ export async function createClientPlatformOrder(input: ClientPlatformOrderInput)
   };
   let { data, error } = await supabase.rpc(rpcName, rpcArgs);
 
-  if (error && rpcArgs.idempotency_key && rpcIsMissing(error)) {
+  if (error && rpcArgs.idempotency_key && rpcShouldRetryWithoutIdempotencyKey(error)) {
     const argsWithoutIdempotencyKey: Record<string, unknown> = { ...rpcArgs };
     delete argsWithoutIdempotencyKey.idempotency_key;
     const retryResult = await supabase.rpc(rpcName, argsWithoutIdempotencyKey);

@@ -38,11 +38,11 @@ declare
   verification_code text := lpad((floor(random() * 1000000))::int::text, 6, '0');
 begin
   if normalized_idempotency_key is not null then
-    select id
+    select o.id
       into created_order_id
-      from public.orders
-      where catalog_id = target_catalog_id
-        and idempotency_key = normalized_idempotency_key;
+      from public.orders o
+      where o.catalog_id = target_catalog_id
+        and o.idempotency_key = normalized_idempotency_key;
 
     if created_order_id is not null then
       return created_order_id;
@@ -98,11 +98,11 @@ begin
     )
     returning id into created_order_id;
   exception when unique_violation then
-    select id
+    select o.id
       into created_order_id
-      from public.orders
-      where catalog_id = target_catalog_id
-        and idempotency_key = normalized_idempotency_key;
+      from public.orders o
+      where o.catalog_id = target_catalog_id
+        and o.idempotency_key = normalized_idempotency_key;
 
     if created_order_id is not null then
       return created_order_id;
@@ -197,11 +197,11 @@ declare
   verification_code text := lpad((floor(random() * 1000000))::int::text, 6, '0');
 begin
   if normalized_idempotency_key is not null then
-    select id
+    select o.id
       into created_order_id
-      from public.orders
-      where catalog_id = target_catalog_id
-        and idempotency_key = normalized_idempotency_key;
+      from public.orders o
+      where o.catalog_id = target_catalog_id
+        and o.idempotency_key = normalized_idempotency_key;
 
     if created_order_id is not null then
       return created_order_id;
@@ -257,11 +257,11 @@ begin
     )
     returning id into created_order_id;
   exception when unique_violation then
-    select id
+    select o.id
       into created_order_id
-      from public.orders
-      where catalog_id = target_catalog_id
-        and idempotency_key = normalized_idempotency_key;
+      from public.orders o
+      where o.catalog_id = target_catalog_id
+        and o.idempotency_key = normalized_idempotency_key;
 
     if created_order_id is not null then
       return created_order_id;

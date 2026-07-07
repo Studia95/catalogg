@@ -99,6 +99,47 @@ describe('public restaurant order payload', () => {
     assert.equal(rpcArgs.idempotency_key, 'checkout-attempt-1');
   });
 
+  it('retries without idempotency key when the deployed SQL overload is ambiguous', async () => {
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const client: PublicRestaurantOrderClient = {
+      async rpc(name, args) {
+        calls.push({ name, args });
+        if (args.idempotency_key) {
+          return {
+            data: null,
+            error: {
+              code: '42702',
+              message: 'column reference "idempotency_key" is ambiguous'
+            }
+          };
+        }
+        return { data: 'order-retried', error: null };
+      },
+      from() {
+        return {
+          update() {
+            return {
+              async eq() {
+                return { error: null };
+              }
+            };
+          }
+        };
+      }
+    };
+
+    const orderId = await createRestaurantOrderWithClient(
+      client,
+      'catalog-1',
+      orderInput({ idempotencyKey: 'checkout-attempt-1' })
+    );
+
+    assert.equal(orderId, 'order-retried');
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].args.idempotency_key, 'checkout-attempt-1');
+    assert.equal('idempotency_key' in calls[1].args, false);
+  });
+
   it('keeps the order created when only the post-create location update is rejected', async () => {
     const calls: Array<{ table: string; patch: Record<string, unknown> }> = [];
     const client: PublicRestaurantOrderClient = {

@@ -33,7 +33,9 @@ describe('public order idempotency SQL', () => {
     const functionSql = extractFunction('create_public_restaurant_order');
 
     assert.match(functionSql, /idempotency_key text/);
-    assert.match(functionSql, /select id\s+into created_order_id\s+from public\.orders/s);
+    assert.match(functionSql, /select o\.id\s+into created_order_id\s+from public\.orders o/s);
+    assert.match(functionSql, /and o\.idempotency_key = normalized_idempotency_key/);
+    assert.doesNotMatch(functionSql, /and idempotency_key = normalized_idempotency_key/);
     assert.match(functionSql, /return created_order_id/);
     assert.match(functionSql, /exception when unique_violation/);
     assert.match(functionSql, /idempotency_key\s*\)/);
@@ -43,6 +45,9 @@ describe('public order idempotency SQL', () => {
     const functionSql = extractFunction('create_legacy_public_restaurant_order');
 
     assert.match(functionSql, /idempotency_key text/);
+    assert.match(functionSql, /select o\.id\s+into created_order_id\s+from public\.orders o/s);
+    assert.match(functionSql, /and o\.idempotency_key = normalized_idempotency_key/);
+    assert.doesNotMatch(functionSql, /and idempotency_key = normalized_idempotency_key/);
     assert.match(functionSql, /from public\.product\b/);
     assert.match(functionSql, /return created_order_id/);
     assert.match(functionSql, /exception when unique_violation/);

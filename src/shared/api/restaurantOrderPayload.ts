@@ -135,6 +135,11 @@ const rpcIsMissing = (error: unknown) => {
   return text.includes('pgrst202') || text.includes('could not find the function') || text.includes('function not found');
 };
 
+const rpcShouldRetryWithoutIdempotencyKey = (error: unknown) => {
+  const text = errorText(error).toLowerCase();
+  return rpcIsMissing(error) || (text.includes('42702') && text.includes('idempotency_key') && text.includes('ambiguous'));
+};
+
 const buildLocationPatch = ({
   fulfillmentType,
   deliveryLat = null,
@@ -190,7 +195,7 @@ export async function createRestaurantOrderWithClient(
   const rpcName = resolvePublicOrderRpcName(items);
   let { data, error } = await client.rpc(rpcName, restaurantRpcArgs);
 
-  if (error && restaurantRpcArgs.idempotency_key && rpcIsMissing(error)) {
+  if (error && restaurantRpcArgs.idempotency_key && rpcShouldRetryWithoutIdempotencyKey(error)) {
     const argsWithoutIdempotencyKey: Record<string, unknown> = { ...restaurantRpcArgs };
     delete argsWithoutIdempotencyKey.idempotency_key;
     const retryResult = await client.rpc(rpcName, argsWithoutIdempotencyKey);
