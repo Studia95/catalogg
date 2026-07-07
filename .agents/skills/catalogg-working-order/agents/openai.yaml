@@ -1,0 +1,3 @@
+interface:
+  display_name: "Catalogg Working Order"
+  short_description: "Preserve the known-good WayCatalog order flow"
