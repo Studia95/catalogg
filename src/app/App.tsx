@@ -32,6 +32,7 @@ import {
   Minus,
   Package,
   Paintbrush,
+  Phone,
   Pizza,
   Plus,
   Salad,
@@ -77,6 +78,7 @@ import {
   useOrderStore,
   useThemeStore
 } from '../features/stores';
+import { buildYandexMapsRouteUrl } from '../features/order/orderLifecycle';
 import {
   deleteProductFromSupabase,
   deleteCategoryFromSupabase,
@@ -2454,6 +2456,31 @@ function getAdminOrderLocationLabel(order: RestaurantOrder) {
   );
 }
 
+function getAdminOrderPhoneHref(phone: string) {
+  const normalizedPhone = phone.replace(/[^\d+]/g, '');
+  return normalizedPhone ? `tel:${normalizedPhone}` : '';
+}
+
+function getAdminOrderWhatsAppHref(phone: string) {
+  const digits = phone.replace(/\D/g, '');
+  return digits ? `https://wa.me/${digits}` : '';
+}
+
+function getAdminOrderRouteHref(order: RestaurantOrder) {
+  return buildYandexMapsRouteUrl({
+    from: {
+      lat: order.restaurantLat,
+      lng: order.restaurantLng,
+      address: order.restaurantAddress
+    },
+    to: {
+      lat: order.deliveryLat,
+      lng: order.deliveryLng,
+      address: getAdminOrderLocationLabel(order)
+    }
+  });
+}
+
 function playRestaurantAdminOrderSound() {
   try {
     const audioWindow = window as typeof window & { webkitAudioContext?: typeof AudioContext };
@@ -2794,6 +2821,10 @@ function OrderDetailsPanel({
     savePaymentStatus(catalogSlug, order.id, status);
     setPaymentStatus(status);
   };
+  const phoneHref = getAdminOrderPhoneHref(order.clientPhone);
+  const whatsappHref = getAdminOrderWhatsAppHref(order.clientPhone);
+  const routeHref = getAdminOrderRouteHref(order);
+  const orderAddress = getAdminOrderLocationLabel(order);
 
   return (
     <aside className="admin-order-details-panel">
@@ -2807,10 +2838,29 @@ function OrderDetailsPanel({
       <section className="admin-section-card">
         <div className="admin-order-meta">
           <span>{fulfillmentLabels[order.fulfillmentType]}</span>
-          <strong>{order.fulfillmentType === 'delivery' ? order.deliveryAddress : order.cabinLabel || 'Без адреса'}</strong>
+          <strong>{order.fulfillmentType === 'delivery' ? orderAddress : order.cabinLabel || 'Без адреса'}</strong>
           <small>{new Date(order.createdAt).toLocaleString('ru-RU')}</small>
         </div>
         {order.comment && <p className="admin-order-comment">{order.comment}</p>}
+      </section>
+      <section className="admin-section-card admin-customer-card">
+        <h2>Данные клиента</h2>
+        <div className="admin-customer-card__identity">
+          <span><User />{order.clientName || 'Клиент'}</span>
+          <span><Phone />{order.clientPhone || 'Телефон не указан'}</span>
+        </div>
+        <div className="admin-customer-card__actions">
+          {phoneHref && <a href={phoneHref}><Phone />Позвонить</a>}
+          {whatsappHref && <a href={whatsappHref} target="_blank" rel="noreferrer"><MessageCircle />WhatsApp</a>}
+        </div>
+      </section>
+      <section className="admin-section-card admin-route-card">
+        <h2>Адрес доставки</h2>
+        <p>{orderAddress}</p>
+        {order.deliveryLat !== null && order.deliveryLng !== null && (
+          <small>{order.deliveryLat.toFixed(7)}, {order.deliveryLng.toFixed(7)}</small>
+        )}
+        <a href={routeHref} target="_blank" rel="noreferrer"><MapPin />Построить маршрут</a>
       </section>
       <section className="admin-section-card">
         <h2>Состав заказа</h2>

@@ -729,6 +729,70 @@
   gap: 6px;
 }
 
+.admin-customer-card,
+.admin-route-card {
+  gap: 12px;
+}
+
+.admin-customer-card__identity,
+.admin-payment-requisites {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-customer-card__identity span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  color: #111827;
+  font-weight: 800;
+}
+
+.admin-customer-card__identity svg,
+.admin-customer-card__actions svg,
+.admin-route-card svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+
+.admin-customer-card__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-customer-card__actions a,
+.admin-route-card a {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #4338ca;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.admin-route-card p {
+  color: #111827;
+  font-weight: 800;
+}
+
+.admin-route-card small {
+  color: #667085;
+  font-weight: 800;
+}
+
+.admin-route-card a {
+  background: #f4f3ff;
+}
+
 .admin-order-comment {
   padding: 12px;
   border-radius: 14px;
