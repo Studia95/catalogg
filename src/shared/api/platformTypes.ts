@@ -61,6 +61,14 @@ export type PlatformSettlementRequest = {
   lastSeenAt: string;
 };
 
+export type PlatformDeliverySettlement = {
+  id: string;
+  cityName: string;
+  settlementName: string;
+  isActive: boolean;
+  createdAt: string;
+};
+
 export type PlatformBannerAdmin = {
   id: string;
   title: string;

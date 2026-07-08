@@ -111,7 +111,7 @@ import {
   type RestaurantOrderStatus
 } from '../shared/api/restaurantOrdersApi';
 import { getRestaurantPaymentsBySlug, saveRestaurantPayments } from '../shared/api/restaurantPaymentsApi';
-import { submitSettlementRequest } from '../shared/api/settlementsApi';
+import { getDeliverySettlements, submitSettlementRequest } from '../shared/api/settlementsApi';
 import {
   buildOrderStatusShareUrl,
   buildRestaurantOrderFingerprint,
@@ -1560,11 +1560,29 @@ function CheckoutScreen({
     if (deliverySettings.enable_delivery) modes.push({ key: 'delivery', label: 'Доставка', icon: MapPin });
     return modes.length > 0 ? modes : [{ key: 'takeaway', label: 'На вынос', icon: ShoppingBag }];
   }, [deliverySettings.enable_delivery, deliverySettings.enable_hall_orders, deliverySettings.enable_pickup]);
-  const settlementOptions = useMemo(
-    () => (deliverySettings.service_settlements ?? []).filter(Boolean),
-    [deliverySettings.service_settlements]
-  );
   const configuredCity = deliverySettings.primary_city.trim();
+  const { data: globalDeliverySettlements = [] } = useQuery({
+    queryKey: ['delivery-settlements-public'],
+    queryFn: getDeliverySettlements,
+    staleTime: 5 * 60 * 1000
+  });
+  const settlementOptions = useMemo(() => {
+    const normalizedConfiguredCity = configuredCity.toLocaleLowerCase('ru-RU');
+    const globalOptions = globalDeliverySettlements
+      .filter((settlement) => {
+        const cityName = settlement.cityName.trim().toLocaleLowerCase('ru-RU');
+        return !normalizedConfiguredCity || !cityName || cityName === normalizedConfiguredCity;
+      })
+      .map((settlement) => settlement.settlementName);
+
+    return Array.from(
+      new Set(
+        [...(deliverySettings.service_settlements ?? []), ...globalOptions]
+          .map((settlement) => settlement.trim())
+          .filter(Boolean)
+      )
+    );
+  }, [configuredCity, deliverySettings.service_settlements, globalDeliverySettlements]);
   const effectiveDeliveryCity = configuredCity || deliveryCity;
   const selectedCabin = activeCabins.find((cabin) => cabin.id === cabinId);
   const [isLocating, setIsLocating] = useState(false);
@@ -3108,6 +3126,12 @@ function DeliverySettingsCard({
   onSave: (settings: RestaurantDeliverySettings) => void;
 }) {
   const [draft, setDraft] = useState(settings);
+  const [selectedDirectorySettlement, setSelectedDirectorySettlement] = useState('');
+  const { data: directorySettlements = [] } = useQuery({
+    queryKey: ['delivery-settlements-public'],
+    queryFn: getDeliverySettlements,
+    staleTime: 5 * 60 * 1000
+  });
 
   useEffect(() => {
     setDraft(settings);
@@ -3127,6 +3151,29 @@ function DeliverySettingsCard({
 
   const setSettlements = (value: string) => {
     setDraft((current) => ({ ...current, service_settlements: parseSettlementList(value) }));
+  };
+  const cityOptions = useMemo(
+    () => Array.from(new Set(directorySettlements.map((settlement) => settlement.cityName.trim()).filter(Boolean))),
+    [directorySettlements]
+  );
+  const directorySettlementOptions = useMemo(() => {
+    const city = draft.primary_city.trim().toLocaleLowerCase('ru-RU');
+    return directorySettlements
+      .filter((settlement) => {
+        const settlementCity = settlement.cityName.trim().toLocaleLowerCase('ru-RU');
+        return !city || !settlementCity || settlementCity === city;
+      })
+      .map((settlement) => settlement.settlementName)
+      .filter(Boolean);
+  }, [directorySettlements, draft.primary_city]);
+  const addDirectorySettlement = () => {
+    const value = selectedDirectorySettlement.trim();
+    if (!value) return;
+    setDraft((current) => ({
+      ...current,
+      service_settlements: Array.from(new Set([...current.service_settlements, value]))
+    }));
+    setSelectedDirectorySettlement('');
   };
 
   return (
@@ -3156,10 +3203,29 @@ function DeliverySettingsCard({
         </label>
         <label>
           Основной город
-          <input value={draft.primary_city} onChange={(event) => setText('primary_city', event.target.value)} placeholder="Например: Грозный" />
+          <input
+            value={draft.primary_city}
+            onChange={(event) => setText('primary_city', event.target.value)}
+            placeholder="Например: Грозный"
+            list="restaurant-delivery-city-options"
+          />
+          <datalist id="restaurant-delivery-city-options">
+            {cityOptions.map((city) => <option value={city} key={city} />)}
+          </datalist>
         </label>
         <label className="delivery-settings-grid__wide">
           Села и районы обслуживания
+          {directorySettlementOptions.length > 0 && (
+            <span className="delivery-directory-picker">
+              <select value={selectedDirectorySettlement} onChange={(event) => setSelectedDirectorySettlement(event.target.value)}>
+                <option value="">Выбрать из справочника</option>
+                {directorySettlementOptions.map((settlement) => (
+                  <option value={settlement} key={settlement}>{settlement}</option>
+                ))}
+              </select>
+              <button type="button" onClick={addDirectorySettlement}>Добавить</button>
+            </span>
+          )}
           <textarea
             value={formatSettlementList(draft.service_settlements)}
             onChange={(event) => setSettlements(event.target.value)}

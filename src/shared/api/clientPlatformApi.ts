@@ -147,6 +147,12 @@ type PlatformSettingsRow = {
   support_whatsapp: string;
 };
 
+type DeliverySettlementRow = {
+  city_name: string;
+  settlement_name: string;
+  is_active: boolean | null;
+};
+
 const transliteration: Record<string, string> = {
   а: 'a',
   б: 'b',
@@ -548,7 +554,8 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
     paymentsResult,
     restaurantProfilesResult,
     bannersResult,
-    settingsResult
+    settingsResult,
+    deliverySettlementsResult
   ] =
     await Promise.all([
       supabase
@@ -585,7 +592,13 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
         .select('id, title, subtitle, kind, image_url, link_url, is_active, sort_order')
         .eq('is_active', true)
         .order('sort_order'),
-      supabase.from('platform_settings').select('support_whatsapp').eq('id', 'global').maybeSingle()
+      supabase.from('platform_settings').select('support_whatsapp').eq('id', 'global').maybeSingle(),
+      supabase
+        .from('delivery_settlements')
+        .select('city_name, settlement_name, is_active')
+        .eq('is_active', true)
+        .order('city_name', { ascending: true })
+        .order('settlement_name', { ascending: true })
     ]);
 
   let categories = (categoriesResult.data ?? []) as CategoryRow[];
@@ -597,6 +610,9 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
   const restaurantProfiles = (restaurantProfilesResult.data ?? []) as RestaurantProfileRow[];
   const bannerRows = (bannersResult.data ?? []) as PlatformBannerRow[];
   const settingsRow = settingsResult.data as PlatformSettingsRow | null;
+  const deliverySettlementRows = deliverySettlementsResult.error
+    ? []
+    : ((deliverySettlementsResult.data ?? []) as DeliverySettlementRow[]);
 
   const mangalCatalog = catalogs.find((catalog) => catalog.slug === 'mangal');
   if (mangalCatalog) {
@@ -681,10 +697,16 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
   });
 
   const cityNames = unique(
-    deliverySettings.flatMap((settings) => [
-      settings.primary_city || fallbackCityName,
-      ...(settings.service_settlements ?? [])
-    ])
+    [
+      ...deliverySettlementRows.flatMap((settlement) => [
+        settlement.city_name,
+        settlement.settlement_name
+      ]),
+      ...deliverySettings.flatMap((settings) => [
+        settings.primary_city || fallbackCityName,
+        ...(settings.service_settlements ?? [])
+      ])
+    ].map((name) => name.trim()).filter(Boolean)
   );
   const cities: ClientCity[] = (cityNames.length > 0 ? cityNames : [fallbackCityName]).map((name) => ({
     id: getCityId(name),

@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import { getAuthenticatedDriverId } from './deliveryApi';
 
 const getClientCatalogSlug = (client: { catalogs?: { slug?: string } | { slug?: string }[] | null } | null) => {
   const catalog = client?.catalogs;
@@ -26,6 +27,9 @@ export async function resolveLoginRedirect(email: string, password: string) {
   const user = sessionData.session?.user;
   if (!user) return '/';
   const normalizedEmail = user.email?.trim().toLowerCase() || email.trim().toLowerCase();
+
+  const authenticatedDriverId = await getAuthenticatedDriverId();
+  if (authenticatedDriverId) return '/driver';
 
   const { data: platformUser } = await supabase
     .from('users')

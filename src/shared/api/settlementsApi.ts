@@ -5,6 +5,7 @@ import {
   type SettlementRequestInput
 } from '../clientIdentity';
 import { supabase } from '../supabase';
+import type { PlatformDeliverySettlement } from './platformTypes';
 
 type SettlementRequestRow = {
   id: string;
@@ -17,6 +18,14 @@ type SettlementRequestRow = {
   last_seen_at: string;
 };
 
+type DeliverySettlementRow = {
+  id: string;
+  city_name: string;
+  settlement_name: string;
+  is_active: boolean | null;
+  created_at: string;
+};
+
 const mapSettlementRequest = (row: SettlementRequestRow): SettlementRequest => ({
   id: row.id,
   cityName: row.city_name,
@@ -27,6 +36,63 @@ const mapSettlementRequest = (row: SettlementRequestRow): SettlementRequest => (
   createdAt: row.created_at,
   lastSeenAt: row.last_seen_at
 });
+
+const mapDeliverySettlement = (row: DeliverySettlementRow): PlatformDeliverySettlement => ({
+  id: row.id,
+  cityName: row.city_name,
+  settlementName: row.settlement_name,
+  isActive: row.is_active ?? true,
+  createdAt: row.created_at
+});
+
+export async function getDeliverySettlements(): Promise<PlatformDeliverySettlement[]> {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('delivery_settlements')
+    .select('id, city_name, settlement_name, is_active, created_at')
+    .order('city_name', { ascending: true })
+    .order('settlement_name', { ascending: true });
+
+  if (error) {
+    console.warn('Failed to load delivery settlements from Supabase', error);
+    return [];
+  }
+
+  return ((data ?? []) as unknown as DeliverySettlementRow[]).map(mapDeliverySettlement);
+}
+
+export async function createDeliverySettlement(input: { cityName: string; settlementName: string }) {
+  const cityName = input.cityName.trim();
+  const settlementName = input.settlementName.trim();
+  if (!settlementName) throw new Error('Введите село или город.');
+
+  if (!supabase) {
+    return {
+      id: `local-settlement-${Date.now().toString(36)}`,
+      cityName,
+      settlementName,
+      isActive: true,
+      createdAt: new Date().toISOString()
+    } satisfies PlatformDeliverySettlement;
+  }
+
+  const { data, error } = await supabase
+    .from('delivery_settlements')
+    .upsert(
+      {
+        city_name: cityName,
+        settlement_name: settlementName,
+        is_active: true
+      },
+      { onConflict: 'city_name,settlement_name' }
+    )
+    .select('id, city_name, settlement_name, is_active, created_at')
+    .single();
+
+  if (error) throw new Error(error.message);
+  return mapDeliverySettlement(data as DeliverySettlementRow);
+}
 
 export async function submitSettlementRequest(input: SettlementRequestInput) {
   const localRequest = saveLocalSettlementRequest(input);

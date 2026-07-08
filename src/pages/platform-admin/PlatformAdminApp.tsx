@@ -46,10 +46,11 @@ import {
   updateClient
 } from '../../shared/api/clientsApi';
 import { createDriver, getDrivers, updateDriverProfile, updateDriverServiceSettlements } from '../../shared/api/driversApi';
-import { getSettlementRequests } from '../../shared/api/settlementsApi';
+import { createDeliverySettlement, getDeliverySettlements, getSettlementRequests } from '../../shared/api/settlementsApi';
 import { getPlatformAdminAccess, signInPlatformAdmin, signOutPlatformAdmin } from '../../shared/api/platformAdminApi';
 import type {
   ClientSignup,
+  PlatformDeliverySettlement,
   PlatformSettlementRequest,
   PlatformDriver,
   PlatformBannerAdmin,
@@ -779,6 +780,9 @@ function CreateClientForm({
 }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const settlementsQuery = useQuery({ queryKey: ['delivery-settlements'], queryFn: getDeliverySettlements });
+  const cityOptions = Array.from(new Set((settlementsQuery.data ?? []).map((settlement) => settlement.cityName.trim()).filter(Boolean)));
+  const settlementOptions = Array.from(new Set((settlementsQuery.data ?? []).map((settlement) => settlement.settlementName.trim()).filter(Boolean)));
   const firstTemplate = templates[0];
   const {
     register,
@@ -994,7 +998,10 @@ function CreateClientForm({
             </label>
             <label>
               Основной город
-              <input {...register('primaryCity')} placeholder="Например: Грозный" />
+              <input {...register('primaryCity')} placeholder="Например: Грозный" list="client-city-options" />
+              <datalist id="client-city-options">
+                {cityOptions.map((city) => <option value={city} key={city} />)}
+              </datalist>
             </label>
             <label>
               <span>
@@ -1038,6 +1045,7 @@ function CreateClientForm({
               placeholder={'Одно село на строку\nЧерноречье\nБеркат-Юрт'}
             />
             <em>Эти населенные пункты можно будет использовать для маршрутизации заказов водителям.</em>
+            {settlementOptions.length > 0 && <em>Справочник: {settlementOptions.slice(0, 8).join(', ')}</em>}
           </label>
         </section>
 
@@ -1095,6 +1103,9 @@ function EditClientForm({
   const [subscriptionStatus, setSubscriptionStatus] = useState(client.subscriptionStatus);
   const [subscriptionEndsAt, setSubscriptionEndsAt] = useState(client.subscriptionEndsAt?.slice(0, 10) ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const settlementsQuery = useQuery({ queryKey: ['delivery-settlements'], queryFn: getDeliverySettlements });
+  const cityOptions = Array.from(new Set((settlementsQuery.data ?? []).map((settlement) => settlement.cityName.trim()).filter(Boolean)));
+  const settlementOptions = Array.from(new Set((settlementsQuery.data ?? []).map((settlement) => settlement.settlementName.trim()).filter(Boolean)));
 
   const handleEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1162,7 +1173,10 @@ function EditClientForm({
             </label>
             <label>
               Основной город
-              <input value={primaryCity} onChange={(event) => setPrimaryCity(event.target.value)} />
+              <input value={primaryCity} onChange={(event) => setPrimaryCity(event.target.value)} list="edit-client-city-options" />
+              <datalist id="edit-client-city-options">
+                {cityOptions.map((city) => <option value={city} key={city} />)}
+              </datalist>
             </label>
           </div>
           <label>
@@ -1173,6 +1187,7 @@ function EditClientForm({
               rows={4}
               placeholder={'Одно село на строку\nЧерноречье\nБеркат-Юрт'}
             />
+            {settlementOptions.length > 0 && <em>Справочник: {settlementOptions.slice(0, 8).join(', ')}</em>}
           </label>
         </section>
 
@@ -1590,8 +1605,29 @@ function ClientSignupsPage() {
 }
 
 function SettlementsPage() {
+  const queryClient = useQueryClient();
   const requestsQuery = useQuery({ queryKey: ['settlement-requests'], queryFn: getSettlementRequests });
+  const settlementsQuery = useQuery({ queryKey: ['delivery-settlements'], queryFn: getDeliverySettlements });
   const requests = requestsQuery.data ?? [];
+  const settlements = settlementsQuery.data ?? [];
+  const [cityName, setCityName] = useState('');
+  const [settlementName, setSettlementName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const addSettlement = async (inputCityName = cityName, inputSettlementName = settlementName) => {
+    setIsSaving(true);
+    try {
+      await createDeliverySettlement({ cityName: inputCityName, settlementName: inputSettlementName });
+      setCityName('');
+      setSettlementName('');
+      toast.success('Населённый пункт добавлен');
+      void queryClient.invalidateQueries({ queryKey: ['delivery-settlements'] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Не удалось добавить населённый пункт');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const renderRequest = (request: PlatformSettlementRequest) => (
     <article className="settlement-request-card" key={request.id}>
@@ -1604,6 +1640,25 @@ function SettlementsPage() {
         <b>{request.count}</b>
         <small>{new Date(request.lastSeenAt).toLocaleDateString('ru-RU')}</small>
       </span>
+      <button
+        type="button"
+        onClick={() => void addSettlement(request.cityName, request.settlementName)}
+        disabled={isSaving}
+      >
+        <Plus />
+        Добавить
+      </button>
+    </article>
+  );
+
+  const renderSettlement = (settlement: PlatformDeliverySettlement) => (
+    <article className="settlement-directory-card" key={settlement.id}>
+      <span><MapPin /></span>
+      <div>
+        <strong>{settlement.settlementName}</strong>
+        <small>{settlement.cityName || 'Город не указан'}</small>
+      </div>
+      <b>{settlement.isActive ? 'Активен' : 'Скрыт'}</b>
     </article>
   );
 
@@ -1615,6 +1670,44 @@ function SettlementsPage() {
           <p>Новые сёла от клиентов и будущий справочник зон доставки</p>
         </div>
       </header>
+
+      <form
+        className="settlement-directory-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void addSettlement();
+        }}
+      >
+        <label>
+          Город
+          <input value={cityName} onChange={(event) => setCityName(event.target.value)} placeholder="Грозный" />
+        </label>
+        <label>
+          Село / район
+          <input value={settlementName} onChange={(event) => setSettlementName(event.target.value)} placeholder="Цоци-Юрт" required />
+        </label>
+        <button type="submit" disabled={isSaving}>
+          <Plus />
+          {isSaving ? 'Добавляем...' : 'Добавить'}
+        </button>
+      </form>
+
+      <section className="platform-section-head">
+        <div>
+          <h2>Справочник</h2>
+          <p>Эти города и сёла будут видны клиентам, ресторанам и водителям.</p>
+        </div>
+      </section>
+
+      {settlementsQuery.isLoading && <div className="platform-state">Загружаем справочник...</div>}
+      {!settlementsQuery.isLoading && settlements.length === 0 && (
+        <section className="platform-placeholder">
+          <MapPin />
+          <h2>Справочник пока пуст</h2>
+          <p>Добавьте город или село вручную, даже если клиент ещё не отправлял заявку.</p>
+        </section>
+      )}
+      {settlements.length > 0 && <section className="settlement-directory-list">{settlements.map(renderSettlement)}</section>}
 
       {requestsQuery.isLoading && <div className="platform-state">Загружаем заявки...</div>}
       {requestsQuery.isError && (
@@ -1640,6 +1733,7 @@ function SettlementsPage() {
 function DriversPage() {
   const queryClient = useQueryClient();
   const driversQuery = useQuery({ queryKey: ['platform-drivers'], queryFn: getDrivers });
+  const settlementsQuery = useQuery({ queryKey: ['delivery-settlements'], queryFn: getDeliverySettlements });
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -1696,6 +1790,9 @@ function DriversPage() {
   };
 
   const drivers = driversQuery.data ?? [];
+  const settlementOptions = settlementsQuery.data ?? [];
+  const cityOptions = Array.from(new Set(settlementOptions.map((settlement) => settlement.cityName.trim()).filter(Boolean)));
+  const settlementNames = Array.from(new Set(settlementOptions.map((settlement) => settlement.settlementName.trim()).filter(Boolean)));
 
   return (
     <main className="platform-page">
@@ -1724,6 +1821,12 @@ function DriversPage() {
       )}
 
       <form className="client-form driver-create-panel" onSubmit={createNewDriver}>
+        <datalist id="driver-city-options">
+          {cityOptions.map((city) => <option value={city} key={city} />)}
+        </datalist>
+        <datalist id="driver-settlement-options">
+          {settlementNames.map((settlement) => <option value={settlement} key={settlement} />)}
+        </datalist>
         <section className="client-form-section">
           <h3>Новый водитель</h3>
           <div className="client-form-grid client-form-grid--three">
@@ -1747,7 +1850,7 @@ function DriversPage() {
             </label>
             <label>
               Город
-              <input value={cityName} onChange={(event) => setCityName(event.target.value)} placeholder="Грозный" />
+              <input value={cityName} onChange={(event) => setCityName(event.target.value)} placeholder="Грозный" list="driver-city-options" />
             </label>
             <label>
               Сёла работы
@@ -1757,6 +1860,7 @@ function DriversPage() {
                 placeholder={'Грозный\nЦоци-Юрт\nШали'}
                 rows={3}
               />
+              {settlementNames.length > 0 && <em>Справочник: {settlementNames.slice(0, 8).join(', ')}</em>}
             </label>
             <label>
               Транспорт
@@ -1818,6 +1922,7 @@ function DriversPage() {
           {drivers.map((driver: PlatformDriver) => (
             <DriverAdminCard
               driver={driver}
+              settlementOptions={settlementNames}
               key={driver.id}
               onSaved={() => void queryClient.invalidateQueries({ queryKey: ['platform-drivers'] })}
             />
@@ -1828,7 +1933,15 @@ function DriversPage() {
   );
 }
 
-function DriverAdminCard({ driver, onSaved }: { driver: PlatformDriver; onSaved: () => void }) {
+function DriverAdminCard({
+  driver,
+  settlementOptions,
+  onSaved
+}: {
+  driver: PlatformDriver;
+  settlementOptions: string[];
+  onSaved: () => void;
+}) {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(driver.name);
   const [phone, setPhone] = useState(driver.phone);
@@ -1890,7 +2003,7 @@ function DriverAdminCard({ driver, onSaved }: { driver: PlatformDriver; onSaved:
           </label>
           <label>
             Город
-            <input value={cityName} onChange={(event) => setCityName(event.target.value)} placeholder="Грозный" />
+            <input value={cityName} onChange={(event) => setCityName(event.target.value)} placeholder="Грозный" list="driver-city-options" />
           </label>
           <label>
             Транспорт
@@ -1908,6 +2021,7 @@ function DriverAdminCard({ driver, onSaved }: { driver: PlatformDriver; onSaved:
               rows={3}
               placeholder={'Грозный\nЦоци-Юрт\nШали'}
             />
+            {settlementOptions.length > 0 && <em>Справочник: {settlementOptions.slice(0, 6).join(', ')}</em>}
           </label>
           <label>
             Новый пароль

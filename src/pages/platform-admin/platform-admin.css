@@ -952,9 +952,131 @@
   gap: 12px;
 }
 
-.settlement-request-card {
+.platform-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 22px;
+  margin-bottom: 12px;
+}
+
+.platform-section-head h2,
+.platform-section-head p {
+  margin: 0;
+}
+
+.platform-section-head h2 {
+  color: #111827;
+  font-size: 20px;
+}
+
+.platform-section-head p {
+  margin-top: 4px;
+  color: #667085;
+  font-weight: 700;
+}
+
+.settlement-directory-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+}
+
+.settlement-directory-form label {
+  display: grid;
+  gap: 7px;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.settlement-directory-form input {
+  min-height: 44px;
+  border: 1px solid #d8dee9;
+  border-radius: 10px;
+  padding: 0 12px;
+  color: #111827;
+  font: inherit;
+  font-weight: 900;
+}
+
+.settlement-directory-form button,
+.settlement-request-card button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 0 14px;
+  background: #111827;
+  color: #fff;
+  font-weight: 900;
+}
+
+.settlement-directory-form button svg,
+.settlement-request-card button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.settlement-directory-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.settlement-directory-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  padding: 14px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+}
+
+.settlement-directory-card > span {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: #5b3df4;
+}
+
+.settlement-directory-card strong,
+.settlement-directory-card small,
+.settlement-directory-card b {
+  display: block;
+}
+
+.settlement-directory-card small {
+  margin-top: 4px;
+  color: #667085;
+  font-weight: 800;
+}
+
+.settlement-directory-card b {
+  color: #15803d;
+  font-size: 12px;
+  text-align: right;
+}
+
+.settlement-request-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 14px;
   border: 1px solid #bbf7d0;
@@ -988,6 +1110,22 @@
   color: #15803d;
   font-size: 22px;
   text-align: right;
+}
+
+@media (max-width: 760px) {
+  .settlement-directory-form {
+    grid-template-columns: 1fr;
+  }
+
+  .settlement-request-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .settlement-request-card > span:last-of-type,
+  .settlement-request-card button {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
 }
 
 .client-signup-card {

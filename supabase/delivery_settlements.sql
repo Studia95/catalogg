@@ -20,6 +20,13 @@ alter table public.drivers
   add column if not exists city_name text not null default '',
   add column if not exists service_settlements text[] not null default '{}';
 
+update public.users platform_user
+set auth_user_id = auth_user.id
+from auth.users auth_user
+where platform_user.auth_user_id is null
+  and platform_user.email <> ''
+  and lower(platform_user.email) = lower(auth_user.email);
+
 drop policy if exists "catalog members read own membership" on public.catalog_members;
 create policy "catalog members read own membership"
   on public.catalog_members
@@ -41,6 +48,51 @@ as $$
   order by case when auth_user_id = auth.uid() then 0 else 1 end
   limit 1
 $$;
+
+create table if not exists public.delivery_settlements (
+  id uuid primary key default gen_random_uuid(),
+  city_name text not null default '',
+  settlement_name text not null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(city_name, settlement_name)
+);
+
+drop trigger if exists delivery_settlements_updated_at on public.delivery_settlements;
+create trigger delivery_settlements_updated_at before update on public.delivery_settlements
+for each row execute function public.set_updated_at();
+
+alter table public.delivery_settlements enable row level security;
+
+drop policy if exists "Anyone can read active delivery settlements" on public.delivery_settlements;
+create policy "Anyone can read active delivery settlements"
+  on public.delivery_settlements
+  for select
+  to anon, authenticated
+  using (is_active);
+
+drop policy if exists "Platform admins manage delivery settlements" on public.delivery_settlements;
+create policy "Platform admins manage delivery settlements"
+  on public.delivery_settlements
+  for all
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.users
+      where users.auth_user_id = auth.uid()
+        and users.role = 'super_admin'
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.users
+      where users.auth_user_id = auth.uid()
+        and users.role = 'super_admin'
+    )
+  );
 
 create table if not exists public.settlement_requests (
   id uuid primary key default gen_random_uuid(),
