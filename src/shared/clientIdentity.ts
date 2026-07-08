@@ -24,6 +24,7 @@ export type SettlementRequestInput = {
 };
 
 export const settlementRequestsStorageKey = 'waycatalog:settlement-requests';
+export const clientPlatformStorageKey = 'waycatalog-client-platform';
 
 const profileStorageKey = (slug: string) => `waycatalog:${slug}:public-client-profile`;
 
@@ -50,6 +51,21 @@ const isProfile = (value: unknown): value is PublicClientProfile => {
   );
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const stringFromRecord = (record: Record<string, unknown>, key: string) =>
+  typeof record[key] === 'string' ? record[key] : '';
+
+const readJson = (value: string | null): unknown => {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+};
+
 export const loadPublicClientProfile = (slug: string, storage: Storage = localStorage): PublicClientProfile | null => {
   try {
     const stored = storage.getItem(profileStorageKey(slug));
@@ -59,6 +75,74 @@ export const loadPublicClientProfile = (slug: string, storage: Storage = localSt
   } catch {
     return null;
   }
+};
+
+const mergeProfiles = (...profiles: Array<PublicClientProfile | null>): PublicClientProfile | null => {
+  const merged = profiles.reduce<PublicClientProfile>(
+    (current, profile) => ({
+      name: profile?.name || current.name,
+      phone: profile?.phone || current.phone,
+      deliveryCity: profile?.deliveryCity || current.deliveryCity,
+      deliverySettlement: profile?.deliverySettlement || current.deliverySettlement,
+      deliveryAddress: profile?.deliveryAddress || current.deliveryAddress
+    }),
+    { name: '', phone: '', deliveryCity: '', deliverySettlement: '', deliveryAddress: '' }
+  );
+
+  return Object.values(merged).some(Boolean) ? merged : null;
+};
+
+export const loadClientPlatformProfile = (
+  slug: string,
+  storage: Storage = localStorage
+): PublicClientProfile | null => {
+  const stored = readJson(storage.getItem(clientPlatformStorageKey));
+  if (!isRecord(stored)) return null;
+
+  const state = isRecord(stored.state) ? stored.state : stored;
+  const profile = isRecord(state.profile) ? state.profile : {};
+  const drafts = isRecord(state.checkoutDrafts) ? state.checkoutDrafts : {};
+  const draft = isRecord(drafts[slug]) ? drafts[slug] : {};
+  const addresses = Array.isArray(state.addresses) ? state.addresses.filter(isRecord) : [];
+  const draftAddressId = stringFromRecord(draft, 'addressId');
+  const selectedAddress =
+    addresses.find((address) => stringFromRecord(address, 'id') === draftAddressId) ??
+    addresses.find((address) => address.isDefault === true) ??
+    addresses[0];
+
+  const nextProfile: PublicClientProfile = {
+    name: normalizeText(stringFromRecord(draft, 'clientName') || stringFromRecord(profile, 'name')),
+    phone: normalizeText(stringFromRecord(draft, 'clientPhone') || stringFromRecord(profile, 'phone')),
+    deliveryCity: '',
+    deliverySettlement: '',
+    deliveryAddress: normalizeText(
+      stringFromRecord(draft, 'deliveryAddress') || (selectedAddress ? stringFromRecord(selectedAddress, 'addressLine') : '')
+    )
+  };
+
+  return Object.values(nextProfile).some(Boolean) ? nextProfile : null;
+};
+
+export const loadPublicClientCheckoutProfile = (
+  slug: string,
+  storage: Storage = localStorage
+): PublicClientProfile | null =>
+  mergeProfiles(loadClientPlatformProfile(slug, storage), loadPublicClientProfile(slug, storage));
+
+const saveClientPlatformProfile = (profile: PublicClientProfile, storage: Storage) => {
+  const stored = readJson(storage.getItem(clientPlatformStorageKey));
+  const container = isRecord(stored) ? stored : {};
+  const state = isRecord(container.state) ? container.state : isRecord(stored) ? stored : {};
+  const currentProfile = isRecord(state.profile) ? state.profile : {};
+  const nextProfile = {
+    ...currentProfile,
+    name: profile.name || stringFromRecord(currentProfile, 'name'),
+    phone: profile.phone || stringFromRecord(currentProfile, 'phone')
+  };
+  const nextState = { ...state, profile: nextProfile };
+  const nextContainer = isRecord(container.state) ? { ...container, state: nextState } : nextState;
+
+  storage.setItem(clientPlatformStorageKey, JSON.stringify(nextContainer));
 };
 
 export const savePublicClientProfile = (
@@ -75,6 +159,7 @@ export const savePublicClientProfile = (
   };
 
   storage.setItem(profileStorageKey(slug), JSON.stringify(nextProfile));
+  saveClientPlatformProfile(nextProfile, storage);
   return nextProfile;
 };
 

@@ -5,6 +5,9 @@ import { describe, it } from 'node:test';
 const identity = await import('./clientIdentity.ts');
 
 const {
+  clientPlatformStorageKey,
+  loadClientPlatformProfile,
+  loadPublicClientCheckoutProfile,
   loadPublicClientProfile,
   normalizeSettlementName,
   savePublicClientProfile,
@@ -56,6 +59,69 @@ describe('public client identity', () => {
     assert.deepEqual(loadPublicClientProfile('mangal', storage), {
       name: 'Адам',
       phone: '+7 928 123-45-67',
+      deliveryCity: 'Грозный',
+      deliverySettlement: 'Цоци-Юрт',
+      deliveryAddress: 'ул. Ленина, 1'
+    });
+  });
+
+  it('loads registered client profile from the PWA client platform store', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+      clientPlatformStorageKey,
+      JSON.stringify({
+        state: {
+          profile: { name: 'Амина', phone: '+7 999 111-22-33' },
+          addresses: [
+            {
+              id: 'home',
+              addressLine: 'ул. Мира, 7',
+              isDefault: true
+            }
+          ],
+          checkoutDrafts: {}
+        },
+        version: 2
+      })
+    );
+
+    assert.deepEqual(loadClientPlatformProfile('mangal', storage), {
+      name: 'Амина',
+      phone: '+7 999 111-22-33',
+      deliveryCity: '',
+      deliverySettlement: '',
+      deliveryAddress: 'ул. Мира, 7'
+    });
+  });
+
+  it('merges restaurant checkout profile over the global PWA profile', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+      clientPlatformStorageKey,
+      JSON.stringify({
+        state: {
+          profile: { name: 'Амина', phone: '+7 999 111-22-33' },
+          addresses: [],
+          checkoutDrafts: {}
+        },
+        version: 2
+      })
+    );
+    savePublicClientProfile(
+      'mangal',
+      {
+        name: '',
+        phone: '',
+        deliveryCity: 'Грозный',
+        deliverySettlement: 'Цоци-Юрт',
+        deliveryAddress: 'ул. Ленина, 1'
+      },
+      storage
+    );
+
+    assert.deepEqual(loadPublicClientCheckoutProfile('mangal', storage), {
+      name: 'Амина',
+      phone: '+7 999 111-22-33',
       deliveryCity: 'Грозный',
       deliverySettlement: 'Цоци-Юрт',
       deliveryAddress: 'ул. Ленина, 1'

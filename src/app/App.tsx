@@ -142,7 +142,7 @@ import {
   type RestaurantPaymentSettings
 } from '../shared/paymentSettings';
 import {
-  loadPublicClientProfile,
+  loadPublicClientCheckoutProfile,
   normalizeSettlementName,
   savePublicClientProfile
 } from '../shared/clientIdentity';
@@ -1696,7 +1696,7 @@ function CheckoutScreen({
   useEffect(() => {
     if (profileHydratedRef.current) return;
     profileHydratedRef.current = true;
-    const savedProfile = loadPublicClientProfile(catalogSlug);
+    const savedProfile = loadPublicClientCheckoutProfile(catalogSlug);
     if (!savedProfile) return;
 
     setOrder({
