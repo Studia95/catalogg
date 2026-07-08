@@ -50,6 +50,17 @@ export type ClientSignup = {
   createdAt: string;
 };
 
+export type PlatformSettlementRequest = {
+  id: string;
+  cityName: string;
+  settlementName: string;
+  source: string;
+  count: number;
+  status: 'new' | 'approved' | 'dismissed';
+  createdAt: string;
+  lastSeenAt: string;
+};
+
 export type PlatformBannerAdmin = {
   id: string;
   title: string;
@@ -130,6 +141,7 @@ export type PlatformDriver = {
   carNumber: string;
   photoUrl: string;
   cityName: string;
+  serviceSettlements: string[];
   isActive: boolean;
   isOnline: boolean;
   status: string;
@@ -143,6 +155,7 @@ export type CreateDriverPayload = {
   phone?: string;
   password: string;
   cityName?: string;
+  serviceSettlements?: string[];
   vehicleInfo?: string;
   carNumber?: string;
   photoUrl?: string;
@@ -152,6 +165,20 @@ export type CreateDriverResult = {
   driverId: string;
   userId: string;
   email: string;
+};
+
+export type UpdateDriverPayload = {
+  driverId: string;
+  userId?: string;
+  name?: string;
+  phone?: string;
+  cityName?: string;
+  serviceSettlements?: string[];
+  vehicleInfo?: string;
+  carNumber?: string;
+  photoUrl?: string;
+  password?: string;
+  isActive?: boolean;
 };
 
 export type UpdateClientPayload = {

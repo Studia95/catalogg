@@ -110,6 +110,7 @@ import {
   type RestaurantOrderStatus
 } from '../shared/api/restaurantOrdersApi';
 import { getRestaurantPaymentsBySlug, saveRestaurantPayments } from '../shared/api/restaurantPaymentsApi';
+import { submitSettlementRequest } from '../shared/api/settlementsApi';
 import {
   buildOrderStatusShareUrl,
   buildRestaurantOrderFingerprint,
@@ -134,6 +135,11 @@ import {
   type PaymentStatus,
   type RestaurantPaymentSettings
 } from '../shared/paymentSettings';
+import {
+  loadPublicClientProfile,
+  normalizeSettlementName,
+  savePublicClientProfile
+} from '../shared/clientIdentity';
 
 const queryClient = new QueryClient();
 
@@ -1553,18 +1559,27 @@ function CheckoutScreen({
   );
   const configuredCity = deliverySettings.primary_city.trim();
   const effectiveDeliveryCity = configuredCity || deliveryCity;
-  const finalDeliveryAddress = buildDeliveryAddress(effectiveDeliveryCity, deliverySettlement, deliveryAddress);
   const selectedCabin = activeCabins.find((cabin) => cabin.id === cabinId);
   const [isLocating, setIsLocating] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [geoError, setGeoError] = useState('');
   const [isDeliveryMapOpen, setIsDeliveryMapOpen] = useState(false);
+  const [usesCustomSettlement, setUsesCustomSettlement] = useState(false);
+  const [customSettlement, setCustomSettlement] = useState('');
+  const effectiveDeliverySettlement = normalizeSettlementName(
+    usesCustomSettlement ? customSettlement : deliverySettlement
+  );
+  const finalDeliveryAddress = buildDeliveryAddress(effectiveDeliveryCity, effectiveDeliverySettlement, deliveryAddress);
+  const settlementNeedsAdminReview =
+    Boolean(effectiveDeliverySettlement) &&
+    !settlementOptions.some((settlement) => normalizeSettlementName(settlement) === effectiveDeliverySettlement);
   const selectedDeliveryLat = deliveryLat ?? DEFAULT_DELIVERY_LOCATION.lat;
   const selectedDeliveryLng = deliveryLng ?? DEFAULT_DELIVERY_LOCATION.lng;
   const locationSessionRef = useRef<{ watchId: number | null; timeoutId: number | null }>({
     watchId: null,
     timeoutId: null
   });
+  const profileHydratedRef = useRef(false);
   const submitLockRef = useRef(false);
   const orderAttemptRef = useRef<{ fingerprint: string; idempotencyKey: string } | null>(null);
 
@@ -1673,9 +1688,30 @@ function CheckoutScreen({
   useEffect(() => clearLocationSession, [clearLocationSession]);
 
   useEffect(() => {
+    if (profileHydratedRef.current) return;
+    profileHydratedRef.current = true;
+    const savedProfile = loadPublicClientProfile(catalogSlug);
+    if (!savedProfile) return;
+
+    setOrder({
+      clientName: clientName || savedProfile.name,
+      clientPhone: clientPhone || savedProfile.phone,
+      deliveryCity: deliveryCity || savedProfile.deliveryCity,
+      deliverySettlement: deliverySettlement || savedProfile.deliverySettlement,
+      deliveryAddress: deliveryAddress || savedProfile.deliveryAddress
+    });
+  }, [catalogSlug, clientName, clientPhone, deliveryAddress, deliveryCity, deliverySettlement, setOrder]);
+
+  useEffect(() => {
     if (!configuredCity || deliveryCity === configuredCity) return;
     setOrder({ deliveryCity: configuredCity });
   }, [configuredCity, deliveryCity, setOrder]);
+
+  useEffect(() => {
+    if (!deliverySettlement || settlementOptions.includes(deliverySettlement)) return;
+    setUsesCustomSettlement(true);
+    setCustomSettlement(deliverySettlement);
+  }, [deliverySettlement, settlementOptions]);
 
   useEffect(() => {
     if (availableModes.some((item) => item.key === mode)) return;
@@ -1709,7 +1745,7 @@ function CheckoutScreen({
         : 'На вынос',
     ...(mode === 'hall' && selectedCabin ? [`Кабинка: ${selectedCabin.title} (${selectedCabin.capacity})`] : []),
     ...(mode === 'delivery' && deliveryCity ? [`Город: ${deliveryCity}`] : []),
-    ...(mode === 'delivery' && deliverySettlement ? [`Село / район: ${deliverySettlement}`] : []),
+    ...(mode === 'delivery' && effectiveDeliverySettlement ? [`Село / район: ${effectiveDeliverySettlement}`] : []),
     ...(mode === 'delivery' && deliveryAddress ? [`Адрес: ${deliveryAddress}`] : []),
     ...(mode === 'delivery' && clientName ? [`Имя: ${clientName}`] : []),
     ...(mode === 'delivery' && clientPhone ? [`Телефон: ${clientPhone}`] : []),
@@ -1881,17 +1917,40 @@ function CheckoutScreen({
             <label className="checkout-field">
               <span>Село / район</span>
               {settlementOptions.length > 0 ? (
-                <select
-                  value={deliverySettlement}
-                  onChange={(event) => setOrder({ deliverySettlement: event.target.value })}
-                >
-                  <option value="">Выберите населенный пункт</option>
-                  {settlementOptions.map((settlement) => (
-                    <option value={settlement} key={settlement}>
-                      {settlement}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <select
+                    value={usesCustomSettlement ? '__other__' : deliverySettlement}
+                    onChange={(event) => {
+                      if (event.target.value === '__other__') {
+                        setUsesCustomSettlement(true);
+                        setOrder({ deliverySettlement: customSettlement });
+                        return;
+                      }
+                      setUsesCustomSettlement(false);
+                      setCustomSettlement('');
+                      setOrder({ deliverySettlement: event.target.value });
+                    }}
+                  >
+                    <option value="">Выберите населенный пункт</option>
+                    {settlementOptions.map((settlement) => (
+                      <option value={settlement} key={settlement}>
+                        {settlement}
+                      </option>
+                    ))}
+                    <option value="__other__">Другое село</option>
+                  </select>
+                  {usesCustomSettlement && (
+                    <input
+                      value={customSettlement}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setCustomSettlement(value);
+                        setOrder({ deliverySettlement: value });
+                      }}
+                      placeholder="Введите своё село"
+                    />
+                  )}
+                </>
               ) : (
                 <input
                   value={deliverySettlement}
@@ -2012,9 +2071,23 @@ function CheckoutScreen({
                 toast.error('Введите имя и номер телефона для доставки');
                 return;
               }
-              if (!effectiveDeliveryCity || !deliverySettlement || !deliveryAddress.trim()) {
+              if (!effectiveDeliveryCity || !effectiveDeliverySettlement || !deliveryAddress.trim()) {
                 toast.error('Укажите город, населенный пункт и адрес доставки');
                 return;
+              }
+              savePublicClientProfile(catalogSlug, {
+                name: clientName,
+                phone: clientPhone,
+                deliveryCity: effectiveDeliveryCity,
+                deliverySettlement: effectiveDeliverySettlement,
+                deliveryAddress
+              });
+              if (settlementNeedsAdminReview) {
+                void submitSettlementRequest({
+                  cityName: effectiveDeliveryCity,
+                  settlementName: effectiveDeliverySettlement,
+                  source: `restaurant:${catalogSlug}`
+                });
               }
             }
             const orderPayload: CreateRestaurantOrderFromCartInput = {
@@ -2023,7 +2096,7 @@ function CheckoutScreen({
               fulfillmentType: mode,
               cabinLabel: mode === 'hall' ? selectedCabin?.title ?? '' : '',
               deliveryCity: effectiveDeliveryCity,
-              deliverySettlement,
+              deliverySettlement: effectiveDeliverySettlement,
               deliveryAddress: finalDeliveryAddress,
               deliveryLat,
               deliveryLng,

@@ -947,6 +947,49 @@
   gap: 12px;
 }
 
+.settlement-request-list {
+  display: grid;
+  gap: 12px;
+}
+
+.settlement-request-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #f6fef9;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.settlement-request-card__badge {
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.settlement-request-card strong,
+.settlement-request-card small,
+.settlement-request-card b {
+  display: block;
+}
+
+.settlement-request-card small {
+  margin-top: 4px;
+  color: #667085;
+}
+
+.settlement-request-card b {
+  color: #15803d;
+  font-size: 22px;
+  text-align: right;
+}
+
 .client-signup-card {
   display: grid;
   grid-template-columns: 46px minmax(0, 1fr) auto 42px;
@@ -1503,7 +1546,7 @@
 
 .driver-admin-card {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1.3fr) minmax(0, 1fr) 56px;
+  grid-template-columns: 96px minmax(0, 1.3fr) minmax(0, 1fr) 56px auto;
   align-items: center;
   gap: 16px;
   padding: 16px;
@@ -1539,6 +1582,95 @@
 .driver-admin-card b {
   justify-self: end;
   color: #111827;
+}
+
+.driver-admin-card > button,
+.driver-admin-actions button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  padding: 0 12px;
+  background: #fff;
+  color: #111827;
+  font-weight: 900;
+  box-shadow: inset 0 0 0 1px #d8dee9;
+}
+
+.driver-admin-card--edit {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.driver-admin-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.driver-admin-edit-grid label {
+  display: grid;
+  gap: 7px;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.driver-admin-edit-grid input,
+.driver-admin-edit-grid textarea {
+  width: 100%;
+  border: 1px solid #d8dee9;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+  font-weight: 800;
+}
+
+.driver-admin-edit-grid textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.driver-admin-password-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px 42px;
+  gap: 8px;
+}
+
+.driver-admin-password-field button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #fff;
+  color: #111827;
+  box-shadow: inset 0 0 0 1px #d8dee9;
+}
+
+.driver-admin-password-field button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.driver-admin-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.driver-admin-actions button[type='submit'] {
+  background: #111827;
+  color: #fff;
+}
+
+.driver-admin-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .client-form__consent-option {
@@ -1885,6 +2017,19 @@
   .driver-access-panel button,
   .driver-admin-card b {
     justify-self: stretch;
+  }
+
+  .driver-admin-card > button {
+    width: 100%;
+  }
+
+  .driver-admin-edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .driver-admin-actions {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .client-form-footer {

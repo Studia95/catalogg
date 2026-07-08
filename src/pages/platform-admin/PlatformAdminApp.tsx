@@ -16,6 +16,7 @@ import {
   LockKeyhole,
   LayoutTemplate,
   LogOut,
+  MapPin,
   MoreHorizontal,
   Plus,
   Search,
@@ -44,10 +45,12 @@ import {
   savePlatformGlobalSettings,
   updateClient
 } from '../../shared/api/clientsApi';
-import { createDriver, getDrivers } from '../../shared/api/driversApi';
+import { createDriver, getDrivers, updateDriverProfile, updateDriverServiceSettlements } from '../../shared/api/driversApi';
+import { getSettlementRequests } from '../../shared/api/settlementsApi';
 import { getPlatformAdminAccess, signInPlatformAdmin, signOutPlatformAdmin } from '../../shared/api/platformAdminApi';
 import type {
   ClientSignup,
+  PlatformSettlementRequest,
   PlatformDriver,
   PlatformBannerAdmin,
   PlatformClient,
@@ -68,6 +71,7 @@ type PlatformRoute =
   | 'dashboard'
   | 'clients'
   | 'client-signups'
+  | 'settlements'
   | 'drivers'
   | 'catalogs'
   | 'templates'
@@ -95,6 +99,7 @@ const navItems: Array<{ route: PlatformRoute; label: string; detail: string; Ico
   { route: 'dashboard', label: 'Главная', detail: 'Дашборд', Icon: Home },
   { route: 'clients', label: 'Клиенты', detail: 'Список клиентов', Icon: Users },
   { route: 'client-signups', label: 'Пользователи', detail: 'Клиенты приложения', Icon: UserRound },
+  { route: 'settlements', label: 'География', detail: 'Сёла и заявки', Icon: MapPin },
   { route: 'drivers', label: 'Водители', detail: 'Доступы и статусы', Icon: Truck },
   { route: 'catalogs', label: 'Каталоги', detail: 'Управление каталогами', Icon: Store },
   { route: 'templates', label: 'Шаблоны', detail: 'Управление шаблонами', Icon: LayoutTemplate },
@@ -148,6 +153,7 @@ const readRouteFromLocation = (): PlatformRoute => {
   const path = getCurrentPlatformPath();
   if (path.includes('/admin/catalogs')) return 'catalogs';
   if (path.includes('/admin/client-signups')) return 'client-signups';
+  if (path.includes('/admin/settlements')) return 'settlements';
   if (path.includes('/admin/drivers')) return 'drivers';
   if (path.includes('/admin/templates')) return 'templates';
   if (path.includes('/admin/import-export')) return 'import-export';
@@ -1583,6 +1589,54 @@ function ClientSignupsPage() {
   );
 }
 
+function SettlementsPage() {
+  const requestsQuery = useQuery({ queryKey: ['settlement-requests'], queryFn: getSettlementRequests });
+  const requests = requestsQuery.data ?? [];
+
+  const renderRequest = (request: PlatformSettlementRequest) => (
+    <article className="settlement-request-card" key={request.id}>
+      <span className="settlement-request-card__badge">Новое</span>
+      <div>
+        <strong>{request.settlementName}</strong>
+        <small>{request.cityName || 'Город не указан'} · {request.source}</small>
+      </div>
+      <span>
+        <b>{request.count}</b>
+        <small>{new Date(request.lastSeenAt).toLocaleDateString('ru-RU')}</small>
+      </span>
+    </article>
+  );
+
+  return (
+    <main className="platform-page">
+      <header className="platform-page-head">
+        <div>
+          <h1>География</h1>
+          <p>Новые сёла от клиентов и будущий справочник зон доставки</p>
+        </div>
+      </header>
+
+      {requestsQuery.isLoading && <div className="platform-state">Загружаем заявки...</div>}
+      {requestsQuery.isError && (
+        <div className="platform-state">
+          Не удалось загрузить заявки.
+          <button type="button" onClick={() => void requestsQuery.refetch()}>
+            Повторить
+          </button>
+        </div>
+      )}
+      {!requestsQuery.isLoading && !requestsQuery.isError && requests.length === 0 && (
+        <section className="platform-placeholder">
+          <MapPin />
+          <h2>Новых сёл пока нет</h2>
+          <p>Когда клиент выберет “Другое село” при заказе, заявка появится здесь.</p>
+        </section>
+      )}
+      {requests.length > 0 && <section className="settlement-request-list">{requests.map(renderRequest)}</section>}
+    </main>
+  );
+}
+
 function DriversPage() {
   const queryClient = useQueryClient();
   const driversQuery = useQuery({ queryKey: ['platform-drivers'], queryFn: getDrivers });
@@ -1590,6 +1644,7 @@ function DriversPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [cityName, setCityName] = useState('');
+  const [serviceSettlementsText, setServiceSettlementsText] = useState('');
   const [vehicleInfo, setVehicleInfo] = useState('');
   const [carNumber, setCarNumber] = useState('');
   const [password, setPassword] = useState(generateSecurePassword());
@@ -1603,20 +1658,26 @@ function DriversPage() {
     event.preventDefault();
     setIsSubmitting(true);
     try {
+      const serviceSettlements = parseSettlementsInput(serviceSettlementsText);
       const result = await createDriver({
         name,
         email,
         phone,
         cityName,
+        serviceSettlements,
         vehicleInfo,
         carNumber,
         password
       });
+      if (serviceSettlements.length > 0) {
+        await updateDriverServiceSettlements(result.driverId, serviceSettlements);
+      }
       setSuccess({ email: result.email, password, driverId: result.driverId });
       setName('');
       setEmail('');
       setPhone('');
       setCityName('');
+      setServiceSettlementsText('');
       setVehicleInfo('');
       setCarNumber('');
       setPassword(generateSecurePassword());
@@ -1689,6 +1750,15 @@ function DriversPage() {
               <input value={cityName} onChange={(event) => setCityName(event.target.value)} placeholder="Грозный" />
             </label>
             <label>
+              Сёла работы
+              <textarea
+                value={serviceSettlementsText}
+                onChange={(event) => setServiceSettlementsText(event.target.value)}
+                placeholder={'Грозный\nЦоци-Юрт\nШали'}
+                rows={3}
+              />
+            </label>
+            <label>
               Транспорт
               <input value={vehicleInfo} onChange={(event) => setVehicleInfo(event.target.value)} placeholder="Hyundai Solaris" />
             </label>
@@ -1746,22 +1816,151 @@ function DriversPage() {
       {drivers.length > 0 && (
         <section className="driver-admin-list">
           {drivers.map((driver: PlatformDriver) => (
-            <article className="driver-admin-card" key={driver.id}>
-              <span className={driver.isOnline ? 'is-online' : ''}>{driver.isOnline ? 'Онлайн' : 'Оффлайн'}</span>
-              <div>
-                <strong>{driver.name}</strong>
-                <small>{driver.email || driver.phone}</small>
-              </div>
-              <div>
-                <strong>{driver.vehicleInfo || 'Транспорт не указан'}</strong>
-                <small>{driver.carNumber || driver.cityName || 'Город не указан'}</small>
-              </div>
-              <b>{driver.rating.toFixed(1)}</b>
-            </article>
+            <DriverAdminCard
+              driver={driver}
+              key={driver.id}
+              onSaved={() => void queryClient.invalidateQueries({ queryKey: ['platform-drivers'] })}
+            />
           ))}
         </section>
       )}
     </main>
+  );
+}
+
+function DriverAdminCard({ driver, onSaved }: { driver: PlatformDriver; onSaved: () => void }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [name, setName] = useState(driver.name);
+  const [phone, setPhone] = useState(driver.phone);
+  const [cityName, setCityName] = useState(driver.cityName);
+  const [vehicleInfo, setVehicleInfo] = useState(driver.vehicleInfo);
+  const [carNumber, setCarNumber] = useState(driver.carNumber);
+  const [serviceSettlementsText, setServiceSettlementsText] = useState(formatSettlementsInput(driver.serviceSettlements));
+  const [newPassword, setNewPassword] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (isEditing) return;
+    setName(driver.name);
+    setPhone(driver.phone);
+    setCityName(driver.cityName);
+    setVehicleInfo(driver.vehicleInfo);
+    setCarNumber(driver.carNumber);
+    setServiceSettlementsText(formatSettlementsInput(driver.serviceSettlements));
+    setNewPassword('');
+  }, [driver, isEditing]);
+
+  const saveDriver = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSaving(true);
+    try {
+      await updateDriverProfile({
+        driverId: driver.id,
+        userId: driver.userId,
+        name,
+        phone,
+        cityName,
+        vehicleInfo,
+        carNumber,
+        serviceSettlements: parseSettlementsInput(serviceSettlementsText),
+        password: newPassword.trim() || undefined
+      });
+      toast.success('Водитель обновлён');
+      setNewPassword('');
+      setIsEditing(false);
+      onSaved();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Не удалось обновить водителя');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <form className="driver-admin-card driver-admin-card--edit" onSubmit={saveDriver}>
+        <div className="driver-admin-edit-grid">
+          <label>
+            Имя
+            <input value={name} onChange={(event) => setName(event.target.value)} required minLength={2} />
+          </label>
+          <label>
+            Телефон
+            <input value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" />
+          </label>
+          <label>
+            Город
+            <input value={cityName} onChange={(event) => setCityName(event.target.value)} placeholder="Грозный" />
+          </label>
+          <label>
+            Транспорт
+            <input value={vehicleInfo} onChange={(event) => setVehicleInfo(event.target.value)} placeholder="Hyundai Solaris" />
+          </label>
+          <label>
+            Госномер
+            <input value={carNumber} onChange={(event) => setCarNumber(event.target.value)} placeholder="A123BC 95" />
+          </label>
+          <label>
+            Сёла работы
+            <textarea
+              value={serviceSettlementsText}
+              onChange={(event) => setServiceSettlementsText(event.target.value)}
+              rows={3}
+              placeholder={'Грозный\nЦоци-Юрт\nШали'}
+            />
+          </label>
+          <label>
+            Новый пароль
+            <span className="driver-admin-password-field">
+              <input
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                type="password"
+                autoComplete="new-password"
+                minLength={10}
+                placeholder="Оставьте пустым, если не менять"
+              />
+              <button type="button" onClick={() => setNewPassword(generateSecurePassword())} aria-label="Сгенерировать пароль">
+                <KeyRound />
+              </button>
+              <button type="button" onClick={() => void copyText(newPassword).then(() => toast.success('Пароль скопирован'))} aria-label="Скопировать пароль" disabled={!newPassword}>
+                <Copy />
+              </button>
+            </span>
+          </label>
+        </div>
+        <footer className="driver-admin-actions">
+          <button type="button" onClick={() => setIsEditing(false)}>
+            Отмена
+          </button>
+          <button type="submit" disabled={isSaving}>
+            {isSaving ? 'Сохраняем...' : 'Сохранить'}
+          </button>
+        </footer>
+      </form>
+    );
+  }
+
+  return (
+    <article className="driver-admin-card">
+      <span className={driver.isOnline ? 'is-online' : ''}>{driver.isOnline ? 'Онлайн' : 'Оффлайн'}</span>
+      <div>
+        <strong>{driver.name}</strong>
+        <small>{driver.email || driver.phone}</small>
+      </div>
+      <div>
+        <strong>{driver.vehicleInfo || 'Транспорт не указан'}</strong>
+        <small>
+          {driver.serviceSettlements.length > 0
+            ? driver.serviceSettlements.join(', ')
+            : driver.carNumber || driver.cityName || 'Город не указан'}
+        </small>
+      </div>
+      <b>{driver.rating.toFixed(1)}</b>
+      <button type="button" onClick={() => setIsEditing(true)}>
+        Редактировать
+      </button>
+    </article>
   );
 }
 
@@ -2058,6 +2257,9 @@ function PlatformAdminContent() {
     }
     if (route === 'client-signups') {
       return <ClientSignupsPage />;
+    }
+    if (route === 'settlements') {
+      return <SettlementsPage />;
     }
     if (route === 'drivers') {
       return <DriversPage />;

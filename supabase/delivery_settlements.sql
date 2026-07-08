@@ -16,6 +16,102 @@ alter table public.delivery_tasks
   add column if not exists city text not null default '',
   add column if not exists settlement text not null default '';
 
+alter table public.drivers
+  add column if not exists city_name text not null default '',
+  add column if not exists service_settlements text[] not null default '{}';
+
+create table if not exists public.settlement_requests (
+  id uuid primary key default gen_random_uuid(),
+  city_name text not null default '',
+  settlement_name text not null,
+  source text not null default 'checkout',
+  request_count integer not null default 1,
+  status text not null default 'new'
+    check (status in ('new', 'approved', 'dismissed')),
+  created_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+
+create unique index if not exists settlement_requests_open_unique_idx
+  on public.settlement_requests (
+    lower(trim(city_name)),
+    lower(trim(settlement_name))
+  )
+  where status = 'new';
+
+alter table public.settlement_requests enable row level security;
+
+drop policy if exists "Anyone can request new settlements" on public.settlement_requests;
+create policy "Anyone can request new settlements"
+  on public.settlement_requests
+  for insert
+  to anon, authenticated
+  with check (status = 'new');
+
+drop policy if exists "Platform admins can read settlement requests" on public.settlement_requests;
+create policy "Platform admins can read settlement requests"
+  on public.settlement_requests
+  for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.users
+      where users.auth_user_id = auth.uid()
+        and users.role = 'super_admin'
+    )
+  );
+
+create or replace function public.record_settlement_request(
+  city_name_input text,
+  settlement_name_input text,
+  source_input text default 'checkout'
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  normalized_city text := trim(coalesce(city_name_input, ''));
+  normalized_settlement text := trim(coalesce(settlement_name_input, ''));
+  existing_id uuid;
+begin
+  if normalized_settlement = '' then
+    raise exception 'Settlement name is required';
+  end if;
+
+  select id
+    into existing_id
+    from public.settlement_requests
+    where status = 'new'
+      and lower(trim(city_name)) = lower(normalized_city)
+      and lower(trim(settlement_name)) = lower(normalized_settlement)
+    limit 1;
+
+  if existing_id is not null then
+    update public.settlement_requests
+      set request_count = request_count + 1,
+          last_seen_at = now(),
+          source = coalesce(nullif(trim(source_input), ''), source)
+      where id = existing_id;
+    return existing_id;
+  end if;
+
+  insert into public.settlement_requests (city_name, settlement_name, source)
+  values (
+    normalized_city,
+    normalized_settlement,
+    coalesce(nullif(trim(source_input), ''), 'checkout')
+  )
+  returning id into existing_id;
+
+  return existing_id;
+end;
+$$;
+
+grant execute on function public.record_settlement_request(text, text, text) to anon, authenticated;
+
 create or replace function public.create_public_restaurant_order(
   target_catalog_id uuid,
   customer_name text,

@@ -6,6 +6,7 @@ type CreateDriverPayload = {
   phone?: string;
   password: string;
   cityName?: string;
+  serviceSettlements?: string[];
   vehicleInfo?: string;
   carNumber?: string;
   photoUrl?: string;
@@ -157,6 +158,8 @@ Deno.serve(async (request) => {
           name: payload.name,
           phone: payload.phone ?? '',
           city_id: cityId,
+          city_name: payload.cityName ?? '',
+          service_settlements: payload.serviceSettlements ?? [],
           vehicle_info: payload.vehicleInfo ?? '',
           car_number: payload.carNumber ?? '',
           photo_url: payload.photoUrl ?? '',

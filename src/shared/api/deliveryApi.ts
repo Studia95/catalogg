@@ -16,6 +16,7 @@ export type DriverProfile = {
   readonly vehicleInfo: string;
   readonly carNumber: string;
   readonly photoUrl: string;
+  readonly serviceSettlements: readonly string[];
   readonly rating: number;
   readonly status: DriverStatus;
   readonly isOnline: boolean;
@@ -110,6 +111,7 @@ type DriverRow = {
   vehicle_info: string | null;
   car_number: string | null;
   photo_url: string | null;
+  service_settlements?: string[] | null;
   rating: number | null;
   status: DriverStatus | null;
   is_online: boolean | null;
@@ -152,6 +154,7 @@ const demoProfile: DriverProfile = {
   vehicleInfo: 'Hyundai Solaris',
   carNumber: 'A123BC 95',
   photoUrl: '',
+  serviceSettlements: ['Грозный'],
   rating: 4.9,
   status: 'online',
   isOnline: true
@@ -303,6 +306,7 @@ const rowToDriverProfile = (row: DriverRow | null): DriverProfile => ({
   vehicleInfo: row?.vehicle_info ?? demoProfile.vehicleInfo,
   carNumber: row?.car_number ?? demoProfile.carNumber,
   photoUrl: row?.photo_url ?? '',
+  serviceSettlements: Array.isArray(row?.service_settlements) ? row.service_settlements : demoProfile.serviceSettlements,
   rating: row?.rating ?? demoProfile.rating,
   status: row?.status ?? (row?.is_online ? 'online' : 'offline'),
   isOnline: row?.is_online ?? false
@@ -358,7 +362,7 @@ export async function getDriverDashboard(driverId = demoDriverId): Promise<Drive
 
   const driverResult = await supabase
     .from('drivers')
-    .select('id, name, phone, vehicle_info, car_number, photo_url, rating, status, is_online')
+    .select('id, name, phone, vehicle_info, car_number, photo_url, service_settlements, rating, status, is_online')
     .eq('id', resolvedDriverId)
     .maybeSingle();
 
@@ -425,6 +429,24 @@ export async function signOutDriver() {
   clearPwaResumePath();
   if (!supabase) return;
   await supabase.auth.signOut();
+}
+
+export async function saveDriverServiceSettlements(driverId: string, serviceSettlements: readonly string[]) {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from('drivers')
+    .update({ service_settlements: [...serviceSettlements] })
+    .eq('id', driverId);
+
+  if (error) throw error;
+}
+
+export async function changeDriverPassword(newPassword: string) {
+  if (!supabase) return;
+
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
 }
 
 export async function acceptDeliveryOffer(deliveryId: string, driverId: string) {

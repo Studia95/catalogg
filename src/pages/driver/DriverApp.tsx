@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Headphones,
   Home,
+  KeyRound,
   LogOut,
   MapPin,
   Navigation,
@@ -22,15 +23,17 @@ import {
   X
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useDriverStore } from '../../features/driver/store';
 import type { DeliveryStatus } from '../../features/order/orderLifecycle';
 import {
   acceptDeliveryOffer,
+  changeDriverPassword,
   completeDeliveryProgress,
   getAuthenticatedDriverId,
   getDriverDashboard,
+  saveDriverServiceSettlements,
   signOutDriver,
   setDriverAvailability,
   subscribeToDriverRealtime,
@@ -44,6 +47,16 @@ import { supabase } from '../../shared/supabase';
 import './driver.css';
 
 const formatPrice = (value: number) => `${new Intl.NumberFormat('ru-RU').format(value)} ₽`;
+
+const parseDriverSettlements = (value: string) =>
+  Array.from(
+    new Set(
+      value
+        .split(/[\n,]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  );
 
 function playDriverNewOrderSound() {
   try {
@@ -101,6 +114,7 @@ const emptySnapshot: DriverDashboardSnapshot = {
     vehicleInfo: '',
     carNumber: '',
     photoUrl: '',
+    serviceSettlements: [],
     rating: 5,
     status: 'offline',
     isOnline: false
@@ -736,15 +750,100 @@ function DriverProfileRow({ icon, label, value }: { icon: ReactNode; label: stri
 function DriverSettingsScreen({ profile }: { profile: DriverProfile }) {
   const navigate = useNavigate();
   const clearLocalActiveDelivery = useDriverStore((state) => state.clearLocalActiveDelivery);
+  const [serviceSettlementsText, setServiceSettlementsText] = useState(profile.serviceSettlements.join('\n'));
+  const [newPassword, setNewPassword] = useState('');
+  const [isSavingSettlements, setIsSavingSettlements] = useState(false);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setServiceSettlementsText(profile.serviceSettlements.join('\n'));
+  }, [profile.serviceSettlements]);
+
+  const saveSettlements = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+    setIsSavingSettlements(true);
+    try {
+      await saveDriverServiceSettlements(profile.id, parseDriverSettlements(serviceSettlementsText));
+      setMessage('Места работы сохранены');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить места работы');
+    } finally {
+      setIsSavingSettlements(false);
+    }
+  };
+
+  const savePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+    if (newPassword.trim().length < 6) {
+      setError('Пароль должен быть минимум 6 символов');
+      return;
+    }
+    setIsSavingPassword(true);
+    try {
+      await changeDriverPassword(newPassword.trim());
+      setNewPassword('');
+      setMessage('Пароль обновлён');
+    } catch (passwordError) {
+      setError(passwordError instanceof Error ? passwordError.message : 'Не удалось сменить пароль');
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
 
   return (
     <>
       <DriverHeader title="Настройки" />
+      {message && <p className="driver-success">{message}</p>}
+      {error && <p className="driver-error">{error}</p>}
       <div className="driver-profile-menu">
         <DriverProfileRow icon={<User />} label="Имя" value={profile.name} />
         <DriverProfileRow icon={<Phone />} label="Телефон" value={profile.phone} />
         <DriverProfileRow icon={<Car />} label="Авто" value={profile.vehicleInfo} />
+        <DriverProfileRow
+          icon={<MapPin />}
+          label="Места работы"
+          value={profile.serviceSettlements.length > 0 ? profile.serviceSettlements.join(', ') : 'Не выбраны'}
+        />
         <DriverProfileRow icon={<WalletCards />} label="Вывод средств" value="Карта / счёт" />
+      </div>
+      <form className="driver-settings-form" onSubmit={saveSettlements}>
+        <label>
+          Сёла и города, где работаете
+          <textarea
+            value={serviceSettlementsText}
+            onChange={(event) => setServiceSettlementsText(event.target.value)}
+            rows={4}
+            placeholder={'Грозный\nЦоци-Юрт\nШали'}
+          />
+        </label>
+        <button className="driver-primary" type="submit" disabled={isSavingSettlements}>
+          {isSavingSettlements ? 'Сохраняем...' : 'Сохранить места работы'}
+        </button>
+      </form>
+      <form className="driver-settings-form" onSubmit={savePassword}>
+        <label>
+          Новый пароль
+          <input
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+            type="password"
+            autoComplete="new-password"
+            minLength={6}
+            placeholder="Минимум 6 символов"
+          />
+        </label>
+        <button className="driver-secondary" type="submit" disabled={isSavingPassword}>
+          <KeyRound />
+          <span>{isSavingPassword ? 'Обновляем...' : 'Сменить пароль'}</span>
+        </button>
+      </form>
+      <div className="driver-profile-menu">
         <button
           type="button"
           onClick={() => {
