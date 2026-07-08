@@ -100,6 +100,7 @@ import {
   getRestaurantDeliverySettings,
   getRestaurantOrders,
   saveRestaurantDeliverySettings,
+  subscribeToRestaurantOrdersRealtime,
   updateRestaurantOrderStatus,
   type PublicRestaurantOrderStatus,
   type RestaurantDeliverySettings,
@@ -113,6 +114,7 @@ import {
   createRestaurantOrderIdempotencyKey,
   type CreateRestaurantOrderFromCartInput
 } from '../shared/api/restaurantOrderPayload';
+import { formatOrderTime, groupOrdersByDate } from '../shared/orderListGroups';
 import { imageFileToDataUrl } from '../shared/images';
 import {
   chooseMoreAccuratePosition,
@@ -2396,6 +2398,26 @@ const adminOrderStatusLabels: Record<RestaurantOrderStatus, string> = {
   canceled: 'Отменен'
 };
 
+const adminOrderStatusTones: Record<RestaurantOrderStatus, 'new' | 'work' | 'ready' | 'delivery' | 'done'> = {
+  new: 'new',
+  waiting_payment_confirmation: 'work',
+  payment_confirmed: 'work',
+  accepted: 'work',
+  confirmed: 'work',
+  preparing: 'work',
+  cooking: 'work',
+  ready: 'ready',
+  waiting_driver: 'delivery',
+  driver_assigned: 'delivery',
+  assigned_driver: 'delivery',
+  picked_up: 'delivery',
+  on_the_way: 'delivery',
+  delivered: 'done',
+  completed: 'done',
+  cancelled: 'done',
+  canceled: 'done'
+};
+
 const adminOrderStatusFilters: Array<{ status: 'all' | RestaurantOrderStatus; label: string }> = [
   { status: 'all', label: 'Все' },
   { status: 'new', label: 'Новые' },
@@ -2417,6 +2439,44 @@ const paymentStatusLabels: Record<PaymentStatus, string> = {
   confirmed: 'Подтвержден',
   declined: 'Отклонен'
 };
+
+function getAdminOrderItemsCount(order: RestaurantOrder) {
+  return order.items.reduce((sum, item) => sum + Math.max(1, item.quantity), 0);
+}
+
+function getAdminOrderLocationLabel(order: RestaurantOrder) {
+  return (
+    order.deliverySettlement ||
+    order.deliveryCity ||
+    order.deliveryAddress ||
+    order.cabinLabel ||
+    (order.fulfillmentType === 'takeaway' ? 'Самовывоз' : 'В зале')
+  );
+}
+
+function playRestaurantAdminOrderSound() {
+  try {
+    const audioWindow = window as typeof window & { webkitAudioContext?: typeof AudioContext };
+    const AudioContextCtor = window.AudioContext ?? audioWindow.webkitAudioContext;
+    if (!AudioContextCtor) return;
+
+    const audio = new AudioContextCtor();
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = 880;
+    gain.gain.setValueAtTime(0.001, audio.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.16, audio.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.22);
+    oscillator.connect(gain);
+    gain.connect(audio.destination);
+    oscillator.start();
+    oscillator.stop(audio.currentTime + 0.24);
+    window.setTimeout(() => void audio.close(), 320);
+  } catch {
+    // Browsers may block notification sounds until a user gesture.
+  }
+}
 
 const defaultAdminDeliverySettings: RestaurantDeliverySettings = {
   enable_orders: false,
@@ -2474,6 +2534,9 @@ function RestaurantAdminShell({
   );
   const [filter, setFilter] = useState<'all' | RestaurantOrderStatus>('all');
   const [selectedOrder, setSelectedOrder] = useState<RestaurantOrder | null>(null);
+  const [recentOrderIds, setRecentOrderIds] = useState<Set<string>>(() => new Set());
+  const knownOrderIdsRef = useRef<Set<string>>(new Set());
+  const hasLoadedOrdersRef = useRef(false);
   const logout = useAuthStore((state) => state.logout);
   const today = new Date().toDateString();
   const todayOrders = orders.filter((order) => new Date(order.createdAt).toDateString() === today);
@@ -2481,6 +2544,10 @@ function RestaurantAdminShell({
     .filter((order) => !['cancelled'].includes(order.status))
     .reduce((total, order) => total + order.total, 0);
   const filteredOrders = filter === 'all' ? orders : orders.filter((order) => order.status === filter);
+  const selectedVisibleOrder = selectedOrder && filteredOrders.some((order) => order.id === selectedOrder.id)
+    ? selectedOrder
+    : null;
+  const orderGroups = useMemo(() => groupOrdersByDate(filteredOrders), [filteredOrders]);
   const activeOrders = orders.filter((order) => !['completed', 'delivered', 'cancelled'].includes(order.status));
 
   useEffect(() => {
@@ -2489,20 +2556,28 @@ function RestaurantAdminShell({
     }
   }, [routeSection]);
 
-  if (selectedOrder) {
-    return (
-      <OrderDetailsScreen
-        order={selectedOrder}
-        catalogSlug={catalogSlug}
-        paymentSettings={paymentSettings}
-        onBack={() => setSelectedOrder(null)}
-        onStatus={(status, reason) => {
-          onOrderStatus(selectedOrder, status, reason);
-          setSelectedOrder((current) => (current ? { ...current, status } : current));
-        }}
-      />
-    );
-  }
+  useEffect(() => {
+    const knownIds = knownOrderIdsRef.current;
+    const newOrderIds = hasLoadedOrdersRef.current
+      ? orders.filter((order) => order.status === 'new' && !knownIds.has(order.id)).map((order) => order.id)
+      : [];
+
+    if (newOrderIds.length > 0) {
+      setRecentOrderIds((current) => new Set([...current, ...newOrderIds]));
+      toast.success(newOrderIds.length === 1 ? 'Новый заказ' : `Новых заказов: ${newOrderIds.length}`);
+      playRestaurantAdminOrderSound();
+      window.setTimeout(() => {
+        setRecentOrderIds((current) => {
+          const next = new Set(current);
+          newOrderIds.forEach((id) => next.delete(id));
+          return next;
+        });
+      }, 9000);
+    }
+
+    knownOrderIdsRef.current = new Set(orders.map((order) => order.id));
+    hasLoadedOrdersRef.current = true;
+  }, [orders]);
 
   return (
     <main className="restaurant-admin">
@@ -2599,26 +2674,61 @@ function RestaurantAdminShell({
                 </button>
               ))}
             </div>
-            <div className="admin-order-list">
-              {filteredOrders.length === 0 && (
-                <section className="admin-empty-orders">
-                  <ClipboardList />
-                  <strong>Заказов пока нет</strong>
-                  <span>Новые заказы появятся здесь автоматически.</span>
-                </section>
+            <div className="admin-orders-layout">
+              <div className="admin-order-list">
+                {filteredOrders.length === 0 && (
+                  <section className="admin-empty-orders">
+                    <ClipboardList />
+                    <strong>Заказов пока нет</strong>
+                    <span>Новые заказы появятся здесь автоматически.</span>
+                  </section>
+                )}
+                {orderGroups.map((group) => (
+                  <section className="admin-order-group" key={group.key}>
+                    <h2>{group.label}</h2>
+                    <div>
+                      {group.orders.map((order) => (
+                        <button
+                          className="admin-order-card"
+                          data-active={selectedVisibleOrder?.id === order.id}
+                          data-highlighted={recentOrderIds.has(order.id)}
+                          type="button"
+                          key={order.id}
+                          onClick={() => setSelectedOrder(order)}
+                        >
+                          <span className="admin-order-card__head">
+                            <strong>#{order.orderNumber}</strong>
+                            <time dateTime={order.createdAt}>{formatOrderTime(order.createdAt)}</time>
+                          </span>
+                          <span className="admin-order-card__meta">
+                            {fulfillmentLabels[order.fulfillmentType]} · {getAdminOrderItemsCount(order)} поз.
+                          </span>
+                          <span className="admin-order-card__address">{getAdminOrderLocationLabel(order)}</span>
+                          <span className="admin-order-card__foot">
+                            <b>{formatPrice(order.total)}</b>
+                            <i data-tone={adminOrderStatusTones[order.status]}>
+                              {order.status === 'new' && <span aria-hidden="true" />}
+                              {adminOrderStatusLabels[order.status]}
+                            </i>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+              {selectedVisibleOrder && (
+                <OrderDetailsPanel
+                  order={selectedVisibleOrder}
+                  catalogSlug={catalogSlug}
+                  paymentSettings={paymentSettings}
+                  onClose={() => setSelectedOrder(null)}
+                  onStatus={(status, reason) => {
+                    onOrderStatus(selectedVisibleOrder, status, reason);
+                    setSelectedOrder((current) => (current ? { ...current, status } : current));
+                  }}
+                />
               )}
-              {filteredOrders.map((order) => (
-                <button className={`admin-order-card status-${order.status}`} type="button" key={order.id} onClick={() => setSelectedOrder(order)}>
-                  <span>
-                    <strong>#{order.orderNumber}</strong>
-                    <small>{fulfillmentLabels[order.fulfillmentType]} · {order.items.length} поз.</small>
-                  </span>
-                  <span>
-                    <b>{formatPrice(order.total)}</b>
-                    <i>{adminOrderStatusLabels[order.status]}</i>
-                  </span>
-                </button>
-              ))}
             </div>
           </section>
         )}
@@ -2666,17 +2776,17 @@ function RestaurantAdminShell({
   );
 }
 
-function OrderDetailsScreen({
+function OrderDetailsPanel({
   order,
   catalogSlug,
   paymentSettings,
-  onBack,
+  onClose,
   onStatus
 }: {
   order: RestaurantOrder;
   catalogSlug: string;
   paymentSettings: RestaurantPaymentSettings;
-  onBack: () => void;
+  onClose: () => void;
   onStatus: (status: RestaurantOrderStatus, reason?: string) => void;
 }) {
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(() => loadPaymentStatus(catalogSlug, order.id));
@@ -2686,9 +2796,9 @@ function OrderDetailsScreen({
   };
 
   return (
-    <main className="restaurant-admin restaurant-admin--detail">
+    <aside className="admin-order-details-panel">
       <header className="admin-detail-header">
-        <button type="button" onClick={onBack} aria-label="Назад"><ArrowLeft /></button>
+        <button type="button" onClick={onClose} aria-label="Закрыть детали"><ArrowLeft /></button>
         <div>
           <span>Заказ #{order.orderNumber}</span>
           <h1>{adminOrderStatusLabels[order.status]}</h1>
@@ -2769,7 +2879,7 @@ function OrderDetailsScreen({
           <button type="button" onClick={() => onStatus('delivered')}>Доставлен</button>
         )}
       </footer>
-    </main>
+    </aside>
   );
 }
 
@@ -4401,6 +4511,23 @@ function AppContent({
         toast.error('Не удалось загрузить заказы');
       });
   }, [catalogSlug, isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return undefined;
+
+    let cleanup: () => void = () => undefined;
+    let cancelled = false;
+
+    void getCatalogIdBySlug(catalogSlug).then((catalogId) => {
+      if (cancelled) return;
+      cleanup = subscribeToRestaurantOrdersRealtime(catalogId, refreshRestaurantOrders);
+    });
+
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
+  }, [catalogSlug, isAdmin, refreshRestaurantOrders]);
 
   const refreshDeliverySettings = useCallback(() => {
     if (!isAdmin) return;
