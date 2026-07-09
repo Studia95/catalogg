@@ -1610,15 +1610,13 @@ function SettlementsPage() {
   const settlementsQuery = useQuery({ queryKey: ['delivery-settlements'], queryFn: getDeliverySettlements });
   const requests = requestsQuery.data ?? [];
   const settlements = settlementsQuery.data ?? [];
-  const [cityName, setCityName] = useState('');
   const [settlementName, setSettlementName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  const addSettlement = async (inputCityName = cityName, inputSettlementName = settlementName) => {
+  const addSettlement = async (inputSettlementName = settlementName, inputCityName = '') => {
     setIsSaving(true);
     try {
       await createDeliverySettlement({ cityName: inputCityName, settlementName: inputSettlementName });
-      setCityName('');
       setSettlementName('');
       toast.success('Населённый пункт добавлен');
       void queryClient.invalidateQueries({ queryKey: ['delivery-settlements'] });
@@ -1634,7 +1632,7 @@ function SettlementsPage() {
       <span className="settlement-request-card__badge">Новое</span>
       <div>
         <strong>{request.settlementName}</strong>
-        <small>{request.cityName || 'Город не указан'} · {request.source}</small>
+        <small>{[request.cityName, request.source].filter(Boolean).join(' · ') || 'Заявка клиента'}</small>
       </div>
       <span>
         <b>{request.count}</b>
@@ -1642,7 +1640,7 @@ function SettlementsPage() {
       </span>
       <button
         type="button"
-        onClick={() => void addSettlement(request.cityName, request.settlementName)}
+        onClick={() => void addSettlement(request.settlementName, request.cityName)}
         disabled={isSaving}
       >
         <Plus />
@@ -1656,7 +1654,7 @@ function SettlementsPage() {
       <span><MapPin /></span>
       <div>
         <strong>{settlement.settlementName}</strong>
-        <small>{settlement.cityName || 'Город не указан'}</small>
+        {settlement.cityName && <small>{settlement.cityName}</small>}
       </div>
       <b>{settlement.isActive ? 'Активен' : 'Скрыт'}</b>
     </article>
@@ -1679,11 +1677,7 @@ function SettlementsPage() {
         }}
       >
         <label>
-          Город
-          <input value={cityName} onChange={(event) => setCityName(event.target.value)} placeholder="Грозный" />
-        </label>
-        <label>
-          Село / район
+          Село или город
           <input value={settlementName} onChange={(event) => setSettlementName(event.target.value)} placeholder="Цоци-Юрт" required />
         </label>
         <button type="submit" disabled={isSaving}>

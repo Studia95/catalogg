@@ -206,6 +206,40 @@ as $$
   limit 1
 $$;
 
+create or replace function public.current_driver_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select driver_id
+  from (
+    select d.id as driver_id, 0 as priority
+    from public.drivers d
+    where d.id::text = coalesce(auth.jwt() -> 'user_metadata' ->> 'driver_id', '')
+
+    union all
+
+    select d.id as driver_id, 1 as priority
+    from public.drivers d
+    join public.users u on u.id = d.user_id
+    where u.auth_user_id = auth.uid()
+
+    union all
+
+    select d.id as driver_id, 2 as priority
+    from public.drivers d
+    join public.users u on u.id = d.user_id
+    where lower(u.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and u.role = 'driver'
+  ) candidates
+  order by priority
+  limit 1
+$$;
+
+grant execute on function public.current_driver_id() to authenticated;
+
 create or replace function public.is_driver_profile(target_driver_id uuid)
 returns boolean
 language sql
@@ -217,7 +251,10 @@ as $$
     select 1
     from public.drivers d
     where d.id = target_driver_id
-      and d.user_id = public.current_platform_user_id()
+      and (
+        d.user_id = public.current_platform_user_id()
+        or d.id = public.current_driver_id()
+      )
   )
 $$;
 

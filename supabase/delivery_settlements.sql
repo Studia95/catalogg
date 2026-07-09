@@ -70,7 +70,16 @@ create policy "Anyone can read active delivery settlements"
   on public.delivery_settlements
   for select
   to anon, authenticated
-  using (is_active);
+  using (
+    is_active
+    or public.is_platform_admin()
+    or exists (
+      select 1
+      from public.users
+      where users.id = public.current_platform_user_id()
+        and users.role = 'super_admin'
+    )
+  );
 
 drop policy if exists "Platform admins manage delivery settlements" on public.delivery_settlements;
 create policy "Platform admins manage delivery settlements"
@@ -78,21 +87,59 @@ create policy "Platform admins manage delivery settlements"
   for all
   to authenticated
   using (
+    public.is_platform_admin()
+    or
     exists (
       select 1
       from public.users
-      where users.auth_user_id = auth.uid()
+      where users.id = public.current_platform_user_id()
         and users.role = 'super_admin'
     )
   )
   with check (
+    public.is_platform_admin()
+    or
     exists (
       select 1
       from public.users
-      where users.auth_user_id = auth.uid()
+      where users.id = public.current_platform_user_id()
         and users.role = 'super_admin'
     )
   );
+
+create or replace function public.current_driver_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select driver_id
+  from (
+    select d.id as driver_id, 0 as priority
+    from public.drivers d
+    where d.id::text = coalesce(auth.jwt() -> 'user_metadata' ->> 'driver_id', '')
+
+    union all
+
+    select d.id as driver_id, 1 as priority
+    from public.drivers d
+    join public.users u on u.id = d.user_id
+    where u.auth_user_id = auth.uid()
+
+    union all
+
+    select d.id as driver_id, 2 as priority
+    from public.drivers d
+    join public.users u on u.id = d.user_id
+    where lower(u.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and u.role = 'driver'
+  ) candidates
+  order by priority
+  limit 1
+$$;
+
+grant execute on function public.current_driver_id() to authenticated;
 
 create table if not exists public.settlement_requests (
   id uuid primary key default gen_random_uuid(),
@@ -128,12 +175,31 @@ create policy "Platform admins can read settlement requests"
   for select
   to authenticated
   using (
-    exists (
+    public.is_platform_admin()
+    or exists (
       select 1
       from public.users
-      where users.auth_user_id = auth.uid()
+      where users.id = public.current_platform_user_id()
         and users.role = 'super_admin'
     )
+  );
+
+insert into public.drivers (user_id, name, phone, city_name, service_settlements, is_active, is_online, status)
+select
+  user_record.id,
+  coalesce(nullif(user_record.name, ''), split_part(user_record.email, '@', 1), 'Водитель'),
+  coalesce(user_record.phone, ''),
+  '',
+  '{}',
+  true,
+  false,
+  'offline'
+from public.users user_record
+where user_record.role = 'driver'
+  and not exists (
+    select 1
+    from public.drivers driver
+    where driver.user_id = user_record.id
   );
 
 create or replace function public.record_settlement_request(

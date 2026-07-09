@@ -348,6 +348,11 @@ export const getAuthenticatedDriverId = async (): Promise<string | null> => {
   const authUser = sessionData.session?.user;
   if (sessionError || !authUser?.id) return null;
 
+  const { data: rpcDriverId, error: rpcDriverError } = await supabase.rpc('current_driver_id');
+  if (!rpcDriverError && typeof rpcDriverId === 'string' && rpcDriverId) {
+    return rpcDriverId;
+  }
+
   const metadataDriverId =
     typeof authUser.user_metadata?.driver_id === 'string' ? authUser.user_metadata.driver_id : '';
   if (metadataDriverId) {

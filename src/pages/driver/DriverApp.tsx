@@ -13,6 +13,7 @@ import {
   Navigation,
   Phone,
   QrCode,
+  RefreshCw,
   Settings,
   ShieldCheck,
   Star,
@@ -315,6 +316,7 @@ export function DriverApp() {
             activeDelivery={activeDelivery}
             availableDeliveries={availableDeliveries}
             error={error}
+            onRefresh={loadDashboard}
           />
         )}
         <DriverBottomNav active={route} />
@@ -332,7 +334,13 @@ function DriverHeader({ title, action }: { title: string; action?: ReactNode }) 
         <ArrowLeft />
       </button>
       <h1>{title}</h1>
-      <span>{action}</span>
+      <span>
+        {action ?? (
+          <button type="button" onClick={() => window.location.reload()} aria-label="Обновить">
+            <RefreshCw />
+          </button>
+        )}
+      </span>
     </header>
   );
 }
@@ -342,13 +350,15 @@ function DriverHomeScreen({
   snapshot,
   activeDelivery,
   availableDeliveries,
-  error
+  error,
+  onRefresh
 }: {
   profile: DriverProfile;
   snapshot: DriverDashboardSnapshot;
   activeDelivery: DeliveryOffer | null;
   availableDeliveries: readonly DeliveryOffer[];
   error: string;
+  onRefresh: () => void;
 }) {
   const setOnline = useDriverStore((state) => state.setOnline);
   const toggleOnline = async () => {
@@ -367,9 +377,14 @@ function DriverHomeScreen({
           <strong>{profile.isOnline ? 'Вы в сети' : 'Вы не в сети'}</strong>
           <small>{profile.name}</small>
         </div>
-        <button className="driver-online-button" type="button" onClick={() => void toggleOnline()} aria-label="Онлайн статус">
-          {profile.isOnline ? <ToggleRight /> : <ToggleLeft />}
-        </button>
+        <div className="driver-topbar__actions">
+          <button className="driver-online-button" type="button" onClick={() => void onRefresh()} aria-label="Обновить">
+            <RefreshCw />
+          </button>
+          <button className="driver-online-button" type="button" onClick={() => void toggleOnline()} aria-label="Онлайн статус">
+            {profile.isOnline ? <ToggleRight /> : <ToggleLeft />}
+          </button>
+        </div>
       </header>
 
       {error && <p className="driver-error">{error}</p>}

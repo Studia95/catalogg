@@ -17,6 +17,7 @@ import {
   Pencil,
   Plus,
   QrCode,
+  RefreshCw,
   Search,
   Settings,
   ShieldAlert,
@@ -551,6 +552,14 @@ export function RestaurantAdminShell({
             <select aria-label="Ресторан" value={slug} onChange={() => toast.info('Переключение ресторанов будет подключено к доступам пользователя')}>
               <option value={slug}>{catalogData.restaurant.name}</option>
             </select>
+            <button
+              className="ra-icon-button"
+              type="button"
+              onClick={() => void refreshData({ silent: true })}
+              aria-label="Обновить данные"
+            >
+              <RefreshCw />
+            </button>
             <button
               className="ra-icon-button"
               type="button"

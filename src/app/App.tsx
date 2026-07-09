@@ -1928,19 +1928,7 @@ function CheckoutScreen({
               />
             </label>
             <label className="checkout-field">
-              <span>Город</span>
-              {configuredCity ? (
-                <input value={configuredCity} readOnly />
-              ) : (
-                <input
-                  value={deliveryCity}
-                  onChange={(event) => setOrder({ deliveryCity: event.target.value })}
-                  placeholder="Например: Грозный"
-                />
-              )}
-            </label>
-            <label className="checkout-field">
-              <span>Село / район</span>
+              <span>Село или город</span>
               {settlementOptions.length > 0 ? (
                 <>
                   <select
@@ -1962,7 +1950,7 @@ function CheckoutScreen({
                         {settlement}
                       </option>
                     ))}
-                    <option value="__other__">Другое село</option>
+                    <option value="__other__">Другой населенный пункт</option>
                   </select>
                   {usesCustomSettlement && (
                     <input
@@ -1972,7 +1960,7 @@ function CheckoutScreen({
                         setCustomSettlement(value);
                         setOrder({ deliverySettlement: value });
                       }}
-                      placeholder="Введите своё село"
+                      placeholder="Введите село или город"
                     />
                   )}
                 </>
@@ -1980,7 +1968,7 @@ function CheckoutScreen({
                 <input
                   value={deliverySettlement}
                   onChange={(event) => setOrder({ deliverySettlement: event.target.value })}
-                  placeholder="Например: Черноречье"
+                  placeholder="Например: Цоци-Юрт"
                 />
               )}
             </label>
@@ -2096,8 +2084,8 @@ function CheckoutScreen({
                 toast.error('Введите имя и номер телефона для доставки');
                 return;
               }
-              if (!effectiveDeliveryCity || !effectiveDeliverySettlement || !deliveryAddress.trim()) {
-                toast.error('Укажите город, населенный пункт и адрес доставки');
+              if (!effectiveDeliverySettlement || !deliveryAddress.trim()) {
+                toast.error('Укажите село или город и адрес доставки');
                 return;
               }
               savePublicClientProfile(catalogSlug, {
@@ -2658,6 +2646,7 @@ function RestaurantAdminShell({
   onAddDish,
   onOrderStatus,
   onOrderDelete,
+  onRefreshOrders,
   onSaveDeliverySettings
 }: {
   catalogSlug: string;
@@ -2673,6 +2662,7 @@ function RestaurantAdminShell({
   onAddDish: () => void;
   onOrderStatus: (order: RestaurantOrder, status: RestaurantOrderStatus, reason?: string) => void;
   onOrderDelete: (order: RestaurantOrder) => void;
+  onRefreshOrders: () => void;
   onSaveDeliverySettings: (settings: RestaurantDeliverySettings) => void;
 }) {
   const [tab, setTab] = useState<'home' | 'dishes' | 'orders' | 'settings' | 'scanner'>(() =>
@@ -2777,6 +2767,10 @@ function RestaurantAdminShell({
             <p>{restaurant.subtitle || 'Управляйте меню, заказами и доставкой'}</p>
           </div>
           <div className="restaurant-admin__hero-actions">
+            <button className="restaurant-admin__notification-button" type="button" onClick={onRefreshOrders}>
+              <RefreshCcw />
+              Обновить
+            </button>
             {notificationPermission === 'default' && (
               <button className="restaurant-admin__notification-button" type="button" onClick={enableOrderNotifications}>
                 <Bell />
@@ -5449,6 +5443,7 @@ function AppContent({
       onAddDish={() => setAdminEditor('dish')}
       onOrderStatus={changeOrderStatus}
       onOrderDelete={(order) => changeOrderStatus(order, 'cancelled', 'restaurant_deleted')}
+      onRefreshOrders={refreshRestaurantOrders}
       onSaveDeliverySettings={saveDeliverySettings}
     />
   );

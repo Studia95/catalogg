@@ -3,6 +3,7 @@ import { Navigate, useLocation, useParams } from 'react-router-dom';
 import { App } from './app/App';
 import { ClientPlatformApp } from './pages/client-platform/ClientPlatformApp';
 import { CatalogAdminApp } from './pages/catalog-admin/CatalogAdminApp';
+import { resolveSessionRedirect } from './shared/api/loginRedirectApi';
 import { appIsRunningStandalone, readPwaResumePath, rememberPwaResumePath, routeIsRoleAppPath } from './shared/pwaSession';
 
 export function CatalogAdminRoute() {
@@ -30,14 +31,41 @@ export function PwaResumeTracker() {
 }
 
 export function PwaHomeRoute() {
-  const resumePath = React.useMemo(
-    () => {
-      const path = readPwaResumePath();
-      if (!path) return null;
-      return appIsRunningStandalone() || routeIsRoleAppPath(path) ? path : null;
-    },
-    []
-  );
+  const initialResumePath = React.useMemo(() => {
+    const path = readPwaResumePath();
+    if (!path) return null;
+    return routeIsRoleAppPath(path) ? path : null;
+  }, []);
+  const publicStandaloneResumePath = React.useMemo(() => {
+    const path = readPwaResumePath();
+    if (!path || routeIsRoleAppPath(path)) return null;
+    return appIsRunningStandalone() ? path : null;
+  }, []);
+  const [sessionPath, setSessionPath] = React.useState(initialResumePath);
+  const [isSessionChecked, setIsSessionChecked] = React.useState(Boolean(initialResumePath));
 
-  return resumePath ? <Navigate replace to={resumePath} /> : <ClientPlatformApp />;
+  React.useEffect(() => {
+    if (sessionPath) return undefined;
+
+    let isMounted = true;
+    void resolveSessionRedirect().then((redirect) => {
+      if (!isMounted) return;
+      const targetPath = redirect === '/admin' ? '/admin/clients' : redirect;
+      if (targetPath && targetPath !== '/') {
+        rememberPwaResumePath(targetPath);
+        setSessionPath(targetPath);
+      }
+      setIsSessionChecked(true);
+    }).catch(() => {
+      if (isMounted) setIsSessionChecked(true);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [sessionPath]);
+
+  if (sessionPath) return <Navigate replace to={sessionPath} />;
+  if (!isSessionChecked) return null;
+  return publicStandaloneResumePath ? <Navigate replace to={publicStandaloneResumePath} /> : <ClientPlatformApp />;
 }

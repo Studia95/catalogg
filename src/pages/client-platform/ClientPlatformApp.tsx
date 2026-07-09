@@ -25,6 +25,7 @@ import {
   QrCode,
   ReceiptText,
   Repeat2,
+  RefreshCw,
   Search,
   Settings,
   ShieldCheck,
@@ -277,7 +278,13 @@ function PageHeader({
         <ArrowLeft />
       </Link>
       <h1>{title}</h1>
-      <div className="platform-header__action">{action}</div>
+      <div className="platform-header__action">
+        {action ?? (
+          <button className="icon-button" type="button" onClick={() => window.location.reload()} aria-label="Обновить">
+            <RefreshCw />
+          </button>
+        )}
+      </div>
     </header>
   );
 }
@@ -1671,7 +1678,7 @@ function ProfilePage() {
 
   return (
     <>
-      <PageHeader title="Профиль" action={<span />} />
+      <PageHeader title="Профиль" />
       <section className="profile-card">
         <span className="avatar"><CircleUserRound /></span>
         <span>

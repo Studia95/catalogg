@@ -12,21 +12,12 @@ const metadataRole = (metadata: unknown) => {
   return typeof role === 'string' ? role : '';
 };
 
-export async function resolveLoginRedirect(email: string, password: string) {
-  if (!supabase) {
-    return email.trim().toLowerCase() === 'admin' && password.trim() === '1234' ? '/mangal/dashboard' : null;
-  }
-
-  const { error } = await supabase.auth.signInWithPassword({
-    email: email.trim().toLowerCase(),
-    password
-  });
-  if (error) throw new Error(error.message);
-
+export async function resolveSessionRedirect(emailFallback = '') {
+  if (!supabase) return null;
   const { data: sessionData } = await supabase.auth.getSession();
   const user = sessionData.session?.user;
   if (!user) return '/';
-  const normalizedEmail = user.email?.trim().toLowerCase() || email.trim().toLowerCase();
+  const normalizedEmail = user.email?.trim().toLowerCase() || emailFallback.trim().toLowerCase();
 
   const authenticatedDriverId = await getAuthenticatedDriverId();
   if (authenticatedDriverId) return '/driver';
@@ -58,6 +49,17 @@ export async function resolveLoginRedirect(email: string, password: string) {
   const ownedSlug = getClientCatalogSlug(client);
   if (ownedSlug) return `/${ownedSlug}/dashboard`;
 
+  if (normalizedEmail) {
+    const { data: clientByEmail } = await supabase
+      .from('clients')
+      .select('catalogs(slug)')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+
+    const emailOwnedSlug = getClientCatalogSlug(clientByEmail);
+    if (emailOwnedSlug) return `/${emailOwnedSlug}/dashboard`;
+  }
+
   const { data: member } = await supabase
     .from('catalog_members')
     .select('catalogs(slug)')
@@ -72,4 +74,18 @@ export async function resolveLoginRedirect(email: string, password: string) {
   if (isPlatformAdmin) return '/admin';
 
   return '/';
+}
+
+export async function resolveLoginRedirect(email: string, password: string) {
+  if (!supabase) {
+    return email.trim().toLowerCase() === 'admin' && password.trim() === '1234' ? '/mangal/dashboard' : null;
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password
+  });
+  if (error) throw new Error(error.message);
+
+  return resolveSessionRedirect(email);
 }

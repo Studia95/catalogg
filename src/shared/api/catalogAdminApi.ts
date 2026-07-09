@@ -130,17 +130,18 @@ export async function getCatalogAdminAccess(slug: string): Promise<CatalogAdminA
 
   const { data: client, error: clientError } = await supabase
     .from('clients')
-    .select('first_login, consent_given')
+    .select('catalog_id, first_login, consent_given')
     .eq('owner_user_id', session.user.id)
     .maybeSingle();
 
   if (clientError) throw new Error(clientError.message);
+  const clientOwnsCatalog = client?.catalog_id === catalog.id;
 
   return {
     hasSession: true,
-    isMember: Boolean(member),
+    isMember: Boolean(member) || clientOwnsCatalog,
     email: session.user.email ?? null,
-    role: (member?.role as CatalogRole | undefined) ?? null,
+    role: (member?.role as CatalogRole | undefined) ?? (clientOwnsCatalog ? 'owner' : null),
     firstLogin: client?.first_login ?? false,
     consentGiven: client?.consent_given ?? true,
     catalog
