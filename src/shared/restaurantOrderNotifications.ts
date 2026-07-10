@@ -1,3 +1,5 @@
+import { registerWebPushSubscription, type WebPushContext } from './webPush';
+
 type NotificationState = NotificationPermission | 'unsupported';
 
 const notificationIsSupported = () => typeof window !== 'undefined' && 'Notification' in window;
@@ -7,12 +9,17 @@ export const getRestaurantOrderNotificationPermission = (): NotificationState =>
   return Notification.permission;
 };
 
-export async function requestRestaurantOrderNotificationPermission(): Promise<NotificationState> {
+export async function requestRestaurantOrderNotificationPermission(context?: WebPushContext): Promise<NotificationState> {
   if (!notificationIsSupported()) return 'unsupported';
-  if (Notification.permission !== 'default') return Notification.permission;
 
   try {
-    return await Notification.requestPermission();
+    const permission = Notification.permission === 'default'
+      ? await Notification.requestPermission()
+      : Notification.permission;
+    if (permission === 'granted' && context) {
+      await registerWebPushSubscription(context);
+    }
+    return permission;
   } catch {
     return Notification.permission;
   }

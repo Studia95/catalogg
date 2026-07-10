@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { describe, it } from 'node:test';
+
+const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
+
+describe('background web push contract', () => {
+  it('contains a push-aware service worker and notification click routing', async () => {
+    const source = await read('src/sw.ts');
+    assert.match(source, /addEventListener\(['"]push['"]/);
+    assert.match(source, /showNotification/);
+    assert.match(source, /notificationclick/);
+    assert.match(source, /clients\.openWindow/);
+  });
+
+  it('stores subscriptions with an upsert key and protects them with RLS', async () => {
+    const source = await read('supabase/web_push.sql');
+    assert.match(source, /create table if not exists public\.web_push_subscriptions/);
+    assert.match(source, /unique \(user_id, endpoint\)/);
+    assert.match(source, /enable row level security/);
+    assert.match(source, /upsert_web_push_subscription/);
+  });
+
+  it('has a server-side sender that signs Web Push requests with VAPID secrets', async () => {
+    const source = await read('supabase/functions/send-web-push/index.ts');
+    assert.match(source, /VAPID_PRIVATE_KEY/);
+    assert.match(source, /webpush|push service|applicationServerKey/i);
+    assert.match(source, /SUPABASE_SERVICE_ROLE_KEY/);
+  });
+
+  it('connects order and delivery changes to the sender through pg_net', async () => {
+    const source = await read('supabase/web_push_triggers.sql');
+    assert.match(source, /net\.http_post/);
+    assert.match(source, /web_push_orders_event/);
+    assert.match(source, /web_push_deliveries_event/);
+  });
+});

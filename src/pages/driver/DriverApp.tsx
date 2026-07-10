@@ -392,7 +392,7 @@ function DriverHomeScreen({
   const toggleOnline = async () => {
     const nextOnline = !profile.isOnline;
     if (nextOnline) {
-      void requestRestaurantOrderNotificationPermission();
+      void requestRestaurantOrderNotificationPermission({ role: 'driver', driverId: profile.id });
     }
     setOnline(nextOnline);
     await setDriverAvailability(profile.id, nextOnline);

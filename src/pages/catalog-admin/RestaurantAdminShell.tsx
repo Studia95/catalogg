@@ -340,7 +340,10 @@ export function RestaurantAdminShell({
   const slug = access.catalog?.slug ?? 'demo';
   const publicUrl = useMemo(() => (access.catalog ? getCatalogPublicUrl(access.catalog.slug) : '#'), [access.catalog]);
   const enableOrderNotifications = () => {
-    void requestRestaurantOrderNotificationPermission().then(setNotificationPermission);
+    void requestRestaurantOrderNotificationPermission({
+      role: 'restaurant',
+      catalogId: access.catalog?.id
+    }).then(setNotificationPermission);
   };
 
   const refreshData = useCallback(async (options: { silent?: boolean } = {}) => {

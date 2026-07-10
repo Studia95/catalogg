@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tan
 import {
   Activity,
   BookOpen,
+  Bell,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -66,6 +67,10 @@ import type {
 } from '../../shared/api/platformTypes';
 import { createRestaurantTemplate, getTemplateOptions } from '../../shared/api/templatesApi';
 import { copyText, getCatalogAdminUrl, getCatalogPublicUrl } from '../../shared/platformUrls';
+import {
+  getRestaurantOrderNotificationPermission,
+  requestRestaurantOrderNotificationPermission
+} from '../../shared/restaurantOrderNotifications';
 import {
   createClientSchema,
   createSlug,
@@ -2392,6 +2397,7 @@ function PlatformAdminContent() {
     queryFn: getPlatformAdminAccess
   });
   const templatesQuery = useQuery({ queryKey: ['platform-templates'], queryFn: getTemplateOptions });
+  const [notificationPermission, setNotificationPermission] = useState(() => getRestaurantOrderNotificationPermission());
 
   useEffect(() => {
     const onPopState = () => setRoute(readRouteFromLocation());
@@ -2497,6 +2503,14 @@ function PlatformAdminContent() {
             <span>Администратор</span>
             <small>{platformAdminQuery.data.email ?? 'admin@catalog.app'}</small>
           </div>
+          <button
+            type="button"
+            aria-label="Включить push-уведомления"
+            onClick={() => void requestRestaurantOrderNotificationPermission({ role: 'super_admin' }).then(setNotificationPermission)}
+            title={notificationPermission === 'granted' ? 'Push включён' : 'Включить push-уведомления'}
+          >
+            <Bell />
+          </button>
         </header>
         {content}
       </section>

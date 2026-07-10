@@ -2706,7 +2706,7 @@ function RestaurantAdminShell({
   const orderGroups = useMemo(() => groupOrdersByDate(filteredOrders), [filteredOrders]);
   const activeOrders = orders.filter((order) => !['completed', 'delivered', 'cancelled'].includes(order.status));
   const enableOrderNotifications = () => {
-    void requestRestaurantOrderNotificationPermission().then(setNotificationPermission);
+    void requestRestaurantOrderNotificationPermission({ role: 'restaurant', catalogSlug }).then(setNotificationPermission);
   };
 
   useEffect(() => {

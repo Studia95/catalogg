@@ -13,6 +13,9 @@ export default defineConfig(function (_a) {
         plugins: [
             react(),
             VitePWA({
+                strategies: 'injectManifest',
+                srcDir: 'src',
+                filename: 'sw.ts',
                 registerType: 'autoUpdate',
                 injectRegister: false,
                 includeAssets: ['assets/logo/*.{png,svg}', 'robots.txt', 'placeholders/*.svg'],
@@ -41,30 +44,8 @@ export default defineConfig(function (_a) {
                         }
                     ]
                 },
-                workbox: {
-                    skipWaiting: true,
-                    clientsClaim: true,
-                    cleanupOutdatedCaches: true,
-                    navigateFallback: null,
-                    navigateFallbackDenylist: [/^\/api\//],
-                    globPatterns: ['**/*.{js,css,svg,ico,png,webp}'],
-                    runtimeCaching: [
-                        {
-                            urlPattern: function (_a) {
-                                var request = _a.request;
-                                return request.destination === 'image';
-                            },
-                            handler: 'NetworkFirst',
-                            options: {
-                                cacheName: 'catalog-images',
-                                networkTimeoutSeconds: 4,
-                                expiration: {
-                                    maxEntries: 120,
-                                    maxAgeSeconds: 86400
-                                }
-                            }
-                        }
-                    ]
+                injectManifest: {
+                    globPatterns: ['**/*.{js,css,svg,ico,png,webp}']
                 }
             })
         ],
