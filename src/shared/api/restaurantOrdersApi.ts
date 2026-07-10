@@ -508,13 +508,14 @@ export async function updateRestaurantOrderStatus(
   const { error } = await supabase.from('orders').update(patch).eq('id', order.id).eq('catalog_id', order.catalogId);
   if (error) throw error;
 
-  await supabase.from('order_status_history').insert({
+  const historyResult = await supabase.from('order_status_history').insert({
     catalog_id: order.catalogId,
     order_id: order.id,
     from_status: order.status,
     to_status: status,
     reason
   });
+  if (historyResult.error) throw historyResult.error;
 
   if (status === 'waiting_driver' && order.fulfillmentType === 'delivery') {
     const settingsResult = await supabase
@@ -524,7 +525,7 @@ export async function updateRestaurantOrderStatus(
       .maybeSingle();
     const restaurantSettlement = settingsResult.data?.primary_city || order.restaurantCity;
     const configuredDeliveryFee = await getConfiguredDeliveryPrice(restaurantSettlement, order.deliverySettlement);
-    await supabase.from('deliveries').upsert(
+    const deliveryResult = await supabase.from('deliveries').upsert(
       {
         order_id: order.id,
         delivery_provider: 'platform',
@@ -559,8 +560,9 @@ export async function updateRestaurantOrderStatus(
       },
       { onConflict: 'order_id' }
     );
+    if (deliveryResult.error) throw deliveryResult.error;
 
-    await supabase.from('delivery_tasks').upsert(
+    const deliveryTaskResult = await supabase.from('delivery_tasks').upsert(
       {
         catalog_id: order.catalogId,
         order_id: order.id,
@@ -572,6 +574,7 @@ export async function updateRestaurantOrderStatus(
       },
       { onConflict: 'order_id' }
     );
+    if (deliveryTaskResult.error) throw deliveryTaskResult.error;
   }
 }
 

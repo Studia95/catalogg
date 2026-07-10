@@ -8,6 +8,11 @@ describe('PWA resume route rules', () => {
     assert.equal(routeCanBeResumed('/login'), false);
   });
 
+  it('does not resume a bare public restaurant catalog as the PWA home screen', () => {
+    assert.equal(routeCanBeResumed('/mangal'), false);
+    assert.equal(routeCanBeResumed('/r/mangal'), false);
+  });
+
   it('resumes role-specific app routes', () => {
     assert.equal(routeCanBeResumed('/driver'), true);
     assert.equal(routeCanBeResumed('/admin/clients'), true);

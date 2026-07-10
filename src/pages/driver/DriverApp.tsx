@@ -658,6 +658,20 @@ function DriverActiveScreen({ delivery }: { delivery: DeliveryOffer | null }) {
     if (delivery.status === 'arrived_to_client') return { label: 'Заказ доставлен', status: 'delivered' as const };
     return null;
   }, [delivery]);
+  const routeIsToClient = delivery
+    ? delivery.status === 'handed_over' || delivery.status === 'on_the_way' || delivery.status === 'arrived_to_client'
+    : false;
+  const routeUrl = routeIsToClient ? delivery?.routeToClientUrl ?? delivery?.routeToRestaurantUrl : delivery?.routeToRestaurantUrl;
+  const routeAppUrl = delivery
+    ? buildYandexMapsRouteAppUrl(
+        routeIsToClient
+          ? {
+              from: { lat: delivery.restaurantLat, lng: delivery.restaurantLng, address: delivery.restaurantAddress },
+              to: { lat: delivery.deliveryLat, lng: delivery.deliveryLng, address: delivery.deliveryAddress }
+            }
+          : { to: { lat: delivery.restaurantLat, lng: delivery.restaurantLng, address: delivery.restaurantAddress } }
+      )
+    : '';
 
   const updateStatus = async (status: DeliveryStatus, to?: string) => {
     if (!delivery) return;
@@ -704,10 +718,8 @@ function DriverActiveScreen({ delivery }: { delivery: DeliveryOffer | null }) {
         {delivery.deliveryComment && <DriverRouteLine icon={<ShieldCheck />} label="Комментарий" value={delivery.deliveryComment} />}
         <div className="driver-action-row">
           {delivery.clientPhone && <a href={`tel:${delivery.clientPhone}`}><Phone />Позвонить</a>}
-          <a href={delivery.status === 'handed_over' || delivery.status === 'on_the_way' || delivery.status === 'arrived_to_client'
-            ? delivery.routeToClientUrl ?? delivery.routeToRestaurantUrl
-            : delivery.routeToRestaurantUrl}
-            target="_blank"
+          <a href={routeAppUrl || routeUrl}
+            target={routeAppUrl ? undefined : '_blank'}
             rel="noreferrer"
           >
             <Navigation />Маршрут
@@ -778,7 +790,7 @@ function DriverMapScreen({ delivery }: { delivery: DeliveryOffer | null }) {
         <section className="driver-order-panel">
           <DriverRouteLine icon={<MapPin />} label="Следующая точка" value={nextAddress ?? ''} />
           <DriverRouteLine icon={<Navigation />} label="Маршрут" value={`${delivery.distanceKm} км · ${delivery.routeEtaMin} мин`} />
-          <a className="driver-primary driver-link-button" href={routeAppUrl || routeUrl} target="_blank" rel="noreferrer">
+          <a className="driver-primary driver-link-button" href={routeAppUrl || routeUrl} target={routeAppUrl ? undefined : '_blank'} rel="noreferrer">
             Построить маршрут
           </a>
           {routeAppUrl && routeUrl && <a className="driver-secondary driver-link-button" href={routeUrl} target="_blank" rel="noreferrer">Открыть веб-карту</a>}

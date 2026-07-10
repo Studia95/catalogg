@@ -5183,10 +5183,12 @@ function AppContent({
   };
 
   const changeOrderStatus = (order: RestaurantOrder, status: RestaurantOrderStatus, reason = '') => {
-    setRestaurantOrders((current) =>
-      current.map((item) => (item.id === order.id ? { ...item, status } : item))
-    );
-    persist(updateRestaurantOrderStatus(order, status, reason), refreshRestaurantOrders);
+    persist(updateRestaurantOrderStatus(order, status, reason), () => {
+      setRestaurantOrders((current) =>
+        current.map((item) => (item.id === order.id ? { ...item, status } : item))
+      );
+      refreshRestaurantOrders();
+    });
   };
 
   const finishOrderFlow = () => {
