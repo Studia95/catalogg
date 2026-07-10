@@ -78,6 +78,10 @@ export type DriverDeliveryView = {
   readonly itemsVisible: boolean;
   readonly routeToRestaurantUrl: string;
   readonly routeToClientUrl?: string;
+  readonly restaurantLat: number | null;
+  readonly restaurantLng: number | null;
+  readonly deliveryLat: number | null;
+  readonly deliveryLng: number | null;
   readonly clientName?: string;
   readonly clientPhone?: string;
   readonly deliveryComment?: string;
@@ -93,6 +97,28 @@ type RoutePoint = {
 type BuildYandexMapsRouteUrlInput = {
   readonly from?: RoutePoint;
   readonly to: RoutePoint;
+};
+
+export type DeliveryPriceRule = {
+  readonly fromSettlement: string;
+  readonly toSettlement: string;
+  readonly amount: number;
+};
+
+export const buildDeliveryDestinationAddress = ({
+  address,
+  settlement,
+  city
+}: {
+  readonly address?: string | null;
+  readonly settlement?: string | null;
+  readonly city?: string | null;
+}) => {
+  const parts = [address, settlement, city]
+    .map((part) => part?.trim() ?? '')
+    .filter(Boolean);
+
+  return Array.from(new Set(parts)).join(', ');
 };
 
 type CreatePickupQrTokenInput = {
@@ -145,11 +171,35 @@ export const buildYandexMapsRouteUrl = ({ from, to }: BuildYandexMapsRouteUrlInp
   if (from && hasCoordinates(from) && hasCoordinates(to)) {
     params.set('rtext', `${formatCoordinates(from)}~${formatCoordinates(to)}`);
     params.set('rtt', 'auto');
-    return `https://yandex.ru/maps/?${params.toString()}`;
+    return `https://yandex.ru/maps/?${params.toString().replace(/%7E/g, '~')}`;
   }
 
   params.set('text', hasCoordinates(to) ? formatCoordinates(to) : to.address.trim());
-  return `https://yandex.ru/maps/?${params.toString()}`;
+  return `https://yandex.ru/maps/?${params.toString().replace(/%7E/g, '~')}`;
+};
+
+export const buildYandexMapsRouteAppUrl = (input: BuildYandexMapsRouteUrlInput) => {
+  const webUrl = buildYandexMapsRouteUrl(input);
+  const query = webUrl.split('?')[1] ?? '';
+  return `yandexmaps://maps.yandex.ru/?${query}`;
+};
+
+const normalizeSettlement = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
+
+export const findDeliveryPrice = (
+  prices: readonly DeliveryPriceRule[],
+  fromSettlement: string,
+  toSettlement: string
+) => {
+  const from = normalizeSettlement(fromSettlement);
+  const to = normalizeSettlement(toSettlement);
+  if (!from || !to) return null;
+
+  const rule = prices.find(
+    (price) => normalizeSettlement(price.fromSettlement) === from && normalizeSettlement(price.toSettlement) === to
+  );
+
+  return rule && Number.isFinite(rule.amount) && rule.amount >= 0 ? rule.amount : null;
 };
 
 export const rotatePickupQr = ({
@@ -214,6 +264,10 @@ export const buildDriverDeliveryView = ({
     routeToClientUrl: isAssignedToViewer
       ? buildYandexMapsRouteUrl({ from: restaurantPoint, to: clientPoint })
       : undefined,
+    restaurantLat: order.restaurantLat ?? null,
+    restaurantLng: order.restaurantLng ?? null,
+    deliveryLat: order.deliveryLat ?? null,
+    deliveryLng: order.deliveryLng ?? null,
     clientName: isAssignedToViewer ? order.clientName : undefined,
     clientPhone: isAssignedToViewer ? order.clientPhone : undefined,
     deliveryComment: isAssignedToViewer ? order.deliveryComment : undefined,

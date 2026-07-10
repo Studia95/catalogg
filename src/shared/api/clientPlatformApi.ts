@@ -493,6 +493,9 @@ export type ClientOrderRealtimePatch = {
   readonly paymentStatus?: ClientPaymentStatus;
   readonly driverName?: string;
   readonly driverPhone?: string;
+  readonly driverLat?: number | null;
+  readonly driverLng?: number | null;
+  readonly driverLocationAt?: string | null;
 };
 
 export function subscribeClientOrderRealtime(orderId: string, onChange: (patch: ClientOrderRealtimePatch) => void) {
@@ -509,12 +512,26 @@ export function subscribeClientOrderRealtime(orderId: string, onChange: (patch: 
     if (error || !data) return;
     const delivery = Array.isArray(data.deliveries) ? data.deliveries[0] : data.deliveries;
     const driver = Array.isArray(delivery?.drivers) ? delivery?.drivers[0] : delivery?.drivers;
+    const { data: trackingData } = await client.rpc('get_public_order_tracking', {
+      target_order_id: orderId
+    });
+    const tracking = trackingData && typeof trackingData === 'object'
+      ? trackingData as {
+          driver_lat?: number | null;
+          driver_lng?: number | null;
+          driver_location_at?: string | null;
+        }
+      : null;
+
     onChange({
       id: String(data.id),
       status: String(data.status),
       paymentStatus: data.payment_status as ClientPaymentStatus,
       driverName: driver?.name ? String(driver.name) : undefined,
-      driverPhone: driver?.phone ? String(driver.phone) : undefined
+      driverPhone: driver?.phone ? String(driver.phone) : undefined,
+      driverLat: tracking?.driver_lat ?? null,
+      driverLng: tracking?.driver_lng ?? null,
+      driverLocationAt: tracking?.driver_location_at ?? null
     });
   };
 
@@ -524,6 +541,7 @@ export function subscribeClientOrderRealtime(orderId: string, onChange: (patch: 
     .channel(`client-order-${orderId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` }, fetchOrder)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries', filter: `order_id=eq.${orderId}` }, fetchOrder)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, fetchOrder)
     .subscribe();
 
   return () => {

@@ -27,6 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useDriverStore } from '../../features/driver/store';
+import { buildYandexMapsRouteAppUrl } from '../../features/order/orderLifecycle';
 import type { DeliveryStatus } from '../../features/order/orderLifecycle';
 import {
   acceptDeliveryOffer,
@@ -38,11 +39,13 @@ import {
   signOutDriver,
   setDriverAvailability,
   subscribeToDriverRealtime,
+  updateDriverLocation,
   updateDeliveryProgress,
   type DeliveryOffer,
   type DriverDashboardSnapshot,
   type DriverProfile
 } from '../../shared/api/deliveryApi';
+import { requestDriverDeliveryPrice } from '../../shared/api/deliveryPricingApi';
 import { formatOrderTime, groupOrdersByDate } from '../../shared/orderListGroups';
 import {
   requestRestaurantOrderNotificationPermission,
@@ -122,7 +125,10 @@ const emptySnapshot: DriverDashboardSnapshot = {
     serviceSettlements: [],
     rating: 5,
     status: 'offline',
-    isOnline: false
+    isOnline: false,
+    lastLat: null,
+    lastLng: null,
+    lastLocationAt: null
   },
   activeDelivery: null,
   availableDeliveries: [],
@@ -224,6 +230,28 @@ export function DriverApp() {
   const effectiveDriverId = profile.id || selectedDriverId;
 
   useEffect(() => subscribeToDriverRealtime(effectiveDriverId, loadDashboard), [effectiveDriverId, loadDashboard]);
+
+  useEffect(() => {
+    if (!authChecked || !hasDriverAccess || !isOnline || !effectiveDriverId || !navigator.geolocation) {
+      return undefined;
+    }
+
+    const onPosition = (position: GeolocationPosition) => {
+      void updateDriverLocation(effectiveDriverId, {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy
+      }).catch(() => undefined);
+    };
+
+    const watchId = navigator.geolocation.watchPosition(onPosition, () => undefined, {
+      enableHighAccuracy: true,
+      maximumAge: 10_000,
+      timeout: 15_000
+    });
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [authChecked, effectiveDriverId, hasDriverAccess, isOnline]);
 
   useEffect(() => {
     if (!authChecked || !hasDriverAccess) return undefined;
@@ -545,6 +573,10 @@ function DriverNewOrderScreen({ driverId, offer }: { driverId: string; offer: De
   const navigate = useNavigate();
   const acceptLocalOffer = useDriverStore((state) => state.acceptLocalOffer);
   const [isAccepting, setIsAccepting] = useState(false);
+  const [requestedAmount, setRequestedAmount] = useState(String(Math.round(offer.deliveryFee)));
+  const [priceComment, setPriceComment] = useState('');
+  const [isRequestingPrice, setIsRequestingPrice] = useState(false);
+  const [priceMessage, setPriceMessage] = useState('');
   const [error, setError] = useState('');
 
   const accept = async () => {
@@ -561,6 +593,25 @@ function DriverNewOrderScreen({ driverId, offer }: { driverId: string; offer: De
     }
   };
 
+  const requestPrice = async () => {
+    setIsRequestingPrice(true);
+    setError('');
+    setPriceMessage('');
+    try {
+      await requestDriverDeliveryPrice({
+        deliveryId: offer.deliveryId,
+        driverId,
+        amount: Number(requestedAmount),
+        comment: priceComment
+      });
+      setPriceMessage('Запрос отправлен супер-админу. Заказ останется доступным после решения.');
+    } catch (priceError) {
+      setError(priceError instanceof Error ? priceError.message : 'Не удалось отправить запрос цены');
+    } finally {
+      setIsRequestingPrice(false);
+    }
+  };
+
   return (
     <>
       <DriverHeader title="Новый заказ" action={<small>{offer.routeEtaMin} сек</small>} />
@@ -573,6 +624,12 @@ function DriverNewOrderScreen({ driverId, offer }: { driverId: string; offer: De
         <DriverRouteLine icon={<Navigation />} label="Расстояние" value={`${offer.distanceKm} км от вас`} />
         <strong>{formatPrice(offer.orderTotal > 0 ? offer.orderTotal : offer.deliveryFee)}</strong>
         <small>{offer.paymentLabel} · доставка водителю {formatPrice(offer.deliveryFee)}</small>
+        <div className="driver-price-request">
+          <label>Предложить свою цену<input type="number" min="0" step="1" value={requestedAmount} onChange={(event) => setRequestedAmount(event.target.value)} /></label>
+          <input value={priceComment} onChange={(event) => setPriceComment(event.target.value)} placeholder="Комментарий для супер-админа" />
+          <button className="driver-secondary" type="button" onClick={() => void requestPrice()} disabled={isRequestingPrice}>{isRequestingPrice ? 'Отправляем...' : 'Согласовать цену'}</button>
+        </div>
+        {priceMessage && <p className="driver-success">{priceMessage}</p>}
         {error && <p className="driver-error">{error}</p>}
         <button className="driver-primary" type="button" onClick={() => void accept()} disabled={isAccepting}>
           {isAccepting ? 'Принимаем...' : 'Принять заказ'}
@@ -702,6 +759,16 @@ function DriverMapScreen({ delivery }: { delivery: DeliveryOffer | null }) {
     : false;
   const nextAddress = routeIsToClient ? delivery?.deliveryAddress : delivery?.restaurantAddress;
   const routeUrl = routeIsToClient ? delivery?.routeToClientUrl ?? delivery?.routeToRestaurantUrl : delivery?.routeToRestaurantUrl;
+  const routeAppUrl = delivery
+    ? buildYandexMapsRouteAppUrl(
+        routeIsToClient
+          ? {
+              from: { lat: delivery.restaurantLat, lng: delivery.restaurantLng, address: delivery.restaurantAddress },
+              to: { lat: delivery.deliveryLat, lng: delivery.deliveryLng, address: delivery.deliveryAddress }
+            }
+          : { to: { lat: delivery.restaurantLat, lng: delivery.restaurantLng, address: delivery.restaurantAddress } }
+      )
+    : '';
 
   return (
     <>
@@ -711,9 +778,10 @@ function DriverMapScreen({ delivery }: { delivery: DeliveryOffer | null }) {
         <section className="driver-order-panel">
           <DriverRouteLine icon={<MapPin />} label="Следующая точка" value={nextAddress ?? ''} />
           <DriverRouteLine icon={<Navigation />} label="Маршрут" value={`${delivery.distanceKm} км · ${delivery.routeEtaMin} мин`} />
-          <a className="driver-primary driver-link-button" href={routeUrl} target="_blank" rel="noreferrer">
+          <a className="driver-primary driver-link-button" href={routeAppUrl || routeUrl} target="_blank" rel="noreferrer">
             Построить маршрут
           </a>
+          {routeAppUrl && routeUrl && <a className="driver-secondary driver-link-button" href={routeUrl} target="_blank" rel="noreferrer">Открыть веб-карту</a>}
         </section>
       )}
     </>

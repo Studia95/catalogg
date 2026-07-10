@@ -98,6 +98,7 @@ import {
 } from '../shared/supabase';
 import {
   createRestaurantOrderFromCart,
+  getPublicOrderTracking,
   getPublicRestaurantOrderStatus,
   getCatalogIdBySlug,
   getRestaurantDeliverySettings,
@@ -2187,6 +2188,12 @@ function PublicOrderStatusScreen({
     refetchInterval: 15_000
   });
   const order = statusQuery.data;
+  const trackingQuery = useQuery({
+    queryKey: ['public-order-tracking', orderId],
+    queryFn: () => getPublicOrderTracking(orderId),
+    refetchInterval: 10_000,
+    enabled: Boolean(order)
+  });
 
   const renderOrder = (value: PublicRestaurantOrderStatus) => (
     <>
@@ -2221,6 +2228,14 @@ function PublicOrderStatusScreen({
           <div className="checkout-summary__total">
             <span>Курьер</span>
             <strong>{value.driverName}</strong>
+          </div>
+        )}
+        {trackingQuery.data?.driverName && trackingQuery.data.driverLat !== null && trackingQuery.data.driverLng !== null && (
+          <div className="checkout-summary__total">
+            <span>Водитель в пути</span>
+            <a href={`https://yandex.ru/maps/?rtext=${trackingQuery.data.driverLat},${trackingQuery.data.driverLng}~${encodeURIComponent(value.deliveryAddress)}&rtt=auto`} target="_blank" rel="noreferrer">
+              Открыть местоположение на Яндекс Картах
+            </a>
           </div>
         )}
         <div className="checkout-summary__total">

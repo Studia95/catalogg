@@ -47,6 +47,12 @@ import {
 } from '../../shared/api/clientsApi';
 import { createDriver, getDrivers, updateDriverProfile, updateDriverServiceSettlements } from '../../shared/api/driversApi';
 import { createDeliverySettlement, getDeliverySettlements, getSettlementRequests } from '../../shared/api/settlementsApi';
+import {
+  getDeliveryPriceRequests,
+  getDeliveryPricingRules,
+  reviewDeliveryPriceRequest,
+  saveDeliveryPricingRule
+} from '../../shared/api/deliveryPricingApi';
 import { getPlatformAdminAccess, signInPlatformAdmin, signOutPlatformAdmin } from '../../shared/api/platformAdminApi';
 import type {
   ClientSignup,
@@ -1608,10 +1614,15 @@ function SettlementsPage() {
   const queryClient = useQueryClient();
   const requestsQuery = useQuery({ queryKey: ['settlement-requests'], queryFn: getSettlementRequests });
   const settlementsQuery = useQuery({ queryKey: ['delivery-settlements'], queryFn: getDeliverySettlements });
+  const pricingQuery = useQuery({ queryKey: ['delivery-pricing-rules'], queryFn: getDeliveryPricingRules });
+  const priceRequestsQuery = useQuery({ queryKey: ['delivery-price-requests'], queryFn: getDeliveryPriceRequests });
   const requests = requestsQuery.data ?? [];
   const settlements = settlementsQuery.data ?? [];
   const [settlementName, setSettlementName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [fromSettlement, setFromSettlement] = useState('');
+  const [toSettlement, setToSettlement] = useState('');
+  const [priceAmount, setPriceAmount] = useState('');
 
   const addSettlement = async (inputSettlementName = settlementName, inputCityName = '') => {
     setIsSaving(true);
@@ -1624,6 +1635,33 @@ function SettlementsPage() {
       toast.error(error instanceof Error ? error.message : 'Не удалось добавить населённый пункт');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const savePrice = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSaving(true);
+    try {
+      await saveDeliveryPricingRule({ fromSettlement, toSettlement, amount: Number(priceAmount) });
+      setFromSettlement('');
+      setToSettlement('');
+      setPriceAmount('');
+      toast.success('Тариф сохранён');
+      void queryClient.invalidateQueries({ queryKey: ['delivery-pricing-rules'] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Не удалось сохранить тариф');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const reviewPrice = async (requestId: string, approved: boolean, amount?: number) => {
+    try {
+      await reviewDeliveryPriceRequest({ requestId, approved, amount });
+      toast.success(approved ? 'Цена согласована' : 'Запрос отклонён');
+      void queryClient.invalidateQueries({ queryKey: ['delivery-price-requests'] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Не удалось обработать запрос');
     }
   };
 
@@ -1702,6 +1740,45 @@ function SettlementsPage() {
         </section>
       )}
       {settlements.length > 0 && <section className="settlement-directory-list">{settlements.map(renderSettlement)}</section>}
+
+      <section className="platform-section-head">
+        <div>
+          <h2>Тарифы доставки</h2>
+          <p>Цена задаётся для маршрута из одного села в другое. Для доставки внутри села укажите одинаковые пункты.</p>
+        </div>
+      </section>
+      <form className="settlement-directory-form" onSubmit={(event) => void savePrice(event)}>
+        <label>Откуда<input value={fromSettlement} onChange={(event) => setFromSettlement(event.target.value)} placeholder="Цоци-Юрт" required /></label>
+        <label>Куда<input value={toSettlement} onChange={(event) => setToSettlement(event.target.value)} placeholder="Шали" required /></label>
+        <label>Цена<input value={priceAmount} onChange={(event) => setPriceAmount(event.target.value)} type="number" min="0" step="1" placeholder="500" required /></label>
+        <button type="submit" disabled={isSaving}><Plus />Сохранить тариф</button>
+      </form>
+      {pricingQuery.data && pricingQuery.data.length > 0 && (
+        <section className="settlement-directory-list">
+          {pricingQuery.data.map((rule) => (
+            <article className="settlement-directory-card" key={rule.id}>
+              <span><Truck /></span>
+              <div><strong>{rule.fromSettlement} → {rule.toSettlement}</strong><small>{rule.amount.toLocaleString('ru-RU')} ₽</small></div>
+              <b>Активен</b>
+            </article>
+          ))}
+        </section>
+      )}
+
+      <section className="platform-section-head">
+        <div>
+          <h2>Согласование цены</h2>
+          <p>Водитель может предложить другую сумму, а решение принимает супер-админ.</p>
+        </div>
+      </section>
+      {priceRequestsQuery.data?.map((request) => (
+        <article className="settlement-request-card" key={request.id}>
+          <span className="settlement-request-card__badge">Запрос водителя</span>
+          <div><strong>{request.driverName}</strong><small>{request.currentAmount.toLocaleString('ru-RU')} ₽ → {request.requestedAmount.toLocaleString('ru-RU')} ₽{request.comment ? ` · ${request.comment}` : ''}</small></div>
+          <button type="button" onClick={() => void reviewPrice(request.id, true, request.requestedAmount)}><CheckCircle2 />Согласовать</button>
+          <button type="button" onClick={() => void reviewPrice(request.id, false)}><X />Отклонить</button>
+        </article>
+      ))}
 
       {requestsQuery.isLoading && <div className="platform-state">Загружаем заявки...</div>}
       {requestsQuery.isError && (

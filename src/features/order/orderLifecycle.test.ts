@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   buildDriverDeliveryView,
+  buildDeliveryDestinationAddress,
+  buildYandexMapsRouteAppUrl,
   buildYandexMapsRouteUrl,
+  findDeliveryPrice,
   canSendOrderToDelivery,
   createPickupQrToken,
   rotatePickupQr,
@@ -41,6 +44,47 @@ const assignment = (overrides: Partial<DeliveryAssignment> = {}): DeliveryAssign
 });
 
 describe('order delivery lifecycle', () => {
+  it('keeps the full settlement and street address in the driver route target', () => {
+    assert.equal(
+      buildDeliveryDestinationAddress({ address: 'ул. Ленина, 123', settlement: 'Цоци-Юрт', city: 'Цоци-Юрт' }),
+      'ул. Ленина, 123, Цоци-Юрт'
+    );
+    assert.equal(
+      buildYandexMapsRouteUrl({
+        to: {
+          lat: null,
+          lng: null,
+          address: 'ул. Ленина, 123, Цоци-Юрт'
+        }
+      }),
+      'https://yandex.ru/maps/?text=%D1%83%D0%BB.+%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0%2C+123%2C+%D0%A6%D0%BE%D1%86%D0%B8-%D0%AE%D1%80%D1%82'
+    );
+  });
+
+  it('provides a Yandex Maps app link using the same exact route coordinates', () => {
+    assert.equal(
+      buildYandexMapsRouteAppUrl({
+        from: { lat: 43.322, lng: 45.705, address: 'Ресторан' },
+        to: { lat: 43.318123, lng: 45.698456, address: 'Клиент' }
+      }),
+      'yandexmaps://maps.yandex.ru/?rtext=43.322%2C45.705~43.318123%2C45.698456&rtt=auto'
+    );
+  });
+
+  it('selects a configured tariff for a same-settlement or inter-settlement route', () => {
+    const prices = [
+      { fromSettlement: 'Цоци-Юрт', toSettlement: 'Шали', amount: 700 },
+      { fromSettlement: 'Цоци-Юрт', toSettlement: 'Цоци-Юрт', amount: 250 }
+    ];
+
+    assert.equal(findDeliveryPrice(prices, 'Цоци-Юрт', 'Шали'), 700);
+    assert.equal(findDeliveryPrice(prices, 'Цоци-Юрт', 'Цоци-Юрт'), 250);
+    assert.equal(findDeliveryPrice(prices, ' цоци-юрт ', ' шали '), 700);
+    assert.equal(findDeliveryPrice(prices, 'Шали', 'Грозный'), null);
+    assert.equal(findDeliveryPrice([{ fromSettlement: 'Шали', toSettlement: 'Грозный', amount: -1 }], 'Шали', 'Грозный'), null);
+    assert.equal(findDeliveryPrice(prices, '', 'Шали'), null);
+  });
+
   it('does not send delivery orders to drivers before the restaurant confirms payment', () => {
     assert.equal(
       canSendOrderToDelivery(order({ paymentStatus: 'waiting_confirmation' })),

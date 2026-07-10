@@ -580,6 +580,19 @@
   background: #ffffff;
 }
 
+.driver-price-request {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.driver-price-request label,
+.driver-price-request input {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
 .driver-settings-form label {
   display: grid;
   gap: 7px;

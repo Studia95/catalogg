@@ -1419,7 +1419,10 @@ function OrderStatusPage({
         status: toClientOrderStatus(patch.status),
         paymentStatus: patch.paymentStatus,
         driverName: patch.driverName,
-        driverPhone: patch.driverPhone
+        driverPhone: patch.driverPhone,
+        driverLat: patch.driverLat,
+        driverLng: patch.driverLng,
+        driverLocationAt: patch.driverLocationAt
       });
     });
   }, [order?.id, syncOrderPatch]);
@@ -1466,6 +1469,17 @@ function OrderStatusPage({
               <a href={`tel:${order.driverPhone}`}>
                 <Phone />
                 Позвонить
+              </a>
+            </span>
+          )}
+          {order.driverName && order.driverLat !== null && order.driverLat !== undefined && order.driverLng !== null && order.driverLng !== undefined && (
+            <span>
+              <strong>Таксист в пути</strong>
+              <small>{order.driverLat.toFixed(5)}, {order.driverLng.toFixed(5)}</small>
+              {order.driverLocationAt && <small>Обновлено {new Date(order.driverLocationAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</small>}
+              <a href={`https://yandex.ru/maps/?rtext=${order.driverLat},${order.driverLng}~${order.addressLine}&rtt=auto`} target="_blank" rel="noreferrer">
+                <MapPin />
+                Отследить на карте
               </a>
             </span>
           )}

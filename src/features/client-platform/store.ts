@@ -38,7 +38,7 @@ type ClientPlatformStore = {
   submitOrder: (order: ClientOrder) => void;
   syncOrderPatch: (
     orderId: string,
-    patch: Partial<Pick<ClientOrder, 'driverName' | 'driverPhone'>> & {
+    patch: Partial<Pick<ClientOrder, 'driverName' | 'driverPhone' | 'driverLat' | 'driverLng' | 'driverLocationAt'>> & {
       status?: ClientOrderStatus;
       paymentStatus?: ClientPaymentStatus;
     }

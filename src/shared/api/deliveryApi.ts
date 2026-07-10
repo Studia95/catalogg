@@ -1,4 +1,5 @@
 import {
+  buildDeliveryDestinationAddress,
   buildDriverDeliveryView,
   createPickupQrToken,
   type DeliveryStatus,
@@ -20,6 +21,9 @@ export type DriverProfile = {
   readonly rating: number;
   readonly status: DriverStatus;
   readonly isOnline: boolean;
+  readonly lastLat: number | null;
+  readonly lastLng: number | null;
+  readonly lastLocationAt: string | null;
 };
 
 export type DeliveryOffer = DriverDeliveryView & {
@@ -70,6 +74,8 @@ type DeliveryRow = {
   route_to_client_url: string | null;
   estimated_time_min: number | null;
   estimated_time_max: number | null;
+  offered_fee: number | null;
+  pricing_status: 'pending' | 'offered' | 'countered' | 'accepted' | 'rejected' | null;
   created_at: string;
   orders?: MaybeArray<{
     id: string;
@@ -82,6 +88,8 @@ type DeliveryRow = {
     customer_name?: string | null;
     customer_phone?: string | null;
     delivery_address: string | null;
+    delivery_city: string | null;
+    delivery_settlement: string | null;
     delivery_lat: number | null;
     delivery_lng: number | null;
     delivery_comment: string | null;
@@ -118,6 +126,9 @@ type DriverRow = {
   rating: number | null;
   status: DriverStatus | null;
   is_online: boolean | null;
+  last_lat: number | null;
+  last_lng: number | null;
+  last_location_at: string | null;
 };
 
 type DriverUserRow = {
@@ -163,7 +174,10 @@ const demoProfile: DriverProfile = {
   serviceSettlements: ['Грозный'],
   rating: 4.9,
   status: 'online',
-  isOnline: true
+  isOnline: true,
+  lastLat: null,
+  lastLng: null,
+  lastLocationAt: null
 };
 
 const demoOrder = (overrides: Partial<OrderLifecycleSnapshot> = {}): OrderLifecycleSnapshot => ({
@@ -271,7 +285,7 @@ const rowToOffer = (row: DeliveryRow, viewerDriverId: string): DeliveryOffer | n
   if (!order) return null;
   const restaurant = firstRelation(order.restaurants);
 
-  const deliveryFee = Number(order.delivery_fee ?? 0);
+  const deliveryFee = Number(row.offered_fee ?? 0) > 0 ? Number(row.offered_fee) : Number(order.delivery_fee ?? 0);
   const lifecycleOrder: OrderLifecycleSnapshot = {
     id: order.id,
     orderType: normalizeOrderType(order),
@@ -279,7 +293,11 @@ const rowToOffer = (row: DeliveryRow, viewerDriverId: string): DeliveryOffer | n
     paymentStatus: order.payment_status,
     clientName: order.client_name || order.customer_name || '',
     clientPhone: order.client_phone || order.customer_phone || '',
-    deliveryAddress: order.delivery_address ?? '',
+    deliveryAddress: buildDeliveryDestinationAddress({
+      address: order.delivery_address,
+      settlement: order.delivery_settlement,
+      city: order.delivery_city
+    }),
     deliveryLat: order.delivery_lat,
     deliveryLng: order.delivery_lng,
     deliveryComment: order.delivery_comment ?? '',
@@ -324,7 +342,10 @@ const rowToDriverProfile = (row: DriverRow | null): DriverProfile => ({
   serviceSettlements: Array.isArray(row?.service_settlements) ? row.service_settlements : demoProfile.serviceSettlements,
   rating: row?.rating ?? demoProfile.rating,
   status: row?.status ?? (row?.is_online ? 'online' : 'offline'),
-  isOnline: row?.is_online ?? false
+  isOnline: row?.is_online ?? false,
+  lastLat: row?.last_lat ?? null,
+  lastLng: row?.last_lng ?? null,
+  lastLocationAt: row?.last_location_at ?? null
 });
 
 const rowToEarning = (row: EarningRow): DriverEarning => {
@@ -417,7 +438,7 @@ export async function getDriverDashboard(driverId = demoDriverId): Promise<Drive
 
   const driverResult = await supabase
     .from('drivers')
-    .select('id, name, phone, vehicle_info, car_number, photo_url, service_settlements, rating, status, is_online')
+    .select('id, name, phone, vehicle_info, car_number, photo_url, service_settlements, rating, status, is_online, last_lat, last_lng, last_location_at')
     .eq('id', resolvedDriverId)
     .maybeSingle();
 
@@ -426,7 +447,7 @@ export async function getDriverDashboard(driverId = demoDriverId): Promise<Drive
 
   const deliveriesResult = await supabase
     .from('deliveries')
-    .select('id, order_id, driver_id, status, delivery_provider, pickup_qr_token, pickup_qr_expires_at, assigned_at, route_to_restaurant_url, route_to_client_url, estimated_time_min, estimated_time_max, created_at, orders(id, order_type, fulfillment_type, status, payment_status, client_name, client_phone, customer_name, customer_phone, delivery_address, delivery_lat, delivery_lng, delivery_comment, restaurant_address_snapshot, restaurant_lat_snapshot, restaurant_lng_snapshot, delivery_fee, total, total_amount, created_at, order_items(quantity), restaurants(name, logo_url, cover_url, description, address_line, lat, lng))')
+    .select('id, order_id, driver_id, status, delivery_provider, pickup_qr_token, pickup_qr_expires_at, assigned_at, route_to_restaurant_url, route_to_client_url, estimated_time_min, estimated_time_max, offered_fee, pricing_status, created_at, orders(id, order_type, fulfillment_type, status, payment_status, client_name, client_phone, customer_name, customer_phone, delivery_address, delivery_city, delivery_settlement, delivery_lat, delivery_lng, delivery_comment, restaurant_address_snapshot, restaurant_lat_snapshot, restaurant_lng_snapshot, delivery_fee, total, total_amount, created_at, order_items(quantity), restaurants(name, logo_url, cover_url, description, address_line, lat, lng))')
     .in('status', ['waiting_courier', 'waiting_driver', 'assigned', 'arrived_to_restaurant', 'handed_over', 'on_the_way'])
     .or(`driver_id.is.null,driver_id.eq.${profile.id}`)
     .order('created_at', { ascending: false });
@@ -475,6 +496,25 @@ export async function setDriverAvailability(driverId: string, isOnline: boolean)
   const { error } = await supabase
     .from('drivers')
     .update({ is_online: isOnline, status: isOnline ? 'online' : 'offline' })
+    .eq('id', driverId);
+
+  if (error) throw error;
+}
+
+export async function updateDriverLocation(
+  driverId: string,
+  location: { lat: number; lng: number; accuracy?: number | null }
+) {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from('drivers')
+    .update({
+      last_lat: location.lat,
+      last_lng: location.lng,
+      last_location_accuracy: location.accuracy ?? null,
+      last_location_at: new Date().toISOString()
+    })
     .eq('id', driverId);
 
   if (error) throw error;

@@ -80,6 +80,10 @@ alter table public.drivers add column if not exists status text not null default
     'completed'
   ));
 alter table public.drivers add column if not exists updated_at timestamptz not null default now();
+alter table public.drivers add column if not exists last_lat numeric(10,7);
+alter table public.drivers add column if not exists last_lng numeric(10,7);
+alter table public.drivers add column if not exists last_location_accuracy numeric(10,2);
+alter table public.drivers add column if not exists last_location_at timestamptz;
 
 create table if not exists public.restaurant_couriers (
   id uuid primary key default gen_random_uuid(),
@@ -607,3 +611,29 @@ exception
   when duplicate_object then null;
   when undefined_object then null;
 end $$;
+
+create or replace function public.get_public_order_tracking(target_order_id uuid)
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'driver_id', d.id,
+    'driver_name', coalesce(d.name, ''),
+    'driver_phone', coalesce(d.phone, ''),
+    'driver_status', coalesce(d.status, 'offline'),
+    'driver_lat', d.last_lat,
+    'driver_lng', d.last_lng,
+    'driver_accuracy', d.last_location_accuracy,
+    'driver_location_at', d.last_location_at,
+    'delivery_status', coalesce(delivery.status, 'waiting_courier')
+  )
+  from public.orders o
+  join public.deliveries delivery on delivery.order_id = o.id
+  join public.drivers d on d.id = delivery.driver_id
+  where o.id = target_order_id
+  limit 1
+$$;
+
+grant execute on function public.get_public_order_tracking(uuid) to anon, authenticated;

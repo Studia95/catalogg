@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import {
+  buildDeliveryDestinationAddress,
   buildYandexMapsRouteUrl,
   canSendOrderToDelivery,
   type DeliveryStatus,
@@ -10,6 +11,7 @@ import {
   normalizeRestaurantDeliverySettingsForSave,
   type CreateRestaurantOrderFromCartInput
 } from './restaurantOrderPayload';
+import { getConfiguredDeliveryPrice } from './deliveryPricingApi';
 
 type MaybeArray<T> = T | T[];
 
@@ -59,6 +61,7 @@ export type RestaurantOrder = {
   deliveryCity: string;
   deliverySettlement: string;
   restaurantAddress: string;
+  restaurantCity: string;
   restaurantLat: number | null;
   restaurantLng: number | null;
   comment: string;
@@ -93,6 +96,9 @@ export type PublicRestaurantOrderStatus = {
   deliveryStatus: DeliveryStatus;
   driverName: string;
   driverPhone: string;
+  driverLat: number | null;
+  driverLng: number | null;
+  driverLocationAt: string | null;
   subtotal: number;
   deliveryFee: number;
   total: number;
@@ -163,6 +169,9 @@ type OrderRow = {
   restaurant_lng_snapshot?: number | null;
   delivery_city?: string;
   delivery_settlement?: string;
+  restaurants?: MaybeArray<{
+    cities?: MaybeArray<{ name: string | null }> | null;
+  }> | null;
   comment: string;
   status: RestaurantOrderStatus;
   payment_status?: PaymentStatus;
@@ -206,6 +215,9 @@ type PublicRestaurantOrderStatusRow = {
   delivery_status?: unknown;
   driver_name?: unknown;
   driver_phone?: unknown;
+  driver_lat?: unknown;
+  driver_lng?: unknown;
+  driver_location_at?: unknown;
   subtotal?: unknown;
   delivery_fee?: unknown;
   total?: unknown;
@@ -239,6 +251,7 @@ const demoOrders: RestaurantOrder[] = [
     deliveryCity: '',
     deliverySettlement: '',
     restaurantAddress: '',
+    restaurantCity: '',
     restaurantLat: null,
     restaurantLng: null,
     comment: 'Без лука',
@@ -282,6 +295,7 @@ const orderSelect = `
   restaurant_lng_snapshot,
   delivery_city,
   delivery_settlement,
+  restaurant_id,
   comment,
   status,
   subtotal,
@@ -296,6 +310,7 @@ const orderSelect = `
   qr_expires_at,
   verification_code,
   payment_status,
+  restaurants(city_id, cities(name)),
   deliveries(id, status, driver_id, drivers(name, phone)),
   order_items(id, title, quantity, unit_price, line_total)
 `;
@@ -318,6 +333,7 @@ const mapOrder = (row: OrderRow): RestaurantOrder => {
     deliveryCity: row.delivery_city ?? '',
     deliverySettlement: row.delivery_settlement ?? '',
     restaurantAddress: row.restaurant_address_snapshot ?? '',
+    restaurantCity: firstRelation(firstRelation(row.restaurants)?.cities)?.name ?? '',
     restaurantLat: row.restaurant_lat_snapshot ?? null,
     restaurantLng: row.restaurant_lng_snapshot ?? null,
     comment: row.comment,
@@ -366,6 +382,9 @@ const mapPublicOrderStatus = (row: PublicRestaurantOrderStatusRow): PublicRestau
   deliveryStatus: stringValue(row.delivery_status, 'not_required') as DeliveryStatus,
   driverName: stringValue(row.driver_name),
   driverPhone: stringValue(row.driver_phone),
+  driverLat: row.driver_lat == null ? null : numberValue(row.driver_lat),
+  driverLng: row.driver_lng == null ? null : numberValue(row.driver_lng),
+  driverLocationAt: nullableStringValue(row.driver_location_at),
   subtotal: numberValue(row.subtotal),
   deliveryFee: numberValue(row.delivery_fee),
   total: numberValue(row.total),
@@ -438,6 +457,30 @@ export async function getPublicRestaurantOrderStatus(orderId: string): Promise<P
   return mapPublicOrderStatus(data as PublicRestaurantOrderStatusRow);
 }
 
+export type PublicOrderTracking = {
+  driverName: string;
+  driverPhone: string;
+  driverLat: number | null;
+  driverLng: number | null;
+  driverLocationAt: string | null;
+  deliveryStatus: DeliveryStatus;
+};
+
+export async function getPublicOrderTracking(orderId: string): Promise<PublicOrderTracking | null> {
+  if (!supabase || !orderId.trim()) return null;
+  const { data, error } = await supabase.rpc('get_public_order_tracking', { target_order_id: orderId.trim() });
+  if (error || !data || typeof data !== 'object') return null;
+  const row = data as Record<string, unknown>;
+  return {
+    driverName: stringValue(row.driver_name),
+    driverPhone: stringValue(row.driver_phone),
+    driverLat: row.driver_lat == null ? null : numberValue(row.driver_lat),
+    driverLng: row.driver_lng == null ? null : numberValue(row.driver_lng),
+    driverLocationAt: nullableStringValue(row.driver_location_at),
+    deliveryStatus: stringValue(row.delivery_status, 'waiting_courier') as DeliveryStatus
+  };
+}
+
 export async function updateRestaurantOrderStatus(
   order: RestaurantOrder,
   status: RestaurantOrderStatus,
@@ -474,6 +517,13 @@ export async function updateRestaurantOrderStatus(
   });
 
   if (status === 'waiting_driver' && order.fulfillmentType === 'delivery') {
+    const settingsResult = await supabase
+      .from('restaurant_delivery_settings')
+      .select('primary_city')
+      .eq('catalog_id', order.catalogId)
+      .maybeSingle();
+    const restaurantSettlement = settingsResult.data?.primary_city || order.restaurantCity;
+    const configuredDeliveryFee = await getConfiguredDeliveryPrice(restaurantSettlement, order.deliverySettlement);
     await supabase.from('deliveries').upsert(
       {
         order_id: order.id,
@@ -495,9 +545,15 @@ export async function updateRestaurantOrderStatus(
           to: {
             lat: order.deliveryLat,
             lng: order.deliveryLng,
-            address: order.deliveryAddress
+            address: buildDeliveryDestinationAddress({
+              address: order.deliveryAddress,
+              settlement: order.deliverySettlement,
+              city: order.deliveryCity
+            })
           }
         }),
+        offered_fee: configuredDeliveryFee ?? order.deliveryFee,
+        pricing_status: configuredDeliveryFee === null ? 'pending' : 'offered',
         estimated_time_min: 20,
         estimated_time_max: 40
       },

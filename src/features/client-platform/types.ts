@@ -171,6 +171,9 @@ export type ClientOrder = {
   estimatedTimeMax: number;
   driverName?: string;
   driverPhone?: string;
+  driverLat?: number | null;
+  driverLng?: number | null;
+  driverLocationAt?: string | null;
   items: ClientOrderItem[];
 };
 
