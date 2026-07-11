@@ -46,6 +46,8 @@ import {
   type DriverProfile
 } from '../../shared/api/deliveryApi';
 import { requestDriverDeliveryPrice } from '../../shared/api/deliveryPricingApi';
+import { getDeliverySettlements } from '../../shared/api/settlementsApi';
+import { DeliveryTrackingMap } from '../../shared/DeliveryTrackingMap';
 import { formatOrderTime, groupOrdersByDate } from '../../shared/orderListGroups';
 import {
   requestRestaurantOrderNotificationPermission,
@@ -328,7 +330,7 @@ export function DriverApp() {
         ) : route === 'active' ? (
           <DriverActiveScreen delivery={activeDelivery} />
         ) : route === 'map' ? (
-          <DriverMapScreen delivery={activeDelivery ?? availableDeliveries[0] ?? null} />
+          <DriverMapScreen delivery={activeDelivery ?? availableDeliveries[0] ?? null} profile={profile} />
         ) : route === 'qr' ? (
           <DriverQrScreen delivery={activeDelivery} />
         ) : route === 'earnings' ? (
@@ -662,8 +664,13 @@ function DriverActiveScreen({ delivery }: { delivery: DeliveryOffer | null }) {
     ? delivery.status === 'handed_over' || delivery.status === 'on_the_way' || delivery.status === 'arrived_to_client'
     : false;
   const routeUrl = routeIsToClient ? delivery?.routeToClientUrl ?? delivery?.routeToRestaurantUrl : delivery?.routeToRestaurantUrl;
+  const routeTargetReady = delivery
+    ? routeIsToClient
+      ? Number.isFinite(delivery.deliveryLat) && Number.isFinite(delivery.deliveryLng) && Number.isFinite(delivery.restaurantLat) && Number.isFinite(delivery.restaurantLng)
+      : Number.isFinite(delivery.restaurantLat) && Number.isFinite(delivery.restaurantLng)
+    : false;
   const routeAppUrl = delivery
-    ? buildYandexMapsRouteAppUrl(
+    ? routeTargetReady && buildYandexMapsRouteAppUrl(
         routeIsToClient
           ? {
               from: { lat: delivery.restaurantLat, lng: delivery.restaurantLng, address: delivery.restaurantAddress },
@@ -718,12 +725,13 @@ function DriverActiveScreen({ delivery }: { delivery: DeliveryOffer | null }) {
         {delivery.deliveryComment && <DriverRouteLine icon={<ShieldCheck />} label="Комментарий" value={delivery.deliveryComment} />}
         <div className="driver-action-row">
           {delivery.clientPhone && <a href={`tel:${delivery.clientPhone}`}><Phone />Позвонить</a>}
-          <a href={routeAppUrl || routeUrl}
-            target={routeAppUrl ? undefined : '_blank'}
-            rel="noreferrer"
-          >
-            <Navigation />Маршрут
-          </a>
+          {routeTargetReady ? (
+            <a href={routeAppUrl || routeUrl} target={routeAppUrl ? undefined : '_blank'} rel="noreferrer">
+              <Navigation />Маршрут
+            </a>
+          ) : (
+            <button type="button" disabled><Navigation />Точка не сохранена</button>
+          )}
           <Link to="/driver/qr"><QrCode />QR</Link>
         </div>
         {error && <p className="driver-error">{error}</p>}
@@ -765,35 +773,63 @@ function DriverQrScreen({ delivery }: { delivery: DeliveryOffer | null }) {
   );
 }
 
-function DriverMapScreen({ delivery }: { delivery: DeliveryOffer | null }) {
+function DriverMapScreen({ delivery, profile }: { delivery: DeliveryOffer | null; profile: DriverProfile }) {
   const routeIsToClient = delivery
     ? delivery.status === 'handed_over' || delivery.status === 'on_the_way' || delivery.status === 'arrived_to_client'
     : false;
   const nextAddress = routeIsToClient ? delivery?.deliveryAddress : delivery?.restaurantAddress;
   const routeUrl = routeIsToClient ? delivery?.routeToClientUrl ?? delivery?.routeToRestaurantUrl : delivery?.routeToRestaurantUrl;
+  const routeTargetReady = delivery
+    ? routeIsToClient
+      ? Number.isFinite(delivery.deliveryLat) && Number.isFinite(delivery.deliveryLng) && Number.isFinite(delivery.restaurantLat) && Number.isFinite(delivery.restaurantLng)
+      : Number.isFinite(delivery.restaurantLat) && Number.isFinite(delivery.restaurantLng)
+    : false;
   const routeAppUrl = delivery
-    ? buildYandexMapsRouteAppUrl(
+    ? routeTargetReady && buildYandexMapsRouteAppUrl(
         routeIsToClient
           ? {
               from: { lat: delivery.restaurantLat, lng: delivery.restaurantLng, address: delivery.restaurantAddress },
               to: { lat: delivery.deliveryLat, lng: delivery.deliveryLng, address: delivery.deliveryAddress }
             }
-          : { to: { lat: delivery.restaurantLat, lng: delivery.restaurantLng, address: delivery.restaurantAddress } }
+          : profile.lastLat !== null && profile.lastLng !== null
+            ? {
+                from: { lat: profile.lastLat, lng: profile.lastLng, address: 'Моё местоположение' },
+                to: { lat: delivery.restaurantLat, lng: delivery.restaurantLng, address: delivery.restaurantAddress }
+              }
+            : { to: { lat: delivery.restaurantLat, lng: delivery.restaurantLng, address: delivery.restaurantAddress } }
       )
     : '';
 
   return (
     <>
       <DriverHeader title="Карта" />
-      <DriverMapPreview offer={delivery} tall />
+      {delivery && (
+        <>
+          {delivery.restaurantLat !== null && delivery.restaurantLng !== null && delivery.deliveryLat !== null && delivery.deliveryLng !== null ? (
+            <DeliveryTrackingMap
+              className="driver-tracking-map"
+              restaurant={{ lat: delivery.restaurantLat, lng: delivery.restaurantLng, label: delivery.restaurantName, address: delivery.restaurantAddress }}
+              client={{ lat: delivery.deliveryLat, lng: delivery.deliveryLng, label: 'Клиент', address: delivery.deliveryAddress }}
+              driver={profile.lastLat !== null && profile.lastLng !== null
+                ? { lat: profile.lastLat, lng: profile.lastLng, label: 'Моё местоположение' }
+                : null}
+            />
+          ) : <DriverMapPreview offer={delivery} tall />}
+        </>
+      )}
+      {!delivery && <DriverMapPreview offer={delivery} tall />}
       {delivery && (
         <section className="driver-order-panel">
           <DriverRouteLine icon={<MapPin />} label="Следующая точка" value={nextAddress ?? ''} />
           <DriverRouteLine icon={<Navigation />} label="Маршрут" value={`${delivery.distanceKm} км · ${delivery.routeEtaMin} мин`} />
-          <a className="driver-primary driver-link-button" href={routeAppUrl || routeUrl} target={routeAppUrl ? undefined : '_blank'} rel="noreferrer">
-            Построить маршрут
-          </a>
-          {routeAppUrl && routeUrl && <a className="driver-secondary driver-link-button" href={routeUrl} target="_blank" rel="noreferrer">Открыть веб-карту</a>}
+          {routeTargetReady ? (
+            <a className="driver-primary driver-link-button" href={routeAppUrl || routeUrl} target={routeAppUrl ? undefined : '_blank'} rel="noreferrer">
+              Построить маршрут
+            </a>
+          ) : (
+            <button className="driver-primary" type="button" disabled>Точная точка не сохранена</button>
+          )}
+          {routeTargetReady && routeAppUrl && routeUrl && <a className="driver-secondary driver-link-button" href={routeUrl} target="_blank" rel="noreferrer">Открыть веб-карту</a>}
         </section>
       )}
     </>
@@ -898,6 +934,17 @@ function DriverSettingsScreen({ profile }: { profile: DriverProfile }) {
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [directorySettlements, setDirectorySettlements] = useState<string[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    void getDeliverySettlements().then((settlements) => {
+      if (isMounted) {
+        setDirectorySettlements(Array.from(new Set(settlements.flatMap((item) => [item.cityName, item.settlementName]).filter(Boolean))));
+      }
+    });
+    return () => { isMounted = false; };
+  }, []);
 
   useEffect(() => {
     setServiceSettlementsText(profile.serviceSettlements.join('\n'));
@@ -957,12 +1004,15 @@ function DriverSettingsScreen({ profile }: { profile: DriverProfile }) {
       <form className="driver-settings-form" onSubmit={saveSettlements}>
         <label>
           Сёла и города, где работаете
-          <textarea
-            value={serviceSettlementsText}
-            onChange={(event) => setServiceSettlementsText(event.target.value)}
-            rows={4}
-            placeholder={'Грозный\nЦоци-Юрт\nШали'}
-          />
+          <select
+            multiple
+            size={Math.min(6, Math.max(2, directorySettlements.length))}
+            value={parseDriverSettlements(serviceSettlementsText)}
+            onChange={(event) => setServiceSettlementsText(Array.from(event.target.selectedOptions, (option) => option.value).join('\n'))}
+          >
+            {directorySettlements.map((settlement) => <option value={settlement} key={settlement}>{settlement}</option>)}
+          </select>
+          {directorySettlements.length === 0 && <small>Суперадмин ещё не добавил населённые пункты.</small>}
         </label>
         <button className="driver-primary" type="submit" disabled={isSavingSettlements}>
           {isSavingSettlements ? 'Сохраняем...' : 'Сохранить места работы'}

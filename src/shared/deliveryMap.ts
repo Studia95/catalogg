@@ -8,6 +8,11 @@ export type DeliveryMapPoint = {
   y: number;
 };
 
+export type DeliveryMapCoordinateInput = {
+  lat: number | null | undefined;
+  lng: number | null | undefined;
+};
+
 export type OsmTile = {
   key: string;
   url: string;
@@ -18,6 +23,21 @@ export type OsmTile = {
 const tileSize = 256;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+export const getMapCenter = (points: readonly DeliveryMapCoordinateInput[]): DeliveryMapCoordinates => {
+  const validPoints = points.filter(
+    (point): point is { lat: number; lng: number } =>
+      typeof point.lat === 'number' && Number.isFinite(point.lat) &&
+      typeof point.lng === 'number' && Number.isFinite(point.lng)
+  );
+
+  if (validPoints.length === 0) return { lat: 43.3184, lng: 45.6927 };
+
+  return {
+    lat: Number((validPoints.reduce((sum, point) => sum + point.lat, 0) / validPoints.length).toFixed(7)),
+    lng: Number((validPoints.reduce((sum, point) => sum + point.lng, 0) / validPoints.length).toFixed(7))
+  };
+};
 
 const normalizeLng = (lng: number) => ((((lng + 180) % 360) + 360) % 360) - 180;
 

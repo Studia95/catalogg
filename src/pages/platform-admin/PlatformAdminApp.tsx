@@ -1867,8 +1867,8 @@ function DriversPage() {
 
   const drivers = driversQuery.data ?? [];
   const settlementOptions = settlementsQuery.data ?? [];
-  const cityOptions = Array.from(new Set(settlementOptions.map((settlement) => settlement.cityName.trim()).filter(Boolean)));
   const settlementNames = Array.from(new Set(settlementOptions.map((settlement) => settlement.settlementName.trim()).filter(Boolean)));
+  const placeNames = Array.from(new Set(settlementOptions.flatMap((settlement) => [settlement.cityName.trim(), settlement.settlementName.trim()]).filter(Boolean)));
 
   return (
     <main className="platform-page">
@@ -1898,7 +1898,7 @@ function DriversPage() {
 
       <form className="client-form driver-create-panel" onSubmit={createNewDriver}>
         <datalist id="driver-city-options">
-          {cityOptions.map((city) => <option value={city} key={city} />)}
+          {placeNames.map((place) => <option value={place} key={place} />)}
         </datalist>
         <datalist id="driver-settlement-options">
           {settlementNames.map((settlement) => <option value={settlement} key={settlement} />)}
@@ -1929,14 +1929,16 @@ function DriversPage() {
               <input value={cityName} onChange={(event) => setCityName(event.target.value)} placeholder="Грозный" list="driver-city-options" />
             </label>
             <label>
-              Сёла работы
-              <textarea
-                value={serviceSettlementsText}
-                onChange={(event) => setServiceSettlementsText(event.target.value)}
-                placeholder={'Грозный\nЦоци-Юрт\nШали'}
-                rows={3}
-              />
-              {settlementNames.length > 0 && <em>Справочник: {settlementNames.slice(0, 8).join(', ')}</em>}
+              Населённые пункты работы
+              <select
+                multiple
+                size={Math.min(5, Math.max(2, settlementNames.length))}
+                value={parseSettlementsInput(serviceSettlementsText)}
+                onChange={(event) => setServiceSettlementsText(formatSettlementsInput(Array.from(event.target.selectedOptions, (option) => option.value)))}
+              >
+                {settlementNames.map((settlement) => <option value={settlement} key={settlement}>{settlement}</option>)}
+              </select>
+              {settlementNames.length === 0 && <em>Сначала добавьте населённый пункт в разделе «География».</em>}
             </label>
             <label>
               Транспорт
@@ -1999,6 +2001,7 @@ function DriversPage() {
             <DriverAdminCard
               driver={driver}
               settlementOptions={settlementNames}
+              placeOptions={placeNames}
               key={driver.id}
               onSaved={() => void queryClient.invalidateQueries({ queryKey: ['platform-drivers'] })}
             />
@@ -2012,10 +2015,12 @@ function DriversPage() {
 function DriverAdminCard({
   driver,
   settlementOptions,
+  placeOptions,
   onSaved
 }: {
   driver: PlatformDriver;
   settlementOptions: string[];
+  placeOptions: string[];
   onSaved: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -2079,7 +2084,10 @@ function DriverAdminCard({
           </label>
           <label>
             Город
-            <input value={cityName} onChange={(event) => setCityName(event.target.value)} placeholder="Грозный" list="driver-city-options" />
+            <select value={cityName} onChange={(event) => setCityName(event.target.value)}>
+              <option value="">Выберите село или город</option>
+              {placeOptions.map((place) => <option value={place} key={place}>{place}</option>)}
+            </select>
           </label>
           <label>
             Транспорт
@@ -2090,14 +2098,16 @@ function DriverAdminCard({
             <input value={carNumber} onChange={(event) => setCarNumber(event.target.value)} placeholder="A123BC 95" />
           </label>
           <label>
-            Сёла работы
-            <textarea
-              value={serviceSettlementsText}
-              onChange={(event) => setServiceSettlementsText(event.target.value)}
-              rows={3}
-              placeholder={'Грозный\nЦоци-Юрт\nШали'}
-            />
-            {settlementOptions.length > 0 && <em>Справочник: {settlementOptions.slice(0, 6).join(', ')}</em>}
+            Населённые пункты работы
+            <select
+              multiple
+              size={Math.min(5, Math.max(2, settlementOptions.length))}
+              value={parseSettlementsInput(serviceSettlementsText)}
+              onChange={(event) => setServiceSettlementsText(formatSettlementsInput(Array.from(event.target.selectedOptions, (option) => option.value)))}
+            >
+              {settlementOptions.map((settlement) => <option value={settlement} key={settlement}>{settlement}</option>)}
+            </select>
+            {settlementOptions.length === 0 && <em>Сначала добавьте населённый пункт в разделе «География».</em>}
           </label>
           <label>
             Новый пароль

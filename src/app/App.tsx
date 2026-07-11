@@ -111,6 +111,8 @@ import {
   type RestaurantOrder,
   type RestaurantOrderStatus
 } from '../shared/api/restaurantOrdersApi';
+import { useClientPlatformStore } from '../features/client-platform/store';
+import { getClientCityId } from '../shared/api/clientPlatformApi';
 import { getRestaurantPaymentsBySlug, saveRestaurantPayments } from '../shared/api/restaurantPaymentsApi';
 import { getDeliverySettlements, submitSettlementRequest } from '../shared/api/settlementsApi';
 import {
@@ -134,6 +136,7 @@ import {
   type DeliveryCoordinates
 } from '../shared/deliveryLocation';
 import { DeliveryMapPicker } from '../shared/DeliveryMapPicker';
+import { DeliveryTrackingMap } from '../shared/DeliveryTrackingMap';
 import {
   loadPaymentSettings,
   loadPaymentStatus,
@@ -155,18 +158,9 @@ const formatPrice = (value: number) => `${new Intl.NumberFormat('ru-RU').format(
 const DELIVERY_TARGET_ACCURACY_M = 35;
 const DELIVERY_LOCATION_TIMEOUT_MS = 15_000;
 const DEFAULT_DELIVERY_LOCATION = { lat: 43.3184, lng: 45.6927 };
-const parseSettlementList = (value: string) =>
-  Array.from(
-    new Set(
-      value
-        .split(/[\n,]/)
-        .map((item) => item.trim())
-        .filter(Boolean)
-    )
-  );
 const formatSettlementList = (values: string[]) => values.join('\n');
 const buildDeliveryAddress = (city: string, settlement: string, address: string) =>
-  [city.trim(), settlement.trim(), address.trim()].filter(Boolean).join(', ');
+  Array.from(new Set([city.trim(), settlement.trim(), address.trim()].filter(Boolean))).join(', ');
 const publicOrderStatusLabels: Record<RestaurantOrderStatus, string> = {
   new: 'Новый',
   waiting_payment_confirmation: 'Ожидает подтверждения оплаты',
@@ -1548,6 +1542,7 @@ function CheckoutScreen({
     clientPhone,
     setOrder
   } = useOrderStore();
+  const selectedClientCityId = useClientPlatformStore((state) => state.selectedCityId);
   const items = useCartStore((state) => state.items);
   const total = selectCartTotal(items);
   const activeCabins = useMemo(
@@ -1567,14 +1562,12 @@ function CheckoutScreen({
     queryFn: getDeliverySettlements,
     staleTime: 5 * 60 * 1000
   });
+  const selectedClientPlace = useMemo(() => {
+    const places = globalDeliverySettlements.flatMap((settlement) => [settlement.cityName, settlement.settlementName]);
+    return places.find((place) => place.trim() && getClientCityId(place) === selectedClientCityId)?.trim() ?? '';
+  }, [globalDeliverySettlements, selectedClientCityId]);
   const settlementOptions = useMemo(() => {
-    const normalizedConfiguredCity = configuredCity.toLocaleLowerCase('ru-RU');
-    const globalOptions = globalDeliverySettlements
-      .filter((settlement) => {
-        const cityName = settlement.cityName.trim().toLocaleLowerCase('ru-RU');
-        return !normalizedConfiguredCity || !cityName || cityName === normalizedConfiguredCity;
-      })
-      .map((settlement) => settlement.settlementName);
+    const globalOptions = globalDeliverySettlements.flatMap((settlement) => [settlement.cityName, settlement.settlementName]);
 
     return Array.from(
       new Set(
@@ -1583,8 +1576,8 @@ function CheckoutScreen({
           .filter(Boolean)
       )
     );
-  }, [configuredCity, deliverySettings.service_settlements, globalDeliverySettlements]);
-  const effectiveDeliveryCity = configuredCity || deliveryCity;
+  }, [deliverySettings.service_settlements, globalDeliverySettlements]);
+  const effectiveDeliveryCity = selectedClientPlace || deliveryCity || configuredCity;
   const selectedCabin = activeCabins.find((cabin) => cabin.id === cabinId);
   const [isLocating, setIsLocating] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
@@ -1608,6 +1601,7 @@ function CheckoutScreen({
   const profileHydratedRef = useRef(false);
   const submitLockRef = useRef(false);
   const orderAttemptRef = useRef<{ fingerprint: string; idempotencyKey: string } | null>(null);
+  const selectedClientPlaceRef = useRef('');
 
   const clearLocationSession = useCallback(() => {
     const { watchId, timeoutId } = locationSessionRef.current;
@@ -1729,9 +1723,15 @@ function CheckoutScreen({
   }, [catalogSlug, clientName, clientPhone, deliveryAddress, deliveryCity, deliverySettlement, setOrder]);
 
   useEffect(() => {
-    if (!configuredCity || deliveryCity === configuredCity) return;
+    if (selectedClientPlace || !configuredCity || deliveryCity === configuredCity) return;
     setOrder({ deliveryCity: configuredCity });
-  }, [configuredCity, deliveryCity, setOrder]);
+  }, [configuredCity, deliveryCity, selectedClientPlace, setOrder]);
+
+  useEffect(() => {
+    if (mode !== 'delivery' || !selectedClientPlace || selectedClientPlaceRef.current === selectedClientPlace) return;
+    selectedClientPlaceRef.current = selectedClientPlace;
+    setOrder({ deliveryCity: selectedClientPlace, deliverySettlement: selectedClientPlace });
+  }, [mode, selectedClientPlace, setOrder]);
 
   useEffect(() => {
     if (!deliverySettlement || settlementOptions.includes(deliverySettlement)) return;
@@ -2233,10 +2233,22 @@ function PublicOrderStatusScreen({
         {trackingQuery.data?.driverName && trackingQuery.data.driverLat !== null && trackingQuery.data.driverLng !== null && (
           <div className="checkout-summary__total">
             <span>Водитель в пути</span>
-            <a href={`https://yandex.ru/maps/?rtext=${trackingQuery.data.driverLat},${trackingQuery.data.driverLng}~${encodeURIComponent(value.deliveryAddress)}&rtt=auto`} target="_blank" rel="noreferrer">
+            <a href={buildYandexMapsRouteUrl({
+              from: { lat: trackingQuery.data.driverLat, lng: trackingQuery.data.driverLng, address: 'Водитель' },
+              to: { lat: value.deliveryLat, lng: value.deliveryLng, address: value.deliveryAddress }
+            })} target="_blank" rel="noreferrer">
               Открыть местоположение на Яндекс Картах
             </a>
           </div>
+        )}
+        {value.fulfillmentType === 'delivery' && value.restaurantLat !== null && value.restaurantLng !== null && value.deliveryLat !== null && value.deliveryLng !== null && (
+          <DeliveryTrackingMap
+            restaurant={{ lat: value.restaurantLat, lng: value.restaurantLng, label: value.restaurantName, address: value.restaurantAddress }}
+            client={{ lat: value.deliveryLat, lng: value.deliveryLng, label: value.clientName, address: value.deliveryAddress }}
+            driver={trackingQuery.data?.driverLat !== null && trackingQuery.data?.driverLat !== undefined && trackingQuery.data?.driverLng !== null && trackingQuery.data?.driverLng !== undefined
+              ? { lat: trackingQuery.data.driverLat, lng: trackingQuery.data.driverLng, label: trackingQuery.data.driverName || 'Водитель' }
+              : null}
+          />
         )}
         <div className="checkout-summary__total">
           <span>Итого</span>
@@ -2587,6 +2599,11 @@ function getAdminOrderWhatsAppHref(phone: string) {
 }
 
 function getAdminOrderRouteHref(order: RestaurantOrder) {
+  if (
+    order.deliveryLat === null || order.deliveryLng === null ||
+    !Number.isFinite(order.deliveryLat) || !Number.isFinite(order.deliveryLng)
+  ) return '';
+
   return buildYandexMapsRouteUrl({
     from: {
       lat: order.restaurantLat,
@@ -3032,7 +3049,23 @@ function OrderDetailsPanel({
         {order.deliveryLat !== null && order.deliveryLng !== null && (
           <small>{order.deliveryLat.toFixed(7)}, {order.deliveryLng.toFixed(7)}</small>
         )}
-        <a href={routeHref} target="_blank" rel="noreferrer"><MapPin />Построить маршрут</a>
+        {order.clientAccuracyM !== null && <small>Точность геолокации: {order.clientAccuracyM} м</small>}
+        {order.restaurantLat !== null && order.restaurantLng !== null && order.deliveryLat !== null && order.deliveryLng !== null ? (
+          <DeliveryTrackingMap
+            restaurant={{ lat: order.restaurantLat, lng: order.restaurantLng, label: 'Ресторан', address: order.restaurantAddress }}
+            client={{ lat: order.deliveryLat, lng: order.deliveryLng, label: order.clientName || 'Клиент', address: orderAddress }}
+            driver={order.driverLat !== null && order.driverLng !== null
+              ? { lat: order.driverLat, lng: order.driverLng, label: order.driverName || 'Водитель' }
+              : null}
+          />
+        ) : (
+          <p className="admin-order-route-note">Точная точка доставки или точка ресторана ещё не сохранена.</p>
+        )}
+        {routeHref ? (
+          <a href={routeHref} target="_blank" rel="noreferrer"><MapPin />Построить маршрут</a>
+        ) : (
+          <button type="button" disabled><MapPin />Маршрут недоступен без координат</button>
+        )}
       </section>
       <section className="admin-section-card">
         <h2>Состав заказа</h2>
@@ -3135,7 +3168,6 @@ function DeliverySettingsCard({
   onSave: (settings: RestaurantDeliverySettings) => void;
 }) {
   const [draft, setDraft] = useState(settings);
-  const [selectedDirectorySettlement, setSelectedDirectorySettlement] = useState('');
   const { data: directorySettlements = [] } = useQuery({
     queryKey: ['delivery-settlements-public'],
     queryFn: getDeliverySettlements,
@@ -3158,11 +3190,8 @@ function DeliverySettingsCard({
     setDraft((current) => ({ ...current, [key]: value }));
   };
 
-  const setSettlements = (value: string) => {
-    setDraft((current) => ({ ...current, service_settlements: parseSettlementList(value) }));
-  };
-  const cityOptions = useMemo(
-    () => Array.from(new Set(directorySettlements.map((settlement) => settlement.cityName.trim()).filter(Boolean))),
+  const placeOptions = useMemo(
+    () => Array.from(new Set(directorySettlements.flatMap((settlement) => [settlement.cityName.trim(), settlement.settlementName.trim()]).filter(Boolean))),
     [directorySettlements]
   );
   const directorySettlementOptions = useMemo(() => {
@@ -3175,14 +3204,13 @@ function DeliverySettingsCard({
       .map((settlement) => settlement.settlementName)
       .filter(Boolean);
   }, [directorySettlements, draft.primary_city]);
-  const addDirectorySettlement = () => {
-    const value = selectedDirectorySettlement.trim();
-    if (!value) return;
+  const toggleDirectorySettlement = (value: string) => {
     setDraft((current) => ({
       ...current,
-      service_settlements: Array.from(new Set([...current.service_settlements, value]))
+      service_settlements: current.service_settlements.includes(value)
+        ? current.service_settlements.filter((item) => item !== value)
+        : [...current.service_settlements, value]
     }));
-    setSelectedDirectorySettlement('');
   };
 
   return (
@@ -3212,35 +3240,30 @@ function DeliverySettingsCard({
         </label>
         <label>
           Основной город
-          <input
+          <select
             value={draft.primary_city}
             onChange={(event) => setText('primary_city', event.target.value)}
-            placeholder="Например: Грозный"
-            list="restaurant-delivery-city-options"
-          />
-          <datalist id="restaurant-delivery-city-options">
-            {cityOptions.map((city) => <option value={city} key={city} />)}
-          </datalist>
+          >
+            <option value="">Выберите село или город</option>
+            {placeOptions.map((place) => <option value={place} key={place}>{place}</option>)}
+          </select>
         </label>
         <label className="delivery-settings-grid__wide">
           Села и районы обслуживания
-          {directorySettlementOptions.length > 0 && (
-            <span className="delivery-directory-picker">
-              <select value={selectedDirectorySettlement} onChange={(event) => setSelectedDirectorySettlement(event.target.value)}>
-                <option value="">Выбрать из справочника</option>
-                {directorySettlementOptions.map((settlement) => (
-                  <option value={settlement} key={settlement}>{settlement}</option>
-                ))}
-              </select>
-              <button type="button" onClick={addDirectorySettlement}>Добавить</button>
-            </span>
-          )}
-          <textarea
-            value={formatSettlementList(draft.service_settlements)}
-            onChange={(event) => setSettlements(event.target.value)}
-            rows={4}
-            placeholder={'Одно значение на строку\nЧерноречье\nБеркат-Юрт'}
-          />
+          <span className="delivery-directory-picker">
+            {directorySettlementOptions.map((settlement) => (
+              <button
+                type="button"
+                className={draft.service_settlements.includes(settlement) ? 'is-selected' : ''}
+                onClick={() => toggleDirectorySettlement(settlement)}
+                key={settlement}
+              >
+                {settlement}
+              </button>
+            ))}
+            {directorySettlementOptions.length === 0 && <small>Суперадмин ещё не добавил населённые пункты.</small>}
+          </span>
+          {draft.service_settlements.length > 0 && <small>Выбрано: {formatSettlementList(draft.service_settlements)}</small>}
         </label>
       </div>
       <button type="button" onClick={() => onSave(draft)}>Сохранить доставку</button>

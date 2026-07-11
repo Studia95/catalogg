@@ -341,6 +341,13 @@ as $$
     'customer_phone', o.customer_phone,
     'fulfillment_type', o.fulfillment_type,
     'delivery_address', coalesce(o.delivery_address, ''),
+    'delivery_lat', o.delivery_lat,
+    'delivery_lng', o.delivery_lng,
+    'client_accuracy_m', o.client_accuracy_m,
+    'restaurant_name', coalesce(c.name, ''),
+    'restaurant_address', coalesce(o.restaurant_address_snapshot, ''),
+    'restaurant_lat', o.restaurant_lat_snapshot,
+    'restaurant_lng', o.restaurant_lng_snapshot,
     'status', o.status,
     'payment_status', coalesce(o.payment_status, 'unpaid'),
     'delivery_status', coalesce(d.status, case when o.fulfillment_type = 'delivery' then 'waiting_courier' else 'not_required' end),
@@ -374,6 +381,7 @@ as $$
   from public.orders o
   left join public.deliveries d on d.order_id = o.id
   left join public.drivers drv on drv.id = d.driver_id
+  left join public.catalogs c on c.id = o.catalog_id
   where o.id = target_order_id;
 $$;
 

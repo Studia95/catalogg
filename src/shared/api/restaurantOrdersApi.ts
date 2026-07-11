@@ -58,6 +58,7 @@ export type RestaurantOrder = {
   deliveryAddress: string;
   deliveryLat: number | null;
   deliveryLng: number | null;
+  clientAccuracyM: number | null;
   deliveryCity: string;
   deliverySettlement: string;
   restaurantAddress: string;
@@ -71,6 +72,9 @@ export type RestaurantOrder = {
   deliveryId: string | null;
   driverName: string | null;
   driverPhone: string | null;
+  driverLat: number | null;
+  driverLng: number | null;
+  driverLocationAt: string | null;
   subtotal: number;
   deliveryFee: number;
   total: number;
@@ -91,6 +95,13 @@ export type PublicRestaurantOrderStatus = {
   clientPhone: string;
   fulfillmentType: RestaurantOrderFulfillment;
   deliveryAddress: string;
+  deliveryLat: number | null;
+  deliveryLng: number | null;
+  clientAccuracyM: number | null;
+  restaurantName: string;
+  restaurantAddress: string;
+  restaurantLat: number | null;
+  restaurantLng: number | null;
   status: RestaurantOrderStatus;
   paymentStatus: PaymentStatus;
   deliveryStatus: DeliveryStatus;
@@ -164,6 +175,7 @@ type OrderRow = {
   delivery_address?: string;
   delivery_lat?: number | null;
   delivery_lng?: number | null;
+  client_accuracy_m?: number | null;
   restaurant_address_snapshot?: string | null;
   restaurant_lat_snapshot?: number | null;
   restaurant_lng_snapshot?: number | null;
@@ -193,6 +205,9 @@ type OrderRow = {
     drivers?: MaybeArray<{
       name: string | null;
       phone: string | null;
+      last_lat: number | null;
+      last_lng: number | null;
+      last_location_at: string | null;
     }> | null;
   }>;
   order_items?: Array<{
@@ -210,6 +225,13 @@ type PublicRestaurantOrderStatusRow = {
   customer_phone?: unknown;
   fulfillment_type?: unknown;
   delivery_address?: unknown;
+  delivery_lat?: unknown;
+  delivery_lng?: unknown;
+  client_accuracy_m?: unknown;
+  restaurant_name?: unknown;
+  restaurant_address?: unknown;
+  restaurant_lat?: unknown;
+  restaurant_lng?: unknown;
   status?: unknown;
   payment_status?: unknown;
   delivery_status?: unknown;
@@ -248,6 +270,7 @@ const demoOrders: RestaurantOrder[] = [
     deliveryAddress: '',
     deliveryLat: null,
     deliveryLng: null,
+    clientAccuracyM: null,
     deliveryCity: '',
     deliverySettlement: '',
     restaurantAddress: '',
@@ -261,6 +284,9 @@ const demoOrders: RestaurantOrder[] = [
     deliveryId: null,
     driverName: null,
     driverPhone: null,
+    driverLat: null,
+    driverLng: null,
+    driverLocationAt: null,
     subtotal: 1180,
     deliveryFee: 0,
     total: 1180,
@@ -290,6 +316,7 @@ const orderSelect = `
   delivery_address,
   delivery_lat,
   delivery_lng,
+  client_accuracy_m,
   restaurant_address_snapshot,
   restaurant_lat_snapshot,
   restaurant_lng_snapshot,
@@ -311,7 +338,7 @@ const orderSelect = `
   verification_code,
   payment_status,
   restaurants(city_id, cities(name)),
-  deliveries(id, status, driver_id, drivers(name, phone)),
+  deliveries(id, status, driver_id, drivers(name, phone, last_lat, last_lng, last_location_at)),
   order_items(id, title, quantity, unit_price, line_total)
 `;
 
@@ -330,6 +357,7 @@ const mapOrder = (row: OrderRow): RestaurantOrder => {
     deliveryAddress: row.delivery_address ?? '',
     deliveryLat: row.delivery_lat ?? null,
     deliveryLng: row.delivery_lng ?? null,
+    clientAccuracyM: row.client_accuracy_m ?? null,
     deliveryCity: row.delivery_city ?? '',
     deliverySettlement: row.delivery_settlement ?? '',
     restaurantAddress: row.restaurant_address_snapshot ?? '',
@@ -346,6 +374,9 @@ const mapOrder = (row: OrderRow): RestaurantOrder => {
     deliveryId: delivery?.id ?? null,
     driverName: driver?.name ?? null,
     driverPhone: driver?.phone ?? null,
+    driverLat: driver?.last_lat ?? null,
+    driverLng: driver?.last_lng ?? null,
+    driverLocationAt: driver?.last_location_at ?? null,
     subtotal: row.subtotal,
     deliveryFee: row.delivery_fee,
     total: row.total,
@@ -377,6 +408,13 @@ const mapPublicOrderStatus = (row: PublicRestaurantOrderStatusRow): PublicRestau
   clientPhone: stringValue(row.customer_phone),
   fulfillmentType: stringValue(row.fulfillment_type, 'hall') as RestaurantOrderFulfillment,
   deliveryAddress: stringValue(row.delivery_address),
+  deliveryLat: row.delivery_lat == null ? null : numberValue(row.delivery_lat),
+  deliveryLng: row.delivery_lng == null ? null : numberValue(row.delivery_lng),
+  clientAccuracyM: row.client_accuracy_m == null ? null : numberValue(row.client_accuracy_m),
+  restaurantName: stringValue(row.restaurant_name, 'Ресторан'),
+  restaurantAddress: stringValue(row.restaurant_address),
+  restaurantLat: row.restaurant_lat == null ? null : numberValue(row.restaurant_lat),
+  restaurantLng: row.restaurant_lng == null ? null : numberValue(row.restaurant_lng),
   status: stringValue(row.status, 'new') as RestaurantOrderStatus,
   paymentStatus: stringValue(row.payment_status, 'unpaid') as PaymentStatus,
   deliveryStatus: stringValue(row.delivery_status, 'not_required') as DeliveryStatus,

@@ -921,12 +921,11 @@
 }
 
 .delivery-directory-picker {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.delivery-directory-picker select,
 .delivery-directory-picker button {
   min-height: 42px;
   border-radius: 10px;
@@ -934,18 +933,21 @@
   font-weight: 800;
 }
 
-.delivery-directory-picker select {
-  min-width: 0;
-  border: 1px solid rgba(99, 102, 241, 0.18);
-  padding: 0 10px;
-  background: #fff;
-  color: #111827;
-}
-
 .delivery-directory-picker button {
   padding: 0 12px;
+  border: 1px solid #d8e0ec;
   background: #eef2ff;
   color: #4f46e5;
+}
+
+.delivery-directory-picker button.is-selected {
+  border-color: #4f46e5;
+  background: #5b3df4;
+  color: #ffffff;
+}
+
+.delivery-directory-picker small {
+  color: #667085;
 }
 
 .settings-form-grid {

@@ -9,7 +9,8 @@ import {
   buildSupportWhatsappUrl,
   calculateCartSummary,
   filterRestaurants,
-  getDeliveryProviderLabel
+  getDeliveryProviderLabel,
+  resolveCheckoutSettlement
 } from './clientPlatformLogic';
 import type { ClientCartLine, ClientDish, ClientRestaurant } from './types';
 
@@ -164,6 +165,16 @@ describe('client platform restaurant filtering', () => {
       result.map((restaurant) => restaurant.slug),
       ['rizih']
     );
+  });
+});
+
+describe('client checkout settlement', () => {
+  it('uses a manually changed settlement instead of the home screen selection', () => {
+    assert.equal(resolveCheckoutSettlement('Соци-Юрт', 'Шали'), 'Шали');
+  });
+
+  it('uses the home screen settlement when checkout was not changed', () => {
+    assert.equal(resolveCheckoutSettlement('Соци-Юрт', ''), 'Соци-Юрт');
   });
 });
 

@@ -54,6 +54,7 @@ const defaultDraft = (): ClientCheckoutDraft => ({
   clientPhone: '',
   boothName: 'Кабинка №1',
   addressId: 'address-home',
+  deliverySettlement: '',
   deliveryAddress: 'ул. Ленина, 123, кв. 45',
   deliveryLat: 43.3184,
   deliveryLng: 45.6927,

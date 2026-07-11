@@ -27,6 +27,8 @@ type OrderPaymentNoticeInput = {
   paymentMethod: ClientPaymentMethod;
   totalAmount: number;
   addressLine: string;
+  deliveryLat?: number | null;
+  deliveryLng?: number | null;
   clientName: string;
   clientPhone: string;
   createdAt?: string;
@@ -44,6 +46,9 @@ type ClientReviewInput = {
 };
 
 const normalizeText = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
+
+export const resolveCheckoutSettlement = (selectedSettlement: string, checkoutSettlement?: string) =>
+  checkoutSettlement?.trim() || selectedSettlement.trim();
 
 export const filterRestaurants = (
   restaurants: ClientRestaurant[],
@@ -172,6 +177,8 @@ export const buildOrderAfterClientPaymentNotice = (input: OrderPaymentNoticeInpu
     paymentStatus,
     totalAmount: input.totalAmount,
     addressLine: input.addressLine,
+    deliveryLat: input.deliveryLat ?? null,
+    deliveryLng: input.deliveryLng ?? null,
     clientName: input.clientName,
     clientPhone: input.clientPhone,
     createdAt: input.createdAt ?? new Date().toISOString(),

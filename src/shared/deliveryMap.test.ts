@@ -2,12 +2,24 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   buildOsmTileGrid,
+  getMapCenter,
   mapPointToCoordinates,
   coordinatesToMapPoint,
   type DeliveryMapPoint
 } from './deliveryMap';
 
 describe('delivery map picker geometry', () => {
+  it('centers a tracking map on all available delivery points', () => {
+    assert.deepEqual(
+      getMapCenter([
+        { lat: 43.3, lng: 45.7 },
+        { lat: 43.4, lng: 45.9 },
+        { lat: null, lng: null }
+      ]),
+      { lat: 43.35, lng: 45.8 }
+    );
+  });
+
   it('round-trips delivery coordinates through a map point', () => {
     const center = { lat: 43.3181235, lng: 45.6987654 };
     const point = coordinatesToMapPoint(center, center, 16, 320);

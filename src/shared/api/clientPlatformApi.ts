@@ -1,4 +1,4 @@
-import { buildClientReviewPayload } from '../../features/client-platform/clientPlatformLogic';
+import { buildClientReviewPayload, resolveCheckoutSettlement } from '../../features/client-platform/clientPlatformLogic';
 import { clientPlatformSnapshot, fallbackPaymentSettings } from '../../features/client-platform/mockData';
 import type {
   ClientCity,
@@ -204,6 +204,8 @@ const fallbackCityName = 'Грозный';
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
 
 const getCityId = (value?: string | null) => slugifyCity(value?.trim() || fallbackCityName);
+
+export const getClientCityId = getCityId;
 
 const createTheme = (theme?: ThemeRow['settings']): RestaurantTheme => ({
   accentColor: theme?.accent_color ?? '#067a46',
@@ -414,8 +416,10 @@ export async function createClientPlatformOrder(input: ClientPlatformOrderInput)
 
   const clientName = (input.draft.clientName || input.profile.name).trim();
   const clientPhone = (input.draft.clientPhone || input.profile.phone).trim();
-  const deliveryCity = input.draft.orderType === 'delivery' ? '' : '';
-  const deliverySettlement = '';
+  const deliverySettlement = input.draft.orderType === 'delivery'
+    ? resolveCheckoutSettlement('', input.draft.deliverySettlement)
+    : '';
+  const deliveryCity = deliverySettlement;
   const addressComment = input.draft.orderType === 'delivery' ? input.draft.deliveryComment : '';
 
   const rpcName = resolveClientOrderRpcName(items);
@@ -459,6 +463,8 @@ export async function createClientPlatformOrder(input: ClientPlatformOrderInput)
       client_name: clientName,
       client_phone: clientPhone,
       delivery_address: input.draft.orderType === 'delivery' ? input.draft.deliveryAddress : null,
+      delivery_city: input.draft.orderType === 'delivery' ? deliverySettlement : null,
+      delivery_settlement: input.draft.orderType === 'delivery' ? deliverySettlement : null,
       delivery_lat: input.draft.orderType === 'delivery' ? input.draft.deliveryLat : null,
       delivery_lng: input.draft.orderType === 'delivery' ? input.draft.deliveryLng : null,
       client_accuracy_m: input.draft.orderType === 'delivery' ? input.draft.deliveryAccuracyM : null,

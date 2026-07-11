@@ -133,6 +133,7 @@ export type ClientCheckoutDraft = {
   clientPhone: string;
   boothName: string;
   addressId: string;
+  deliverySettlement: string;
   deliveryAddress: string;
   deliveryLat: number;
   deliveryLng: number;
@@ -164,6 +165,8 @@ export type ClientOrder = {
   paymentStatus: ClientPaymentStatus;
   totalAmount: number;
   addressLine: string;
+  deliveryLat?: number | null;
+  deliveryLng?: number | null;
   clientName: string;
   clientPhone: string;
   createdAt: string;

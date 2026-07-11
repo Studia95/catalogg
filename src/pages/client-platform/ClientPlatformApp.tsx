@@ -41,7 +41,7 @@ import type { CSSProperties, FormEvent } from 'react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { buildOrderAfterClientPaymentNotice, buildRestaurantPublicPath, buildSupportWhatsappUrl, buildYandexMapsUrl, calculateCartSummary, filterRestaurants, getDeliveryProviderLabel, requireSavedRestaurantOrderId } from '../../features/client-platform/clientPlatformLogic';
+import { buildOrderAfterClientPaymentNotice, buildRestaurantPublicPath, buildSupportWhatsappUrl, buildYandexMapsUrl, calculateCartSummary, filterRestaurants, getDeliveryProviderLabel, requireSavedRestaurantOrderId, resolveCheckoutSettlement } from '../../features/client-platform/clientPlatformLogic';
 import { clientPlatformSnapshot, fallbackPaymentSettings } from '../../features/client-platform/mockData';
 import {
   selectAllCartCount,
@@ -71,6 +71,8 @@ import {
   subscribeClientOrderRealtime
 } from '../../shared/api/clientPlatformApi';
 import { DeliveryMapPicker } from '../../shared/DeliveryMapPicker';
+import { DeliveryTrackingMap } from '../../shared/DeliveryTrackingMap';
+import { submitSettlementRequest } from '../../shared/api/settlementsApi';
 import { resolveLoginRedirect } from '../../shared/api/loginRedirectApi';
 import { signOutPlatformAdmin } from '../../shared/api/platformAdminApi';
 import { createRestaurantOrderIdempotencyKey } from '../../shared/api/restaurantOrderPayload';
@@ -402,6 +404,9 @@ function CityPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
   const recentCityIds = useClientPlatformStore((state) => state.recentCityIds);
   const setSelectedCity = useClientPlatformStore((state) => state.setSelectedCity);
   const [query, setQuery] = useState('');
+  const [otherSettlement, setOtherSettlement] = useState('');
+  const [requestMessage, setRequestMessage] = useState('');
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
   const filteredCities = snapshot.cities.filter((city) =>
     `${city.name} ${city.region}`.toLocaleLowerCase('ru-RU').includes(query.toLocaleLowerCase('ru-RU').trim())
   );
@@ -412,6 +417,23 @@ function CityPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
   const chooseCity = (cityId: string) => {
     setSelectedCity(cityId);
     navigate('/');
+  };
+
+  const submitOtherSettlement = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = otherSettlement.trim();
+    if (!value) return;
+    setIsSubmittingRequest(true);
+    setRequestMessage('');
+    try {
+      await submitSettlementRequest({ cityName: '', settlementName: value, source: 'city_picker' });
+      setRequestMessage('Заявка отправлена суперадмину. Мы добавим населённый пункт в справочник.');
+      setOtherSettlement('');
+    } catch (error) {
+      setRequestMessage(error instanceof Error ? error.message : 'Не удалось отправить заявку.');
+    } finally {
+      setIsSubmittingRequest(false);
+    }
   };
 
   return (
@@ -461,6 +483,22 @@ function CityPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
             </button>
           ))}
         </div>
+      </section>
+      <section className="plain-section city-other-section">
+        <h2>Другие села</h2>
+        <p>Не нашли свой населённый пункт? Напишите его, и суперадмин добавит его в справочник.</p>
+        <form className="other-settlement-form" onSubmit={(event) => void submitOtherSettlement(event)}>
+          <input
+            value={otherSettlement}
+            onChange={(event) => setOtherSettlement(event.target.value)}
+            placeholder="Введите село или город"
+            aria-label="Другое село или город"
+          />
+          <button type="submit" disabled={isSubmittingRequest || !otherSettlement.trim()}>
+            {isSubmittingRequest ? 'Отправляем...' : 'Отправить заявку'}
+          </button>
+        </form>
+        {requestMessage && <p className="form-message">{requestMessage}</p>}
       </section>
     </>
   );
@@ -914,8 +952,12 @@ function CheckoutPage({
   const saveProfile = useClientPlatformStore((state) => state.saveProfile);
   const drafts = useClientPlatformStore((state) => state.checkoutDrafts);
   const updateDraft = useClientPlatformStore((state) => state.updateCheckoutDraft);
+  const selectedCityId = useClientPlatformStore((state) => state.selectedCityId);
+  const setSelectedCity = useClientPlatformStore((state) => state.setSelectedCity);
   const setOrderType = useClientPlatformStore((state) => state.setDraftOrderType);
   const draft = selectCheckoutDraft(drafts, restaurant.slug);
+  const selectedCity = snapshot.cities.find((city) => city.id === selectedCityId);
+  const checkoutSettlement = resolveCheckoutSettlement(selectedCity?.name ?? '', draft.deliverySettlement);
   const supportedOrderTypes = restaurant.orderTypes;
   const activeOrderType = supportedOrderTypes.includes(draft.orderType)
     ? draft.orderType
@@ -928,7 +970,7 @@ function CheckoutPage({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    updateDraft(restaurant.slug, { orderType: activeOrderType });
+    updateDraft(restaurant.slug, { orderType: activeOrderType, deliverySettlement: checkoutSettlement });
     saveProfile({ name: draft.clientName || profile.name, phone: draft.clientPhone || profile.phone });
     navigate(activeOrderType === 'delivery' ? `/r/${restaurant.slug}/address` : `/r/${restaurant.slug}/payment`);
   };
@@ -971,6 +1013,22 @@ function CheckoutPage({
 
         {activeOrderType === 'delivery' && (
           <section className="flow-section">
+            <label className="field-label">
+              <span>Село или город доставки</span>
+              <select
+                value={checkoutSettlement}
+                onChange={(event) => {
+                  const nextSettlement = event.target.value;
+                  const nextCity = snapshot.cities.find((city) => city.name === nextSettlement);
+                  if (nextCity) setSelectedCity(nextCity.id);
+                  updateDraft(restaurant.slug, { deliverySettlement: nextSettlement });
+                }}
+                required
+              >
+                <option value="">Выберите населённый пункт</option>
+                {snapshot.cities.map((city) => <option value={city.name} key={city.id}>{city.name}</option>)}
+              </select>
+            </label>
             <h2>Контакты</h2>
             <label className="field-label">
               <span>Имя</span>
@@ -1362,6 +1420,8 @@ function PaymentConfirmPage({
       paymentMethod: draft.paymentMethod,
       totalAmount: summary.total,
       addressLine: draft.orderType === 'delivery' ? draft.deliveryAddress : draft.boothName,
+      deliveryLat: draft.orderType === 'delivery' ? draft.deliveryLat : null,
+      deliveryLng: draft.orderType === 'delivery' ? draft.deliveryLng : null,
       clientName: draft.clientName || profile.name,
       clientPhone: draft.clientPhone || profile.phone,
       items: orderItems,
@@ -1492,6 +1552,20 @@ function OrderStatusPage({
             <small>{order.addressLine}</small>
           </span>
         </section>
+        {order.orderType === 'delivery' && restaurant.lat !== null && restaurant.lng !== null &&
+          typeof order.deliveryLat === 'number' && Number.isFinite(order.deliveryLat) &&
+          typeof order.deliveryLng === 'number' && Number.isFinite(order.deliveryLng) && (
+            <section className="delivery-tracking-section">
+              <h2>Карта доставки</h2>
+              <DeliveryTrackingMap
+                restaurant={{ lat: restaurant.lat, lng: restaurant.lng, label: 'Ресторан', address: restaurant.addressLine }}
+                client={{ lat: order.deliveryLat, lng: order.deliveryLng, label: 'Вы', address: order.addressLine }}
+                driver={order.driverLat !== null && order.driverLat !== undefined && order.driverLng !== null && order.driverLng !== undefined
+                  ? { lat: order.driverLat, lng: order.driverLng, label: 'Таксист', address: order.driverName }
+                  : null}
+              />
+            </section>
+          )}
         <a
           className="secondary-flow-button"
           href={buildSupportWhatsappUrl(snapshot.supportWhatsapp)}
