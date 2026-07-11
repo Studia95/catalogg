@@ -51,6 +51,7 @@ import { DeliveryTrackingMap } from '../../shared/DeliveryTrackingMap';
 import { formatOrderTime, groupOrdersByDate } from '../../shared/orderListGroups';
 import {
   requestRestaurantOrderNotificationPermission,
+  restoreRestaurantOrderNotificationSubscription,
   showRestaurantOrderNotification
 } from '../../shared/restaurantOrderNotifications';
 import { supabase } from '../../shared/supabase';
@@ -230,6 +231,14 @@ export function DriverApp() {
     status: localActiveDelivery ? 'busy' : isOnline ? 'online' : 'offline'
   };
   const effectiveDriverId = profile.id || selectedDriverId;
+
+  useEffect(() => {
+    if (!authChecked || !hasDriverAccess || !effectiveDriverId) return;
+    void restoreRestaurantOrderNotificationSubscription({
+      role: 'driver',
+      driverId: effectiveDriverId
+    });
+  }, [authChecked, effectiveDriverId, hasDriverAccess]);
 
   useEffect(() => subscribeToDriverRealtime(effectiveDriverId, loadDashboard), [effectiveDriverId, loadDashboard]);
 

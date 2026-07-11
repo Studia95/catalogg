@@ -19,6 +19,9 @@ describe('background web push contract', () => {
     assert.match(source, /unique \(user_id, endpoint\)/);
     assert.match(source, /enable row level security/);
     assert.match(source, /upsert_web_push_subscription/);
+    assert.match(source, /Only platform administrators can register super-admin push/);
+    assert.match(source, /Only the driver can register this driver push subscription/);
+    assert.match(source, /Only catalog members can register restaurant push subscriptions/);
   });
 
   it('has a server-side sender that signs Web Push requests with VAPID secrets', async () => {

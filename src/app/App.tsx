@@ -125,6 +125,7 @@ import { formatOrderTime, groupOrdersByDate } from '../shared/orderListGroups';
 import {
   getRestaurantOrderNotificationPermission,
   requestRestaurantOrderNotificationPermission,
+  restoreRestaurantOrderNotificationSubscription,
   showRestaurantOrderNotification
 } from '../shared/restaurantOrderNotifications';
 import { imageFileToDataUrl } from '../shared/images';
@@ -2396,7 +2397,7 @@ function LoginModal({
     const success = await login(String(formData.get('email')), String(formData.get('password')), catalogSlug);
     setIsLoading(false);
     if (success) {
-      void requestRestaurantOrderNotificationPermission();
+      void requestRestaurantOrderNotificationPermission({ role: 'restaurant', catalogSlug });
       onSuccess();
       return;
     }
@@ -2725,6 +2726,11 @@ function RestaurantAdminShell({
   const enableOrderNotifications = () => {
     void requestRestaurantOrderNotificationPermission({ role: 'restaurant', catalogSlug }).then(setNotificationPermission);
   };
+
+  useEffect(() => {
+    if (notificationPermission !== 'granted' || !catalogSlug) return;
+    void restoreRestaurantOrderNotificationSubscription({ role: 'restaurant', catalogSlug }).then(setNotificationPermission);
+  }, [catalogSlug, notificationPermission]);
 
   useEffect(() => {
     if (routeSection === 'order') {

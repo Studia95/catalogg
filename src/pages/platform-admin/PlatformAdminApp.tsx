@@ -69,7 +69,8 @@ import { createRestaurantTemplate, getTemplateOptions } from '../../shared/api/t
 import { copyText, getCatalogAdminUrl, getCatalogPublicUrl } from '../../shared/platformUrls';
 import {
   getRestaurantOrderNotificationPermission,
-  requestRestaurantOrderNotificationPermission
+  requestRestaurantOrderNotificationPermission,
+  restoreRestaurantOrderNotificationSubscription
 } from '../../shared/restaurantOrderNotifications';
 import {
   createClientSchema,
@@ -2408,6 +2409,11 @@ function PlatformAdminContent() {
   });
   const templatesQuery = useQuery({ queryKey: ['platform-templates'], queryFn: getTemplateOptions });
   const [notificationPermission, setNotificationPermission] = useState(() => getRestaurantOrderNotificationPermission());
+
+  useEffect(() => {
+    if (!platformAdminQuery.data?.isPlatformAdmin) return;
+    void restoreRestaurantOrderNotificationSubscription({ role: 'super_admin' }).then(setNotificationPermission);
+  }, [platformAdminQuery.data?.isPlatformAdmin]);
 
   useEffect(() => {
     const onPopState = () => setRoute(readRouteFromLocation());

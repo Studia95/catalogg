@@ -1,11 +1,12 @@
-import { Home, MapPin, Navigation } from 'lucide-react';
-import { Minus, Plus, LocateFixed } from 'lucide-react';
+import { Home, LocateFixed, MapPin, Minus, Navigation, Plus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { PointerEvent, ReactNode } from 'react';
 import {
   buildOsmTileGrid,
   coordinatesToMapPoint,
   getMapCenter,
+  getMapZoomForPoints,
+  mapPointToCoordinates,
   type DeliveryMapCoordinates
 } from './deliveryMap';
 import './delivery-tracking-map.css';
@@ -23,16 +24,20 @@ type DeliveryTrackingMapProps = {
 };
 
 const mapSize = 640;
-const defaultMapZoom = 14;
-
 export function DeliveryTrackingMap({ restaurant, client, driver, className = '' }: DeliveryTrackingMapProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number; center: DeliveryMapCoordinates; zoom: number } | null>(null);
   const [scale, setScale] = useState(1);
-  const [mapZoom, setMapZoom] = useState(defaultMapZoom);
+  const [isDragging, setIsDragging] = useState(false);
   const points = useMemo(() => [restaurant, client, ...(driver ? [driver] : [])], [client, driver, restaurant]);
   const defaultCenter = useMemo(() => getMapCenter(points), [points]);
+  const defaultMapZoom = useMemo(() => getMapZoomForPoints(points), [points]);
   const [center, setCenter] = useState(defaultCenter);
-  useEffect(() => setCenter(defaultCenter), [defaultCenter]);
+  const [mapZoom, setMapZoom] = useState(defaultMapZoom);
+  useEffect(() => {
+    setCenter(defaultCenter);
+    setMapZoom(defaultMapZoom);
+  }, [defaultCenter, defaultMapZoom]);
   const tiles = useMemo(() => buildOsmTileGrid(center, mapZoom, mapSize), [center, mapZoom]);
   const projectedPoints = useMemo(
     () => points.map((point) => ({ ...point, ...coordinatesToMapPoint(point, center, mapZoom, mapSize) })),
@@ -53,9 +58,36 @@ export function DeliveryTrackingMap({ restaurant, client, driver, className = ''
     return () => observer.disconnect();
   }, []);
 
+  const startDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('button')) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragStartRef.current = { x: event.clientX, y: event.clientY, center, zoom: mapZoom };
+    setIsDragging(true);
+  };
+
+  const dragMap = (event: PointerEvent<HTMLDivElement>) => {
+    const start = dragStartRef.current;
+    if (!start) return;
+    const dx = (event.clientX - start.x) / scale;
+    const dy = (event.clientY - start.y) / scale;
+    setCenter(mapPointToCoordinates({ x: mapSize / 2 - dx, y: mapSize / 2 - dy }, start.center, start.zoom, mapSize));
+  };
+
+  const endDrag = () => {
+    dragStartRef.current = null;
+    setIsDragging(false);
+  };
+
   return (
     <section className={`delivery-tracking-map ${className}`.trim()} aria-label="Карта доставки">
-      <div className="delivery-tracking-map__canvas" ref={canvasRef}>
+      <div
+        className={isDragging ? 'delivery-tracking-map__canvas is-dragging' : 'delivery-tracking-map__canvas'}
+        ref={canvasRef}
+        onPointerDown={startDrag}
+        onPointerMove={dragMap}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+      >
         <div className="delivery-tracking-map__scene" style={{ transform: `scale(${scale})` }}>
           {tiles.map((tile) => (
             <img key={tile.key} src={tile.url} alt="" aria-hidden="true" draggable={false} style={{ left: tile.x, top: tile.y }} />
@@ -72,7 +104,7 @@ export function DeliveryTrackingMap({ restaurant, client, driver, className = ''
           {driverPoint && <TrackingMarker point={driverPoint} kind="driver" icon={<Navigation />} />}
           <TrackingMarker point={clientPoint} kind="client" icon={<MapPin />} />
         </div>
-        <div className="delivery-tracking-map__controls" aria-label="Управление картой">
+        <div className="delivery-tracking-map__controls" aria-label="Управление картой" onPointerDown={(event) => event.stopPropagation()}>
           <button type="button" onClick={() => setMapZoom((value) => Math.min(18, value + 1))} aria-label="Приблизить"><Plus /></button>
           <button type="button" onClick={() => setMapZoom((value) => Math.max(10, value - 1))} aria-label="Отдалить"><Minus /></button>
           <button type="button" onClick={() => { setCenter(defaultCenter); setMapZoom(defaultMapZoom); }} aria-label="Показать все точки"><LocateFixed /></button>

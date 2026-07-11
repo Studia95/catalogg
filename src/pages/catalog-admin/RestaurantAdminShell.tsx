@@ -54,6 +54,7 @@ import type { CatalogAdminAccess } from '../../shared/api/catalogAdminApi';
 import {
   getRestaurantOrderNotificationPermission,
   requestRestaurantOrderNotificationPermission,
+  restoreRestaurantOrderNotificationSubscription,
   showRestaurantOrderNotification
 } from '../../shared/restaurantOrderNotifications';
 
@@ -348,6 +349,14 @@ export function RestaurantAdminShell({
       catalogId: access.catalog?.id
     }).then(setNotificationPermission);
   };
+
+  useEffect(() => {
+    if (notificationPermission !== 'granted' || !access.catalog?.id) return;
+    void restoreRestaurantOrderNotificationSubscription({
+      role: 'restaurant',
+      catalogId: access.catalog.id
+    }).then(setNotificationPermission);
+  }, [access.catalog?.id, notificationPermission]);
 
   const refreshData = useCallback(async (options: { silent?: boolean } = {}) => {
     if (!options.silent) setIsLoadingData(true);

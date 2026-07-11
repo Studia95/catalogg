@@ -1,4 +1,5 @@
-import { registerWebPushSubscription, type WebPushContext } from './webPush';
+import { registerWebPushSubscription } from './webPush';
+import { canRestoreWebPushSubscription, type WebPushContext } from './webPushContext';
 
 type NotificationState = NotificationPermission | 'unsupported';
 
@@ -23,6 +24,18 @@ export async function requestRestaurantOrderNotificationPermission(context?: Web
   } catch {
     return Notification.permission;
   }
+}
+
+export async function restoreRestaurantOrderNotificationSubscription(context: WebPushContext): Promise<NotificationState> {
+  const permission = getRestaurantOrderNotificationPermission();
+  if (!canRestoreWebPushSubscription(permission, context)) return permission;
+
+  try {
+    await registerWebPushSubscription(context);
+  } catch {
+    // The next PWA open will retry registration without interrupting the worker.
+  }
+  return permission;
 }
 
 export async function showRestaurantOrderNotification({

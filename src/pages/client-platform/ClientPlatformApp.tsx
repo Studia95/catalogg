@@ -73,6 +73,7 @@ import {
 import { DeliveryMapPicker } from '../../shared/DeliveryMapPicker';
 import { DeliveryTrackingMap } from '../../shared/DeliveryTrackingMap';
 import { submitSettlementRequest } from '../../shared/api/settlementsApi';
+import { buildYandexMapsRouteUrl } from '../../features/order/orderLifecycle';
 import { resolveLoginRedirect } from '../../shared/api/loginRedirectApi';
 import { signOutPlatformAdmin } from '../../shared/api/platformAdminApi';
 import { createRestaurantOrderIdempotencyKey } from '../../shared/api/restaurantOrderPayload';
@@ -1537,7 +1538,14 @@ function OrderStatusPage({
               <strong>Таксист в пути</strong>
               <small>{order.driverLat.toFixed(5)}, {order.driverLng.toFixed(5)}</small>
               {order.driverLocationAt && <small>Обновлено {new Date(order.driverLocationAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</small>}
-              <a href={`https://yandex.ru/maps/?rtext=${order.driverLat},${order.driverLng}~${order.addressLine}&rtt=auto`} target="_blank" rel="noreferrer">
+              <a
+                href={buildYandexMapsRouteUrl({
+                  from: { lat: order.driverLat, lng: order.driverLng, address: 'Водитель' },
+                  to: { lat: order.deliveryLat, lng: order.deliveryLng, address: order.addressLine }
+                })}
+                target="_blank"
+                rel="noreferrer"
+              >
                 <MapPin />
                 Отследить на карте
               </a>

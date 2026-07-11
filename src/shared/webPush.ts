@@ -1,14 +1,7 @@
 import { supabase } from './supabase';
+import type { WebPushContext } from './webPushContext';
 
-export type WebPushRole = 'client' | 'restaurant' | 'driver' | 'super_admin';
-
-export type WebPushContext = {
-  role: WebPushRole;
-  catalogId?: string | null;
-  catalogSlug?: string | null;
-  driverId?: string | null;
-  orderId?: string | null;
-};
+export type { WebPushContext, WebPushRole } from './webPushContext';
 
 const publicKey = () => import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY?.trim() ?? '';
 

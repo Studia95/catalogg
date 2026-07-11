@@ -57,6 +57,45 @@ begin
     raise exception 'Unsupported push role';
   end if;
 
+  if role_name = 'super_admin'
+    and not (
+      public.is_platform_admin()
+      or exists (
+        select 1
+        from public.users platform_user
+        where platform_user.id = public.current_platform_user_id()
+          and platform_user.role = 'super_admin'
+      )
+    ) then
+    raise exception 'Only platform administrators can register super-admin push subscriptions';
+  end if;
+
+  if role_name = 'driver'
+    and (driver_id_input is null or not public.is_driver_profile(driver_id_input)) then
+    raise exception 'Only the driver can register this driver push subscription';
+  end if;
+
+  if role_name = 'restaurant'
+    and (
+      catalog_id_input is null
+      or not (
+        public.is_platform_admin()
+        or public.is_catalog_member(catalog_id_input, array['owner','admin','editor','viewer']::public.catalog_role[])
+        or exists (
+          select 1
+          from public.clients client
+          where client.catalog_id = catalog_id_input
+            and client.owner_user_id = auth.uid()
+        )
+      )
+    ) then
+    raise exception 'Only catalog members can register restaurant push subscriptions';
+  end if;
+
+  if role_name = 'client' and order_id_input is null then
+    raise exception 'Client push subscriptions require an order';
+  end if;
+
   insert into public.web_push_subscriptions (
     user_id, role, catalog_id, driver_id, order_id, endpoint, p256dh, auth, user_agent, last_seen_at
   ) values (

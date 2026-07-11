@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   buildOsmTileGrid,
   getMapCenter,
+  getMapZoomForPoints,
   mapPointToCoordinates,
   coordinatesToMapPoint,
   type DeliveryMapPoint
@@ -17,6 +18,16 @@ describe('delivery map picker geometry', () => {
         { lat: null, lng: null }
       ]),
       { lat: 43.35, lng: 45.8 }
+    );
+  });
+
+  it('zooms out for a delivery that spans different settlements', () => {
+    assert.equal(
+      getMapZoomForPoints([
+        { lat: 43.3184, lng: 45.6927 },
+        { lat: 43.7234, lng: 46.1102 }
+      ]),
+      11
     );
   });
 

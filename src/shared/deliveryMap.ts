@@ -39,6 +39,26 @@ export const getMapCenter = (points: readonly DeliveryMapCoordinateInput[]): Del
   };
 };
 
+export const getMapZoomForPoints = (points: readonly DeliveryMapCoordinateInput[]) => {
+  const validPoints = points.filter(
+    (point): point is { lat: number; lng: number } =>
+      typeof point.lat === 'number' && Number.isFinite(point.lat) &&
+      typeof point.lng === 'number' && Number.isFinite(point.lng)
+  );
+  if (validPoints.length < 2) return 15;
+
+  const latSpan = Math.max(...validPoints.map((point) => point.lat)) - Math.min(...validPoints.map((point) => point.lat));
+  const lngSpan = Math.max(...validPoints.map((point) => point.lng)) - Math.min(...validPoints.map((point) => point.lng));
+  const span = Math.max(latSpan, lngSpan);
+
+  if (span > 0.8) return 10;
+  if (span > 0.25) return 11;
+  if (span > 0.1) return 12;
+  if (span > 0.04) return 13;
+  if (span > 0.015) return 14;
+  return 15;
+};
+
 const normalizeLng = (lng: number) => ((((lng + 180) % 360) + 360) % 360) - 180;
 
 const latLngToWorldPixel = ({ lat, lng }: DeliveryMapCoordinates, zoom: number) => {

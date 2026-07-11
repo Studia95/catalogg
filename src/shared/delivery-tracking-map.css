@@ -13,7 +13,11 @@
   aspect-ratio: 1;
   overflow: hidden;
   background: #e5e7eb;
+  cursor: grab;
+  touch-action: none;
 }
+
+.delivery-tracking-map__canvas.is-dragging { cursor: grabbing; }
 
 .delivery-tracking-map__scene {
   position: absolute;
