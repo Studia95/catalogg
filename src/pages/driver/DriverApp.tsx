@@ -149,8 +149,7 @@ const emptySnapshot: DriverDashboardSnapshot = {
 export function DriverApp() {
   const location = useLocation();
   const selectedDriverId = useDriverStore((state) => state.selectedDriverId);
-  const setSelectedDriverId = useDriverStore((state) => state.setSelectedDriverId);
-  const isOnline = useDriverStore((state) => state.isOnline);
+  const bindDriver = useDriverStore((state) => state.bindDriver);
   const localActiveDelivery = useDriverStore((state) => state.localActiveDelivery);
   const completedDeliveryIds = useDriverStore((state) => state.completedDeliveryIds);
   const [snapshot, setSnapshot] = useState<DriverDashboardSnapshot>(emptySnapshot);
@@ -214,7 +213,7 @@ export function DriverApp() {
     void getAuthenticatedDriverId().then((driverId) => {
       if (!isMounted) return;
       if (driverId) {
-        setSelectedDriverId(driverId);
+        bindDriver(driverId);
       }
       setHasDriverAccess(Boolean(driverId));
       setAuthChecked(true);
@@ -223,12 +222,11 @@ export function DriverApp() {
     return () => {
       isMounted = false;
     };
-  }, [setSelectedDriverId]);
+  }, [bindDriver]);
 
   const profile: DriverProfile = {
     ...snapshot.profile,
-    isOnline,
-    status: localActiveDelivery ? 'busy' : isOnline ? 'online' : 'offline'
+    status: localActiveDelivery ? 'busy' : snapshot.profile.status
   };
   const effectiveDriverId = profile.id || selectedDriverId;
 
@@ -243,7 +241,7 @@ export function DriverApp() {
   useEffect(() => subscribeToDriverRealtime(effectiveDriverId, loadDashboard), [effectiveDriverId, loadDashboard]);
 
   useEffect(() => {
-    if (!authChecked || !hasDriverAccess || !isOnline || !effectiveDriverId || !navigator.geolocation) {
+    if (!authChecked || !hasDriverAccess || !snapshot.profile.isOnline || !effectiveDriverId || !navigator.geolocation) {
       return undefined;
     }
 
@@ -262,7 +260,7 @@ export function DriverApp() {
     });
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [authChecked, effectiveDriverId, hasDriverAccess, isOnline]);
+  }, [authChecked, effectiveDriverId, hasDriverAccess, snapshot.profile.isOnline]);
 
   useEffect(() => {
     if (!authChecked || !hasDriverAccess) return undefined;
@@ -292,7 +290,7 @@ export function DriverApp() {
   }, [authChecked, hasDriverAccess, loadDashboard]);
 
   const activeDelivery = localActiveDelivery ?? snapshot.activeDelivery;
-  const availableDeliveries = isOnline
+  const availableDeliveries = snapshot.profile.isOnline
     ? snapshot.availableDeliveries.filter((delivery) => !completedDeliveryIds.includes(delivery.deliveryId))
     : [];
   const route = location.pathname.split('/').filter(Boolean)[1] ?? 'home';
@@ -397,16 +395,28 @@ function DriverHomeScreen({
   activeDelivery: DeliveryOffer | null;
   availableDeliveries: readonly DeliveryOffer[];
   error: string;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void>;
 }) {
-  const setOnline = useDriverStore((state) => state.setOnline);
+  const [availabilityError, setAvailabilityError] = useState('');
+  const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
   const toggleOnline = async () => {
+    if (isUpdatingAvailability) return;
     const nextOnline = !profile.isOnline;
-    if (nextOnline) {
-      void requestRestaurantOrderNotificationPermission({ role: 'driver', driverId: profile.id });
+    setIsUpdatingAvailability(true);
+    setAvailabilityError('');
+    try {
+      await setDriverAvailability(profile.id, nextOnline);
+      await onRefresh();
+      if (nextOnline) {
+        void requestRestaurantOrderNotificationPermission({ role: 'driver', driverId: profile.id });
+      }
+    } catch (availabilityUpdateError) {
+      setAvailabilityError(
+        availabilityUpdateError instanceof Error ? availabilityUpdateError.message : 'Не удалось изменить онлайн-статус'
+      );
+    } finally {
+      setIsUpdatingAvailability(false);
     }
-    setOnline(nextOnline);
-    await setDriverAvailability(profile.id, nextOnline);
   };
 
   return (
@@ -420,13 +430,14 @@ function DriverHomeScreen({
           <button className="driver-online-button" type="button" onClick={() => void onRefresh()} aria-label="Обновить">
             <RefreshCw />
           </button>
-          <button className="driver-online-button" type="button" onClick={() => void toggleOnline()} aria-label="Онлайн статус">
+          <button className="driver-online-button" type="button" disabled={isUpdatingAvailability} onClick={() => void toggleOnline()} aria-label="Онлайн статус">
             {profile.isOnline ? <ToggleRight /> : <ToggleLeft />}
           </button>
         </div>
       </header>
 
       {error && <p className="driver-error">{error}</p>}
+      {availabilityError && <p className="driver-error">{availabilityError}</p>}
 
       <section className="driver-earnings-card">
         <span>Сегодня</span>

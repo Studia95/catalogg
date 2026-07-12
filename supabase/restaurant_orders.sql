@@ -128,6 +128,37 @@ drop policy if exists "status history admins insert" on public.order_status_hist
 create policy "status history admins insert" on public.order_status_history
 for insert with check (public.is_catalog_member(catalog_id, array['owner','admin']::public.catalog_role[]));
 
+create or replace function public.delivery_location_from_note(location_note text)
+returns jsonb
+language plpgsql
+immutable
+set search_path = public
+as $$
+declare
+  matched text[];
+  latitude numeric;
+  longitude numeric;
+begin
+  matched := regexp_match(
+    coalesce(location_note, ''),
+    'Координаты клиента:[[:space:]]*(-?[0-9]+[.][0-9]+)[[:space:]]*,[[:space:]]*(-?[0-9]+[.][0-9]+)([[:space:]]*[(]точность[[:space:]]+([0-9]+)[[:space:]]*м[)])?'
+  );
+  if matched is null then return null; end if;
+
+  latitude := matched[1]::numeric;
+  longitude := matched[2]::numeric;
+  if abs(latitude) > 90 or abs(longitude) > 180 then return null; end if;
+
+  return jsonb_build_object(
+    'lat', latitude,
+    'lng', longitude,
+    'accuracy_m', case when matched[4] is null then null else matched[4]::numeric end
+  );
+end;
+$$;
+
+grant execute on function public.delivery_location_from_note(text) to anon, authenticated;
+
 create or replace function public.create_public_restaurant_order(
   target_catalog_id uuid,
   customer_name text,
@@ -148,6 +179,7 @@ set search_path = public, extensions
 as $$
 declare
   created_order_id uuid;
+  location jsonb := public.delivery_location_from_note(comment);
   item jsonb;
   product_record record;
   item_quantity integer;
@@ -179,6 +211,12 @@ begin
     delivery_city,
     delivery_settlement,
     client_address_comment,
+    delivery_lat,
+    delivery_lng,
+    client_lat,
+    client_lng,
+    client_accuracy_m,
+    delivery_address_snapshot,
     verification_code,
     qr_token,
     qr_expires_at
@@ -195,6 +233,12 @@ begin
     coalesce(delivery_city, ''),
     coalesce(delivery_settlement, ''),
     coalesce(client_address_comment, ''),
+    case when fulfillment_type = 'delivery' then (location->>'lat')::numeric else null end,
+    case when fulfillment_type = 'delivery' then (location->>'lng')::numeric else null end,
+    case when fulfillment_type = 'delivery' then (location->>'lat')::numeric else null end,
+    case when fulfillment_type = 'delivery' then (location->>'lng')::numeric else null end,
+    case when fulfillment_type = 'delivery' then (location->>'accuracy_m')::numeric else null end,
+    case when fulfillment_type = 'delivery' then coalesce(delivery_address, '') else null end,
     verification_code,
     encode(gen_random_bytes(24), 'hex'),
     now() + interval '24 hours'
@@ -277,6 +321,7 @@ set search_path = public, extensions
 as $$
 declare
   created_order_id uuid;
+  location jsonb := public.delivery_location_from_note(comment);
   item jsonb;
   legacy_product record;
   item_quantity integer;
@@ -308,6 +353,12 @@ begin
     delivery_city,
     delivery_settlement,
     client_address_comment,
+    delivery_lat,
+    delivery_lng,
+    client_lat,
+    client_lng,
+    client_accuracy_m,
+    delivery_address_snapshot,
     verification_code,
     qr_token,
     qr_expires_at
@@ -324,6 +375,12 @@ begin
     coalesce(delivery_city, ''),
     coalesce(delivery_settlement, ''),
     coalesce(client_address_comment, ''),
+    case when fulfillment_type = 'delivery' then (location->>'lat')::numeric else null end,
+    case when fulfillment_type = 'delivery' then (location->>'lng')::numeric else null end,
+    case when fulfillment_type = 'delivery' then (location->>'lat')::numeric else null end,
+    case when fulfillment_type = 'delivery' then (location->>'lng')::numeric else null end,
+    case when fulfillment_type = 'delivery' then (location->>'accuracy_m')::numeric else null end,
+    case when fulfillment_type = 'delivery' then coalesce(delivery_address, '') else null end,
     verification_code,
     encode(gen_random_bytes(24), 'hex'),
     now() + interval '24 hours'

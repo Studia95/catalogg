@@ -7,6 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "test": "npm run test:node && npm run test:unit",
+    "test:node": "tsx --test src/features/**/*.test.ts src/shared/*.test.ts src/shared/api/*.test.ts scripts/tests/*.test.mjs",
+    "test:unit": "vitest run --project unit",
+    "test:browser": "vitest run --project browser",
+    "test:mutation": "stryker run",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm run build",
@@ -33,11 +38,14 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.14.0",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@types/node": "^22.10.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@types/node": "^22.10.2",
     "@vite-pwa/assets-generator": "^0.2.6",
     "@vitejs/plugin-react": "^4.3.3",
+    "@vitest/browser-playwright": "^4.1.10",
     "eslint": "^9.14.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react-hooks": "^5.0.0",
@@ -45,9 +53,12 @@
     "globals": "^15.12.0",
     "prettier": "^3.3.3",
     "tailwindcss": "^3.4.14",
+    "tsx": "^4.23.0",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.12.2",
     "vite": "^5.4.10",
-    "vite-plugin-pwa": "^0.20.5"
+    "vite-plugin-pwa": "^0.20.5",
+    "vitest": "^4.1.10",
+    "vitest-browser-react": "^2.2.0"
   }
 }

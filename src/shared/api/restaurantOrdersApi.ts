@@ -12,6 +12,7 @@ import {
   type CreateRestaurantOrderFromCartInput
 } from './restaurantOrderPayload';
 import { getConfiguredDeliveryPrice } from './deliveryPricingApi';
+import { resolveStoredDeliveryLocation } from '../deliveryLocation';
 
 type MaybeArray<T> = T | T[];
 
@@ -345,6 +346,24 @@ const orderSelect = `
 const mapOrder = (row: OrderRow): RestaurantOrder => {
   const delivery = row.deliveries?.[0];
   const driver = firstRelation(delivery?.drivers);
+  const deliveryLocation = resolveStoredDeliveryLocation({
+    lat: row.delivery_lat,
+    lng: row.delivery_lng,
+    accuracyM: row.client_accuracy_m,
+    note: row.comment
+  });
+  const restaurantLocation = resolveStoredDeliveryLocation({
+    lat: row.restaurant_lat_snapshot,
+    lng: row.restaurant_lng_snapshot,
+    accuracyM: null,
+    note: ''
+  });
+  const driverLocation = resolveStoredDeliveryLocation({
+    lat: driver?.last_lat,
+    lng: driver?.last_lng,
+    accuracyM: null,
+    note: ''
+  });
 
   return {
     id: row.id,
@@ -355,15 +374,15 @@ const mapOrder = (row: OrderRow): RestaurantOrder => {
     fulfillmentType: row.fulfillment_type ?? 'hall',
     cabinLabel: row.cabin_label || row.table_label || '',
     deliveryAddress: row.delivery_address ?? '',
-    deliveryLat: row.delivery_lat ?? null,
-    deliveryLng: row.delivery_lng ?? null,
-    clientAccuracyM: row.client_accuracy_m ?? null,
+    deliveryLat: deliveryLocation?.lat ?? null,
+    deliveryLng: deliveryLocation?.lng ?? null,
+    clientAccuracyM: deliveryLocation?.accuracyM ?? null,
     deliveryCity: row.delivery_city ?? '',
     deliverySettlement: row.delivery_settlement ?? '',
     restaurantAddress: row.restaurant_address_snapshot ?? '',
     restaurantCity: firstRelation(firstRelation(row.restaurants)?.cities)?.name ?? '',
-    restaurantLat: row.restaurant_lat_snapshot ?? null,
-    restaurantLng: row.restaurant_lng_snapshot ?? null,
+    restaurantLat: restaurantLocation?.lat ?? null,
+    restaurantLng: restaurantLocation?.lng ?? null,
     comment: row.comment,
     status: row.status,
     paymentStatus: row.payment_status ?? 'unpaid',
@@ -374,8 +393,8 @@ const mapOrder = (row: OrderRow): RestaurantOrder => {
     deliveryId: delivery?.id ?? null,
     driverName: driver?.name ?? null,
     driverPhone: driver?.phone ?? null,
-    driverLat: driver?.last_lat ?? null,
-    driverLng: driver?.last_lng ?? null,
+    driverLat: driverLocation?.lat ?? null,
+    driverLng: driverLocation?.lng ?? null,
     driverLocationAt: driver?.last_location_at ?? null,
     subtotal: row.subtotal,
     deliveryFee: row.delivery_fee,
@@ -536,6 +555,79 @@ export async function updateRestaurantOrderStatus(
     throw new Error('Укажите способ оплаты или подтвердите оплату перед отправкой заказа водителю.');
   }
 
+  if (status === 'waiting_driver' && order.fulfillmentType === 'delivery') {
+    const settingsResult = await supabase
+      .from('restaurant_delivery_settings')
+      .select('primary_city')
+      .eq('catalog_id', order.catalogId)
+      .maybeSingle();
+    if (settingsResult.error) throw settingsResult.error;
+
+    const restaurantSettlement = settingsResult.data?.primary_city || order.restaurantCity;
+    const configuredDeliveryFee = await getConfiguredDeliveryPrice(restaurantSettlement, order.deliverySettlement);
+    const deliveryPayload = {
+      order_id: order.id,
+      delivery_provider: 'platform',
+      status: 'waiting_courier',
+      route_to_restaurant_url: buildYandexMapsRouteUrl({
+        to: { lat: order.restaurantLat, lng: order.restaurantLng, address: order.restaurantAddress }
+      }),
+      route_to_client_url: buildYandexMapsRouteUrl({
+        from: { lat: order.restaurantLat, lng: order.restaurantLng, address: order.restaurantAddress },
+        to: {
+          lat: order.deliveryLat,
+          lng: order.deliveryLng,
+          address: buildDeliveryDestinationAddress({
+            address: order.deliveryAddress,
+            settlement: order.deliverySettlement,
+            city: order.deliveryCity
+          })
+        }
+      }),
+      offered_fee: configuredDeliveryFee ?? order.deliveryFee,
+      pricing_status: configuredDeliveryFee === null ? 'pending' : 'offered'
+    } as const;
+
+    const dispatchResult = await supabase.rpc('dispatch_restaurant_order_to_delivery', {
+      target_order_id: order.id,
+      target_catalog_id: order.catalogId,
+      route_to_restaurant_url_input: deliveryPayload.route_to_restaurant_url,
+      route_to_client_url_input: deliveryPayload.route_to_client_url,
+      offered_fee_input: deliveryPayload.offered_fee,
+      pricing_status_input: deliveryPayload.pricing_status
+    });
+
+    if (!dispatchResult.error) return;
+
+    const rpcErrorText = `${dispatchResult.error.code ?? ''} ${dispatchResult.error.message ?? ''}`.toLowerCase();
+    const isMissingDispatchRpc =
+      rpcErrorText.includes('pgrst202') ||
+      rpcErrorText.includes('could not find the function') ||
+      rpcErrorText.includes('function not found');
+    if (!isMissingDispatchRpc) throw dispatchResult.error;
+
+    // Compatibility path for deployments where the atomic RPC has not reached PostgREST yet.
+    const deliveryResult = await supabase.from('deliveries').upsert(
+      { ...deliveryPayload, estimated_time_min: 20, estimated_time_max: 40 },
+      { onConflict: 'order_id' }
+    );
+    if (deliveryResult.error) throw deliveryResult.error;
+
+    const deliveryTaskResult = await supabase.from('delivery_tasks').upsert(
+      {
+        catalog_id: order.catalogId,
+        order_id: order.id,
+        delivery_status: 'waiting_driver',
+        address: order.deliveryAddress,
+        city: order.deliveryCity,
+        settlement: order.deliverySettlement,
+        qr_required: Boolean(order.qrToken || order.verificationCode)
+      },
+      { onConflict: 'order_id' }
+    );
+    if (deliveryTaskResult.error) throw deliveryTaskResult.error;
+  }
+
   const now = new Date().toISOString();
   const patch: Record<string, unknown> = { status };
   if (status === 'accepted' || status === 'confirmed') patch.accepted_at = order.acceptedAt ?? now;
@@ -555,65 +647,6 @@ export async function updateRestaurantOrderStatus(
   });
   if (historyResult.error) throw historyResult.error;
 
-  if (status === 'waiting_driver' && order.fulfillmentType === 'delivery') {
-    const settingsResult = await supabase
-      .from('restaurant_delivery_settings')
-      .select('primary_city')
-      .eq('catalog_id', order.catalogId)
-      .maybeSingle();
-    const restaurantSettlement = settingsResult.data?.primary_city || order.restaurantCity;
-    const configuredDeliveryFee = await getConfiguredDeliveryPrice(restaurantSettlement, order.deliverySettlement);
-    const deliveryResult = await supabase.from('deliveries').upsert(
-      {
-        order_id: order.id,
-        delivery_provider: 'platform',
-        status: 'waiting_courier',
-        route_to_restaurant_url: buildYandexMapsRouteUrl({
-          to: {
-            lat: order.restaurantLat,
-            lng: order.restaurantLng,
-            address: order.restaurantAddress
-          }
-        }),
-        route_to_client_url: buildYandexMapsRouteUrl({
-          from: {
-            lat: order.restaurantLat,
-            lng: order.restaurantLng,
-            address: order.restaurantAddress
-          },
-          to: {
-            lat: order.deliveryLat,
-            lng: order.deliveryLng,
-            address: buildDeliveryDestinationAddress({
-              address: order.deliveryAddress,
-              settlement: order.deliverySettlement,
-              city: order.deliveryCity
-            })
-          }
-        }),
-        offered_fee: configuredDeliveryFee ?? order.deliveryFee,
-        pricing_status: configuredDeliveryFee === null ? 'pending' : 'offered',
-        estimated_time_min: 20,
-        estimated_time_max: 40
-      },
-      { onConflict: 'order_id' }
-    );
-    if (deliveryResult.error) throw deliveryResult.error;
-
-    const deliveryTaskResult = await supabase.from('delivery_tasks').upsert(
-      {
-        catalog_id: order.catalogId,
-        order_id: order.id,
-        delivery_status: 'waiting_driver',
-        address: order.deliveryAddress,
-        city: order.deliveryCity,
-        settlement: order.deliverySettlement,
-        qr_required: Boolean(order.qrToken || order.verificationCode)
-      },
-      { onConflict: 'order_id' }
-    );
-    if (deliveryTaskResult.error) throw deliveryTaskResult.error;
-  }
 }
 
 export async function updateRestaurantOrderPaymentStatus(

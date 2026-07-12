@@ -151,7 +151,12 @@ import {
   normalizeSettlementName,
   savePublicClientProfile
 } from '../shared/clientIdentity';
-import { appIsRunningStandalone, rememberPwaResumePath } from '../shared/pwaSession';
+import {
+  appIsRunningStandalone,
+  buildRestaurantAdminTabPath,
+  rememberPwaResumePath,
+  type RestaurantAdminTab
+} from '../shared/pwaSession';
 
 const queryClient = new QueryClient();
 
@@ -2698,7 +2703,8 @@ function RestaurantAdminShell({
   onRefreshOrders: () => void;
   onSaveDeliverySettings: (settings: RestaurantDeliverySettings) => void;
 }) {
-  const [tab, setTab] = useState<'home' | 'dishes' | 'orders' | 'settings' | 'scanner'>(() =>
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<RestaurantAdminTab>(() =>
     routeSection === 'order'
       ? 'orders'
       : routeSection === 'orders' || routeSection === 'dishes' || routeSection === 'settings' || routeSection === 'scanner'
@@ -2723,6 +2729,10 @@ function RestaurantAdminShell({
     : null;
   const orderGroups = useMemo(() => groupOrdersByDate(filteredOrders), [filteredOrders]);
   const activeOrders = orders.filter((order) => !['completed', 'delivered', 'cancelled'].includes(order.status));
+  const openTab = (nextTab: RestaurantAdminTab) => {
+    setTab(nextTab);
+    navigate(buildRestaurantAdminTabPath(catalogSlug, nextTab));
+  };
   const enableOrderNotifications = () => {
     void requestRestaurantOrderNotificationPermission({ role: 'restaurant', catalogSlug }).then(setNotificationPermission);
   };
@@ -2735,6 +2745,10 @@ function RestaurantAdminShell({
   useEffect(() => {
     if (routeSection === 'order') {
       setTab('orders');
+      return;
+    }
+    if (routeSection === 'dashboard') {
+      setTab('home');
       return;
     }
     if (routeSection === 'orders' || routeSection === 'dishes' || routeSection === 'settings' || routeSection === 'scanner') {
@@ -2788,11 +2802,11 @@ function RestaurantAdminShell({
       <aside className="restaurant-admin-sidebar">
         <Logo compact />
         <nav aria-label="Разделы админки">
-          <button className={tab === 'home' ? 'is-active' : ''} type="button" onClick={() => setTab('home')}><Home />Главная</button>
-          <button className={tab === 'dishes' ? 'is-active' : ''} type="button" onClick={() => setTab('dishes')}><Utensils />Блюда</button>
-          <button className={tab === 'orders' ? 'is-active' : ''} type="button" onClick={() => setTab('orders')}><ClipboardList />Заказы</button>
-          <button className={tab === 'scanner' ? 'is-active' : ''} type="button" onClick={() => setTab('scanner')}><QrCode />Сканер</button>
-          <button className={tab === 'settings' ? 'is-active' : ''} type="button" onClick={() => setTab('settings')}><Settings />Настройки</button>
+          <button className={tab === 'home' ? 'is-active' : ''} type="button" onClick={() => openTab('home')}><Home />Главная</button>
+          <button className={tab === 'dishes' ? 'is-active' : ''} type="button" onClick={() => openTab('dishes')}><Utensils />Блюда</button>
+          <button className={tab === 'orders' ? 'is-active' : ''} type="button" onClick={() => openTab('orders')}><ClipboardList />Заказы</button>
+          <button className={tab === 'scanner' ? 'is-active' : ''} type="button" onClick={() => openTab('scanner')}><QrCode />Сканер</button>
+          <button className={tab === 'settings' ? 'is-active' : ''} type="button" onClick={() => openTab('settings')}><Settings />Настройки</button>
         </nav>
         <button className="restaurant-admin-sidebar__exit" type="button" onClick={logout}><LogOut />Выход</button>
       </aside>
@@ -2836,7 +2850,7 @@ function RestaurantAdminShell({
                 <strong>{formatPrice(todayRevenue)}</strong>
                 <small>{activeOrders.length} активных заказов</small>
               </div>
-              <button type="button" onClick={() => setTab('orders')}>
+              <button type="button" onClick={() => openTab('orders')}>
                 <ClipboardList />
                 Заказы
               </button>
@@ -2844,8 +2858,8 @@ function RestaurantAdminShell({
             <section className="admin-quick-actions">
               <button type="button" onClick={onAddDish}><Plus />Добавить блюдо</button>
                 <button type="button" onClick={() => onOpenScreen('settings-stock')}><Package />Остатки</button>
-                <button type="button" onClick={() => setTab('orders')}><ClipboardList />Заказы</button>
-                <button type="button" onClick={() => setTab('scanner')}><QrCode />Сканер</button>
+                <button type="button" onClick={() => openTab('orders')}><ClipboardList />Заказы</button>
+                <button type="button" onClick={() => openTab('scanner')}><QrCode />Сканер</button>
               </section>
           </section>
         )}
@@ -2977,7 +2991,7 @@ function RestaurantAdminShell({
               <div className="admin-quick-actions">
                 <a className="admin-action-link" href={`#/${catalogSlug}/scanner`}><QrCode />Открыть сканер</a>
                 <button type="button" onClick={() => window.location.hash = `/${catalogSlug}`}><Store />Каталог</button>
-                <button type="button" onClick={() => setTab('orders')}><ClipboardList />Заказы</button>
+                <button type="button" onClick={() => openTab('orders')}><ClipboardList />Заказы</button>
                 <button type="button" onClick={() => onOpenScreen('settings-payments')}><CreditCard />Платежи</button>
               </div>
             </section>
@@ -2986,11 +3000,11 @@ function RestaurantAdminShell({
       </div>
 
       <nav className="restaurant-admin-nav" aria-label="Админка ресторана">
-        <button className={tab === 'home' ? 'is-active' : ''} type="button" onClick={() => setTab('home')}><Home />Главная</button>
-        <button className={tab === 'dishes' ? 'is-active' : ''} type="button" onClick={() => setTab('dishes')}><Utensils />Блюда</button>
-        <button className={tab === 'orders' ? 'is-active' : ''} type="button" onClick={() => setTab('orders')}><ClipboardList />Заказы</button>
-        <button className={tab === 'scanner' ? 'is-active' : ''} type="button" onClick={() => setTab('scanner')}><QrCode />Сканер</button>
-        <button className={tab === 'settings' ? 'is-active' : ''} type="button" onClick={() => setTab('settings')}><Settings />Настройки</button>
+        <button className={tab === 'home' ? 'is-active' : ''} type="button" onClick={() => openTab('home')}><Home />Главная</button>
+        <button className={tab === 'dishes' ? 'is-active' : ''} type="button" onClick={() => openTab('dishes')}><Utensils />Блюда</button>
+        <button className={tab === 'orders' ? 'is-active' : ''} type="button" onClick={() => openTab('orders')}><ClipboardList />Заказы</button>
+        <button className={tab === 'scanner' ? 'is-active' : ''} type="button" onClick={() => openTab('scanner')}><QrCode />Сканер</button>
+        <button className={tab === 'settings' ? 'is-active' : ''} type="button" onClick={() => openTab('settings')}><Settings />Настройки</button>
       </nav>
     </main>
   );

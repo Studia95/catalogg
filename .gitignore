@@ -1,1 +1,9 @@
 node_modules
+tsconfig.app.tsbuildinfo
+tsconfig.node.tsbuildinfo
+vite.config.d.ts
+vite.config.js
+vitest.config.d.ts
+vitest.config.js
+.stryker-tmp
+.vitest-attachments

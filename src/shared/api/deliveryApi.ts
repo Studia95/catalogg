@@ -445,12 +445,7 @@ export async function getDriverDashboard(driverId = demoDriverId): Promise<Drive
   if (driverResult.error) throw driverResult.error;
   const profile = rowToDriverProfile(driverResult.data as DriverRow | null);
 
-  const deliveriesResult = await supabase
-    .from('deliveries')
-    .select('id, order_id, driver_id, status, delivery_provider, pickup_qr_token, pickup_qr_expires_at, assigned_at, route_to_restaurant_url, route_to_client_url, estimated_time_min, estimated_time_max, offered_fee, pricing_status, created_at, orders(id, order_type, fulfillment_type, status, payment_status, client_name, client_phone, customer_name, customer_phone, delivery_address, delivery_city, delivery_settlement, delivery_lat, delivery_lng, delivery_comment, restaurant_address_snapshot, restaurant_lat_snapshot, restaurant_lng_snapshot, delivery_fee, total, total_amount, created_at, order_items(quantity), restaurants(name, logo_url, cover_url, description, address_line, lat, lng))')
-    .in('status', ['waiting_courier', 'waiting_driver', 'assigned', 'arrived_to_restaurant', 'handed_over', 'on_the_way'])
-    .or(`driver_id.is.null,driver_id.eq.${profile.id}`)
-    .order('created_at', { ascending: false });
+  const deliveriesResult = await supabase.rpc('get_driver_delivery_offers');
 
   if (deliveriesResult.error) throw deliveriesResult.error;
 

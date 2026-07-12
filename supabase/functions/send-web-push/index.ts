@@ -29,6 +29,21 @@ const jsonResponse = (body: unknown, status = 200) =>
 
 const asString = (value: unknown) => typeof value === 'string' ? value : '';
 const asId = (value: unknown) => asString(value).trim();
+const normalizePlace = (value: unknown) => asString(value).trim().toLocaleLowerCase('ru-RU');
+
+const driverServesDeliveryLocation = (
+  driver: { city_name?: unknown; service_settlements?: unknown },
+  city: unknown,
+  settlement: unknown
+) => {
+  const servedPlaces = [
+    normalizePlace(driver.city_name),
+    ...(Array.isArray(driver.service_settlements) ? driver.service_settlements.map(normalizePlace) : [])
+  ].filter(Boolean);
+  if (servedPlaces.length === 0) return true;
+  const deliveryPlaces = new Set([normalizePlace(city), normalizePlace(settlement)].filter(Boolean));
+  return servedPlaces.some((place) => deliveryPlaces.has(place));
+};
 
 const appBaseUrl = () => {
   const value = Deno.env.get('PUBLIC_APP_URL')?.trim() || 'https://studia95.github.io/catalogg/';
@@ -95,7 +110,7 @@ Deno.serve(async (request) => {
       const deliveryId = asId(record.id);
       const orderId = asId(record.order_id);
       const [{ data: order }, { data: delivery }] = await Promise.all([
-        admin.from('orders').select('catalog_id, id').eq('id', orderId).maybeSingle(),
+        admin.from('orders').select('catalog_id, id, delivery_city, delivery_settlement').eq('id', orderId).maybeSingle(),
         admin.from('deliveries').select('driver_id, status').eq('id', deliveryId).maybeSingle()
       ]);
       const catalogId = asId(order?.catalog_id);
@@ -116,10 +131,13 @@ Deno.serve(async (request) => {
       } else {
         const { data: onlineDrivers } = await admin
           .from('drivers')
-          .select('id')
+          .select('id, city_name, service_settlements')
           .eq('is_active', true)
           .eq('is_online', true);
-        const onlineDriverIds = (onlineDrivers ?? []).map((driver) => driver.id).filter(Boolean);
+        const onlineDriverIds = (onlineDrivers ?? [])
+          .filter((driver) => driverServesDeliveryLocation(driver, order?.delivery_city, order?.delivery_settlement))
+          .map((driver) => driver.id)
+          .filter(Boolean);
         if (onlineDriverIds.length > 0) {
           const { data } = await admin
             .from('web_push_subscriptions')

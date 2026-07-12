@@ -35,6 +35,56 @@ export const formatDeliveryLocationNote = (
   return `Координаты клиента: ${lat.toFixed(7)}, ${lng.toFixed(7)}${accuracyNote}`;
 };
 
+type StoredDeliveryLocationInput = {
+  readonly lat: unknown;
+  readonly lng: unknown;
+  readonly accuracyM: unknown;
+  readonly note: string;
+};
+
+const finiteNumber = (value: unknown) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const validCoordinatePair = (lat: number | null, lng: number | null) =>
+  lat !== null && lng !== null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+    ? { lat, lng }
+    : null;
+
+export const resolveStoredDeliveryLocation = ({
+  lat,
+  lng,
+  accuracyM,
+  note
+}: StoredDeliveryLocationInput): { readonly lat: number; readonly lng: number; readonly accuracyM: number | null } | null => {
+  const explicitLat = finiteNumber(lat);
+  const explicitLng = finiteNumber(lng);
+  const explicitAccuracy = finiteNumber(accuracyM);
+  const explicitLocation = validCoordinatePair(explicitLat, explicitLng);
+  if (explicitLocation) {
+    return {
+      ...explicitLocation,
+      accuracyM: explicitAccuracy === null ? null : Math.max(0, Math.round(explicitAccuracy))
+    };
+  }
+
+  const match = note.match(/Координаты клиента:\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)(?:\s*\(точность\s+(-?\d+(?:\.\d+)?)\s*м\))?/iu);
+  if (!match) return null;
+  const fallbackLat = finiteNumber(match[1]);
+  const fallbackLng = finiteNumber(match[2]);
+  const fallbackLocation = validCoordinatePair(fallbackLat, fallbackLng);
+  if (!fallbackLocation) return null;
+  const fallbackAccuracy = finiteNumber(match[3]);
+
+  return {
+    ...fallbackLocation,
+    accuracyM: fallbackAccuracy === null ? null : Math.max(0, Math.round(fallbackAccuracy))
+  };
+};
+
 export const deliveryGeolocationPermissionDeniedMessage =
   'Геолокация заблокирована. Разрешите доступ к местоположению в настройках сайта браузера и нажмите кнопку ещё раз.';
 

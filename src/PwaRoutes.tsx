@@ -1,10 +1,16 @@
 import React from 'react';
-import { Navigate, useLocation, useParams } from 'react-router-dom';
+import { Navigate, useLocation, useNavigationType, useParams } from 'react-router-dom';
 import { App } from './app/App';
 import { ClientPlatformApp } from './pages/client-platform/ClientPlatformApp';
 import { CatalogAdminApp } from './pages/catalog-admin/CatalogAdminApp';
 import { resolveSessionRedirect } from './shared/api/loginRedirectApi';
-import { appIsRunningStandalone, readPwaResumePath, rememberPwaResumePath, routeIsRoleAppPath } from './shared/pwaSession';
+import {
+  appIsRunningStandalone,
+  clearPwaResumePath,
+  readPwaResumePath,
+  rememberPwaResumePath,
+  resolvePwaHomeTarget
+} from './shared/pwaSession';
 
 export function CatalogAdminRoute() {
   const { slug = '' } = useParams();
@@ -31,30 +37,34 @@ export function PwaResumeTracker() {
 }
 
 export function PwaHomeRoute() {
-  const initialResumePath = React.useMemo(() => {
-    const path = readPwaResumePath();
-    if (!path) return null;
-    return routeIsRoleAppPath(path) ? path : null;
-  }, []);
-  const publicStandaloneResumePath = React.useMemo(() => {
-    const path = readPwaResumePath();
-    if (!path || routeIsRoleAppPath(path)) return null;
-    return appIsRunningStandalone() ? path : null;
-  }, []);
-  const [sessionPath, setSessionPath] = React.useState(initialResumePath);
-  const [isSessionChecked, setIsSessionChecked] = React.useState(Boolean(initialResumePath));
+  const navigationType = useNavigationType();
+  const explicitNavigation = navigationType !== 'POP';
+  const savedPath = React.useMemo(readPwaResumePath, []);
+  const [sessionPath, setSessionPath] = React.useState<string | null>(null);
+  const [isSessionChecked, setIsSessionChecked] = React.useState(explicitNavigation);
 
   React.useEffect(() => {
-    if (sessionPath) return undefined;
+    if (explicitNavigation) {
+      clearPwaResumePath();
+      setSessionPath(null);
+      setIsSessionChecked(true);
+      return undefined;
+    }
 
     let isMounted = true;
     void resolveSessionRedirect().then((redirect) => {
       if (!isMounted) return;
-      const targetPath = redirect === '/admin' ? '/admin/clients' : redirect;
-      if (targetPath && targetPath !== '/') {
+      const verifiedPath = redirect === '/admin' ? '/admin/clients' : redirect;
+      const targetPath = resolvePwaHomeTarget({
+        explicitNavigation: false,
+        savedPath,
+        sessionRedirect: verifiedPath,
+        standalone: appIsRunningStandalone()
+      });
+      if (targetPath) {
         rememberPwaResumePath(targetPath);
-        setSessionPath(targetPath);
       }
+      setSessionPath(targetPath);
       setIsSessionChecked(true);
     }).catch(() => {
       if (isMounted) setIsSessionChecked(true);
@@ -63,9 +73,9 @@ export function PwaHomeRoute() {
     return () => {
       isMounted = false;
     };
-  }, [sessionPath]);
+  }, [explicitNavigation, savedPath]);
 
   if (sessionPath) return <Navigate replace to={sessionPath} />;
   if (!isSessionChecked) return null;
-  return publicStandaloneResumePath ? <Navigate replace to={publicStandaloneResumePath} /> : <ClientPlatformApp />;
+  return <ClientPlatformApp />;
 }

@@ -1,5 +1,7 @@
 const pwaResumePathKey = 'waycatalog:pwa-resume-path';
 
+export type RestaurantAdminTab = 'home' | 'dishes' | 'orders' | 'settings' | 'scanner';
+
 const isBrowser = () => typeof window !== 'undefined';
 const reservedRootRoutes = new Set([
   'admin',
@@ -36,11 +38,52 @@ export const routeIsRoleAppPath = (path: string) => {
   const normalizedPath = path.trim().split('?')[0].replace(/\/+$/, '') || '/';
   if (normalizedPath === '/driver' || normalizedPath.startsWith('/driver/')) return true;
   if (normalizedPath === '/admin' || normalizedPath.startsWith('/admin/')) return true;
-  if (normalizedPath === '/profile' || normalizedPath.startsWith('/profile/')) return true;
 
-  const [, , section] = normalizedPath.split('/');
-  return Boolean(section && ['dashboard', 'orders', 'dishes', 'settings', 'scanner', 'payments'].includes(section));
+  const [, slug, section] = normalizedPath.split('/');
+  return Boolean(
+    slug &&
+    !reservedRootRoutes.has(slug) &&
+    section &&
+    ['dashboard', 'orders', 'dishes', 'settings', 'scanner', 'payments'].includes(section)
+  );
 };
+
+const roleAppKey = (path: string) => {
+  const normalizedPath = path.trim().split('?')[0].replace(/\/+$/, '') || '/';
+  if (normalizedPath === '/driver' || normalizedPath.startsWith('/driver/')) return 'driver';
+  if (normalizedPath === '/admin' || normalizedPath.startsWith('/admin/')) return 'admin';
+
+  const [, slug, section] = normalizedPath.split('/');
+  return slug && !reservedRootRoutes.has(slug) && section && ['dashboard', 'orders', 'dishes', 'settings', 'scanner', 'payments'].includes(section)
+    ? `restaurant:${slug}`
+    : null;
+};
+
+export const resolvePwaHomeTarget = ({
+  explicitNavigation,
+  savedPath,
+  sessionRedirect,
+  standalone
+}: {
+  readonly explicitNavigation: boolean;
+  readonly savedPath: string | null;
+  readonly sessionRedirect: string | null;
+  readonly standalone: boolean;
+}) => {
+  if (explicitNavigation) return null;
+
+  const verifiedPath = sessionRedirect?.trim() || '/';
+  const verifiedRole = roleAppKey(verifiedPath);
+  if (verifiedRole) {
+    return savedPath && roleAppKey(savedPath) === verifiedRole ? savedPath : verifiedPath;
+  }
+  if (verifiedPath !== '/') return verifiedPath;
+  if (!savedPath || roleAppKey(savedPath)) return null;
+  return standalone ? savedPath : null;
+};
+
+export const buildRestaurantAdminTabPath = (catalogSlug: string, tab: RestaurantAdminTab) =>
+  `/${catalogSlug.trim()}/${tab === 'home' ? 'dashboard' : tab}`;
 
 export const rememberPwaResumePath = (path: string) => {
   if (!isBrowser() || !routeCanBeResumed(path)) return;

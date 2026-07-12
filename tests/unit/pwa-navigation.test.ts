@@ -1,0 +1,97 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildRestaurantAdminTabPath,
+  resolvePwaHomeTarget,
+  routeIsRoleAppPath
+} from '../../src/shared/pwaSession';
+
+describe('PWA navigation', () => {
+  it('treats client profile pages as public navigation rather than a staff role app', () => {
+    expect(routeIsRoleAppPath('/profile/orders')).toBe(false);
+    expect(routeIsRoleAppPath('/driver')).toBe(true);
+    expect(routeIsRoleAppPath('/driver/orders')).toBe(true);
+    expect(routeIsRoleAppPath('/admin')).toBe(true);
+    expect(routeIsRoleAppPath('/admin/restaurants')).toBe(true);
+    expect(routeIsRoleAppPath('/mangal/dashboard')).toBe(true);
+    expect(routeIsRoleAppPath('/mangal/settings/?tab=delivery')).toBe(true);
+    expect(routeIsRoleAppPath('/profile/settings')).toBe(false);
+    expect(routeIsRoleAppPath('/mangal/menu')).toBe(false);
+  });
+
+  it('does not resume any saved path after an explicit home navigation', () => {
+    expect(resolvePwaHomeTarget({
+      explicitNavigation: true,
+      savedPath: '/profile/orders',
+      sessionRedirect: '/driver',
+      standalone: true
+    })).toBeNull();
+  });
+
+  it('resumes a deeper route only when it belongs to the verified current role', () => {
+    expect(resolvePwaHomeTarget({
+      explicitNavigation: false,
+      savedPath: '/driver/orders',
+      sessionRedirect: '/driver',
+      standalone: true
+    })).toBe('/driver/orders');
+
+    expect(resolvePwaHomeTarget({
+      explicitNavigation: false,
+      savedPath: '/driver/orders',
+      sessionRedirect: '/mangal/dashboard',
+      standalone: true
+    })).toBe('/mangal/dashboard');
+
+    expect(resolvePwaHomeTarget({
+      explicitNavigation: false,
+      savedPath: '/mangal/orders',
+      sessionRedirect: '/mangal/dashboard',
+      standalone: true
+    })).toBe('/mangal/orders');
+
+    expect(resolvePwaHomeTarget({
+      explicitNavigation: false,
+      savedPath: '/mangal/orders',
+      sessionRedirect: '/rizih/dashboard',
+      standalone: true
+    })).toBe('/rizih/dashboard');
+  });
+
+  it('rejects staff routes for expired sessions but resumes public pages only in standalone mode', () => {
+    expect(resolvePwaHomeTarget({
+      explicitNavigation: false,
+      savedPath: '/driver/orders',
+      sessionRedirect: '/',
+      standalone: true
+    })).toBeNull();
+
+    expect(resolvePwaHomeTarget({
+      explicitNavigation: false,
+      savedPath: null,
+      sessionRedirect: '/profile/orders',
+      standalone: true
+    })).toBe('/profile/orders');
+
+    expect(resolvePwaHomeTarget({
+      explicitNavigation: false,
+      savedPath: '/profile/orders',
+      sessionRedirect: '/',
+      standalone: true
+    })).toBe('/profile/orders');
+
+    expect(resolvePwaHomeTarget({
+      explicitNavigation: false,
+      savedPath: '/profile/orders',
+      sessionRedirect: '/',
+      standalone: false
+    })).toBeNull();
+  });
+
+  it('gives every restaurant tab a stable resumable route', () => {
+    expect(buildRestaurantAdminTabPath('  mangal  ', 'home')).toBe('/mangal/dashboard');
+    expect(buildRestaurantAdminTabPath('mangal', 'orders')).toBe('/mangal/orders');
+    expect(buildRestaurantAdminTabPath('mangal', 'dishes')).toBe('/mangal/dishes');
+    expect(buildRestaurantAdminTabPath('mangal', 'scanner')).toBe('/mangal/scanner');
+    expect(buildRestaurantAdminTabPath('mangal', 'settings')).toBe('/mangal/settings');
+  });
+});

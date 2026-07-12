@@ -5,11 +5,9 @@ import { buildLocalAcceptedOffer, demoDriverId, type DeliveryOffer } from '../..
 
 type DriverStore = {
   selectedDriverId: string;
-  isOnline: boolean;
   localActiveDelivery: DeliveryOffer | null;
   completedDeliveryIds: string[];
-  setSelectedDriverId: (driverId: string) => void;
-  setOnline: (isOnline: boolean) => void;
+  bindDriver: (driverId: string) => void;
   acceptLocalOffer: (offer: DeliveryOffer, driverId?: string) => void;
   updateLocalDeliveryStatus: (status: DeliveryStatus) => void;
   completeLocalDelivery: () => void;
@@ -20,15 +18,17 @@ export const useDriverStore = create<DriverStore>()(
   persist(
     (set, get) => ({
       selectedDriverId: demoDriverId,
-      isOnline: true,
       localActiveDelivery: null,
       completedDeliveryIds: [],
-      setSelectedDriverId: (driverId) => set({ selectedDriverId: driverId }),
-      setOnline: (isOnline) => set({ isOnline }),
+      bindDriver: (driverId) =>
+        set((state) =>
+          state.selectedDriverId === driverId
+            ? state
+            : { selectedDriverId: driverId, localActiveDelivery: null, completedDeliveryIds: [] }
+        ),
       acceptLocalOffer: (offer, driverId) =>
         set((state) => ({
-          localActiveDelivery: buildLocalAcceptedOffer(offer, driverId ?? state.selectedDriverId),
-          isOnline: true
+          localActiveDelivery: buildLocalAcceptedOffer(offer, driverId ?? state.selectedDriverId)
         })),
       updateLocalDeliveryStatus: (status) =>
         set((state) => ({
@@ -55,7 +55,6 @@ export const useDriverStore = create<DriverStore>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         selectedDriverId: state.selectedDriverId,
-        isOnline: state.isOnline,
         localActiveDelivery: state.localActiveDelivery,
         completedDeliveryIds: state.completedDeliveryIds
       })

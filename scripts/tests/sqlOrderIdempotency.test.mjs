@@ -62,4 +62,16 @@ describe('public order idempotency SQL', () => {
     assert.match(functionSql, /left join public\.deliveries/);
     assert.match(sql, /grant execute on function public\.get_public_restaurant_order_status\(uuid\) to anon, authenticated/);
   });
+
+  it('stores captured delivery coordinates inside both idempotent order transactions', () => {
+    for (const name of ['create_public_restaurant_order', 'create_legacy_public_restaurant_order']) {
+      const functionSql = extractFunction(name);
+
+      assert.match(functionSql, /public\.delivery_location_from_note\(comment\)/);
+      assert.match(functionSql, /delivery_lat,\s*delivery_lng,\s*client_lat,\s*client_lng,\s*client_accuracy_m/s);
+      assert.match(functionSql, /location->>'lat'/);
+      assert.match(functionSql, /location->>'lng'/);
+      assert.match(functionSql, /location->>'accuracy_m'/);
+    }
+  });
 });

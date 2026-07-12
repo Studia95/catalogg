@@ -50,4 +50,12 @@ describe('legacy public restaurant order SQL', () => {
     assert.match(functionSql, /created_order_id,\s*null,\s*legacy_product\.title/s);
     assert.doesNotMatch(functionSql, /create_public_restaurant_order\(/);
   });
+
+  it('keeps legacy public checkout coordinates in the order creation transaction', () => {
+    for (const file of ['supabase/restaurant_orders.sql', 'supabase/fix_legacy_public_restaurant_order.sql']) {
+      const functionSql = readLegacyOrderFunction(file);
+      assert.match(functionSql, /public\.delivery_location_from_note\(comment\)/);
+      assert.match(functionSql, /delivery_lat,\s*delivery_lng,\s*client_lat,\s*client_lng,\s*client_accuracy_m/s);
+    }
+  });
 });

@@ -31,6 +31,14 @@ describe('background web push contract', () => {
     assert.match(source, /SUPABASE_SERVICE_ROLE_KEY/);
   });
 
+  it('notifies only online drivers who serve the delivery city or settlement', async () => {
+    const source = await read('supabase/functions/send-web-push/index.ts');
+    assert.match(source, /delivery_city, delivery_settlement/);
+    assert.match(source, /city_name, service_settlements/);
+    assert.match(source, /driverServesDeliveryLocation/);
+    assert.match(source, /\.filter\(\(driver\) => driverServesDeliveryLocation/);
+  });
+
   it('connects order and delivery changes to the sender through pg_net', async () => {
     const source = await read('supabase/web_push_triggers.sql');
     assert.match(source, /net\.http_post/);

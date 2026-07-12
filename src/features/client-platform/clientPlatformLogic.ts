@@ -11,6 +11,7 @@ import type {
   ClientPaymentStatus,
   ClientRestaurant
 } from './types';
+import { formatDeliveryLocationNote } from '../../shared/deliveryLocation';
 
 type RestaurantFilter = {
   cityId: string;
@@ -49,6 +50,23 @@ const normalizeText = (value: string) => value.trim().toLocaleLowerCase('ru-RU')
 
 export const resolveCheckoutSettlement = (selectedSettlement: string, checkoutSettlement?: string) =>
   checkoutSettlement?.trim() || selectedSettlement.trim();
+
+export const buildClientDeliveryComment = ({
+  comment,
+  orderType,
+  lat,
+  lng,
+  accuracyM
+}: {
+  readonly comment: string;
+  readonly orderType: ClientOrderType;
+  readonly lat: number | null;
+  readonly lng: number | null;
+  readonly accuracyM: number | null;
+}) => [
+  comment.trim(),
+  orderType === 'delivery' ? formatDeliveryLocationNote(lat, lng, accuracyM) : ''
+].filter(Boolean).join('\n');
 
 export const filterRestaurants = (
   restaurants: ClientRestaurant[],

@@ -21,6 +21,7 @@ set search_path = public, extensions
 as $$
 declare
   created_order_id uuid;
+  location jsonb := public.delivery_location_from_note(comment);
   item jsonb;
   legacy_product record;
   item_quantity integer;
@@ -52,6 +53,12 @@ begin
     delivery_city,
     delivery_settlement,
     client_address_comment,
+    delivery_lat,
+    delivery_lng,
+    client_lat,
+    client_lng,
+    client_accuracy_m,
+    delivery_address_snapshot,
     verification_code,
     qr_token,
     qr_expires_at
@@ -68,6 +75,12 @@ begin
     coalesce(delivery_city, ''),
     coalesce(delivery_settlement, ''),
     coalesce(client_address_comment, ''),
+    case when fulfillment_type = 'delivery' then (location->>'lat')::numeric else null end,
+    case when fulfillment_type = 'delivery' then (location->>'lng')::numeric else null end,
+    case when fulfillment_type = 'delivery' then (location->>'lat')::numeric else null end,
+    case when fulfillment_type = 'delivery' then (location->>'lng')::numeric else null end,
+    case when fulfillment_type = 'delivery' then (location->>'accuracy_m')::numeric else null end,
+    case when fulfillment_type = 'delivery' then coalesce(delivery_address, '') else null end,
     verification_code,
     encode(gen_random_bytes(24), 'hex'),
     now() + interval '24 hours'

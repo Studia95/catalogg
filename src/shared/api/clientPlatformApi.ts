@@ -1,4 +1,8 @@
-import { buildClientReviewPayload, resolveCheckoutSettlement } from '../../features/client-platform/clientPlatformLogic';
+import {
+  buildClientDeliveryComment,
+  buildClientReviewPayload,
+  resolveCheckoutSettlement
+} from '../../features/client-platform/clientPlatformLogic';
 import { clientPlatformSnapshot, fallbackPaymentSettings } from '../../features/client-platform/mockData';
 import type {
   ClientCity,
@@ -421,6 +425,13 @@ export async function createClientPlatformOrder(input: ClientPlatformOrderInput)
     : '';
   const deliveryCity = deliverySettlement;
   const addressComment = input.draft.orderType === 'delivery' ? input.draft.deliveryComment : '';
+  const deliveryComment = buildClientDeliveryComment({
+    comment: addressComment,
+    orderType: input.draft.orderType,
+    lat: input.draft.deliveryLat,
+    lng: input.draft.deliveryLng,
+    accuracyM: input.draft.deliveryAccuracyM
+  });
 
   const rpcName = resolveClientOrderRpcName(items);
   const rpcArgs = {
@@ -432,8 +443,8 @@ export async function createClientPlatformOrder(input: ClientPlatformOrderInput)
     delivery_address: input.draft.orderType === 'delivery' ? input.draft.deliveryAddress : '',
     delivery_city: deliveryCity,
     delivery_settlement: deliverySettlement,
-    client_address_comment: addressComment,
-    comment: input.draft.deliveryComment,
+    client_address_comment: deliveryComment,
+    comment: deliveryComment,
     idempotency_key: input.idempotencyKey?.trim() || null,
     items
   };

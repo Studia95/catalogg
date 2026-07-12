@@ -6,6 +6,7 @@ import {
   formatDeliveryLocationNote,
   getDeliveryGeolocationErrorMessage,
   normalizeDeliveryCoordinates,
+  resolveStoredDeliveryLocation,
   type DeliveryCoordinates
 } from './deliveryLocation';
 
@@ -51,5 +52,34 @@ describe('delivery location precision', () => {
       getDeliveryGeolocationErrorMessage({ code: 1 }),
       'Геолокация заблокирована. Разрешите доступ к местоположению в настройках сайта браузера и нажмите кнопку ещё раз.'
     );
+  });
+
+  it('restores coordinates from the fallback order comment when RLS blocked legacy fields', () => {
+    assert.deepEqual(
+      resolveStoredDeliveryLocation({
+        lat: null,
+        lng: null,
+        accuracyM: null,
+        note: 'Позвонить заранее\nКоординаты клиента: 43.2313100, 46.0033982 (точность 18 м)'
+      }),
+      { lat: 43.23131, lng: 46.0033982, accuracyM: 18 }
+    );
+  });
+
+  it('normalizes explicit PostgreSQL numeric strings before using comment fallback', () => {
+    assert.deepEqual(
+      resolveStoredDeliveryLocation({
+        lat: '43.3181235',
+        lng: '45.6987654',
+        accuracyM: '21',
+        note: 'Координаты клиента: 1.0000000, 2.0000000'
+      }),
+      { lat: 43.3181235, lng: 45.6987654, accuracyM: 21 }
+    );
+  });
+
+  it('rejects out-of-range or incomplete stored coordinates', () => {
+    assert.equal(resolveStoredDeliveryLocation({ lat: 91, lng: 45, accuracyM: 10, note: '' }), null);
+    assert.equal(resolveStoredDeliveryLocation({ lat: 43, lng: null, accuracyM: 10, note: '' }), null);
   });
 });

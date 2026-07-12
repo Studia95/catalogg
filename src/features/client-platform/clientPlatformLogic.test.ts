@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   buildYandexMapsUrl,
   buildClientReviewPayload,
+  buildClientDeliveryComment,
   buildRestaurantPublicPath,
   buildOrderAfterClientPaymentNotice,
   requireSavedRestaurantOrderId,
@@ -107,6 +108,21 @@ const restaurants: ClientRestaurant[] = [
     paymentMethods: ['cash']
   }
 ];
+
+describe('client platform delivery order metadata', () => {
+  it('includes captured coordinates in the atomic order RPC comment', () => {
+    assert.equal(
+      buildClientDeliveryComment({
+        comment: 'Домофон 12',
+        orderType: 'delivery',
+        lat: 43.23131,
+        lng: 46.0033982,
+        accuracyM: 18
+      }),
+      'Домофон 12\nКоординаты клиента: 43.2313100, 46.0033982 (точность 18 м)'
+    );
+  });
+});
 
 const dishes: ClientDish[] = [
   {
