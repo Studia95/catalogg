@@ -46,6 +46,10 @@ type ClientReviewInput = {
   comment: string;
 };
 
+type ClientOrderRealtimePatch = Partial<
+  Pick<ClientOrder, 'status' | 'paymentStatus' | 'driverName' | 'driverPhone' | 'driverLat' | 'driverLng' | 'driverLocationAt'>
+>;
+
 const normalizeText = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
 
 export const resolveCheckoutSettlement = (selectedSettlement: string, checkoutSettlement?: string) =>
@@ -109,6 +113,34 @@ export const requireSavedRestaurantOrderId = (orderId: string | null) => {
   }
 
   return orderId;
+};
+
+export const selectClientOrderForStatus = (
+  orders: readonly ClientOrder[],
+  restaurantSlug: string,
+  orderId?: string
+) => {
+  if (orderId) {
+    return orders.find((order) => order.id === orderId) ?? null;
+  }
+
+  return [...orders]
+    .filter((order) => order.restaurantSlug === restaurantSlug)
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())[0] ?? null;
+};
+
+export const mergeClientOrderRealtimePatch = (patch: ClientOrderRealtimePatch) => {
+  const nextPatch: ClientOrderRealtimePatch = {};
+
+  if (patch.status !== undefined) nextPatch.status = patch.status;
+  if (patch.paymentStatus !== undefined) nextPatch.paymentStatus = patch.paymentStatus;
+  if (patch.driverName !== undefined) nextPatch.driverName = patch.driverName;
+  if (patch.driverPhone !== undefined) nextPatch.driverPhone = patch.driverPhone;
+  if (patch.driverLat !== undefined) nextPatch.driverLat = patch.driverLat;
+  if (patch.driverLng !== undefined) nextPatch.driverLng = patch.driverLng;
+  if (patch.driverLocationAt !== undefined) nextPatch.driverLocationAt = patch.driverLocationAt;
+
+  return nextPatch;
 };
 
 export const buildClientReviewPayload = (input: ClientReviewInput) => {

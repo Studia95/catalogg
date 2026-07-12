@@ -1536,12 +1536,12 @@
   color: #111827;
 }
 
-.order-card > span {
+.order-card__summary {
   display: grid;
   gap: 5px;
 }
 
-.order-card > div {
+.order-card__actions {
   display: grid;
   gap: 6px;
   justify-items: end;
@@ -1559,6 +1559,40 @@
   background: #f0edff;
   color: #5b3df4;
   font-weight: 900;
+}
+
+.order-card__actions svg,
+.order-card__driver svg {
+  width: 16px;
+  height: 16px;
+}
+
+.order-card__driver {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.order-card__driver span {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.order-card__driver span small {
+  grid-column: 2;
+}
+
+.order-card__driver a {
+  background: #eaf8ef;
+  color: #087443;
 }
 
 .favorite-dish-list a {

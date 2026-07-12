@@ -2733,6 +2733,14 @@ function RestaurantAdminShell({
     setTab(nextTab);
     navigate(buildRestaurantAdminTabPath(catalogSlug, nextTab));
   };
+  const openOrderFromList = (order: RestaurantOrder) => {
+    setSelectedOrder(order);
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector('.admin-order-details-panel')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
   const enableOrderNotifications = () => {
     void requestRestaurantOrderNotificationPermission({ role: 'restaurant', catalogSlug }).then(setNotificationPermission);
   };
@@ -2924,7 +2932,7 @@ function RestaurantAdminShell({
                           data-highlighted={recentOrderIds.has(order.id)}
                           type="button"
                           key={order.id}
-                          onClick={() => setSelectedOrder(order)}
+                          onClick={() => openOrderFromList(order)}
                         >
                           <span className="admin-order-card__head">
                             <strong>#{order.orderNumber}</strong>

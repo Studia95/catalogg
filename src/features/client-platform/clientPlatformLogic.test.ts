@@ -6,7 +6,9 @@ import {
   buildClientDeliveryComment,
   buildRestaurantPublicPath,
   buildOrderAfterClientPaymentNotice,
+  mergeClientOrderRealtimePatch,
   requireSavedRestaurantOrderId,
+  selectClientOrderForStatus,
   buildSupportWhatsappUrl,
   calculateCartSummary,
   filterRestaurants,
@@ -241,6 +243,69 @@ describe('client platform support links', () => {
 describe('client platform order persistence', () => {
   it('does not allow a client-visible order without a saved restaurant order id', () => {
     assert.throws(() => requireSavedRestaurantOrderId(null), /Заказ не был сохранён в системе ресторана/);
+  });
+
+  it('does not show another local order when the requested order id is missing', () => {
+    const orders = [
+      buildOrderAfterClientPaymentNotice({
+        id: 'order-1',
+        restaurantSlug: 'rizih',
+        restaurantName: 'Rizih',
+        orderType: 'delivery',
+        deliveryProvider: 'platform',
+        paymentMethod: 'cash',
+        totalAmount: 1200,
+        addressLine: 'ул. Ленина, 123',
+        clientName: 'Адам',
+        clientPhone: '+7 928 123-45-67'
+      })
+    ];
+
+    assert.equal(selectClientOrderForStatus(orders, 'rizih', 'missing-order'), null);
+  });
+
+  it('uses the latest local order only when a status page has no order id yet', () => {
+    const olderOrder = buildOrderAfterClientPaymentNotice({
+      id: 'order-old',
+      restaurantSlug: 'rizih',
+      restaurantName: 'Rizih',
+      orderType: 'delivery',
+      deliveryProvider: 'platform',
+      paymentMethod: 'cash',
+      totalAmount: 1200,
+      addressLine: 'ул. Ленина, 123',
+      clientName: 'Адам',
+      clientPhone: '+7 928 123-45-67',
+      createdAt: '2026-07-10T10:00:00.000Z'
+    });
+    const newestOrder = buildOrderAfterClientPaymentNotice({
+      id: 'order-new',
+      restaurantSlug: 'rizih',
+      restaurantName: 'Rizih',
+      orderType: 'delivery',
+      deliveryProvider: 'platform',
+      paymentMethod: 'cash',
+      totalAmount: 1300,
+      addressLine: 'ул. Мира, 7',
+      clientName: 'Адам',
+      clientPhone: '+7 928 123-45-67',
+      createdAt: '2026-07-11T10:00:00.000Z'
+    });
+
+    assert.equal(selectClientOrderForStatus([olderOrder, newestOrder], 'rizih')?.id, 'order-new');
+  });
+
+  it('keeps existing status and payment values when realtime patch omits them', () => {
+    assert.deepEqual(
+      mergeClientOrderRealtimePatch({
+        driverName: 'Алан',
+        driverPhone: '+7 928 000-00-00'
+      }),
+      {
+        driverName: 'Алан',
+        driverPhone: '+7 928 000-00-00'
+      }
+    );
   });
 });
 

@@ -41,7 +41,7 @@ import type { CSSProperties, FormEvent } from 'react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { buildOrderAfterClientPaymentNotice, buildRestaurantPublicPath, buildSupportWhatsappUrl, buildYandexMapsUrl, calculateCartSummary, filterRestaurants, getDeliveryProviderLabel, requireSavedRestaurantOrderId, resolveCheckoutSettlement } from '../../features/client-platform/clientPlatformLogic';
+import { buildOrderAfterClientPaymentNotice, buildRestaurantPublicPath, buildSupportWhatsappUrl, buildYandexMapsUrl, calculateCartSummary, filterRestaurants, getDeliveryProviderLabel, mergeClientOrderRealtimePatch, requireSavedRestaurantOrderId, resolveCheckoutSettlement, selectClientOrderForStatus } from '../../features/client-platform/clientPlatformLogic';
 import { clientPlatformSnapshot, fallbackPaymentSettings } from '../../features/client-platform/mockData';
 import {
   selectAllCartCount,
@@ -1469,14 +1469,14 @@ function OrderStatusPage({
 }) {
   const orders = useClientPlatformStore((state) => state.orders);
   const syncOrderPatch = useClientPlatformStore((state) => state.syncOrderPatch);
-  const order = orders.find((item) => item.id === orderId) ?? orders.find((item) => item.restaurantSlug === restaurant.slug);
+  const order = selectClientOrderForStatus(orders, restaurant.slug, orderId);
   const restaurantImage = snapshot.restaurants.find((item) => item.slug === restaurant.slug)?.coverUrl;
 
   useEffect(() => {
     if (!order?.id) return undefined;
 
     return subscribeClientOrderRealtime(order.id, (patch) => {
-      syncOrderPatch(order.id, {
+      syncOrderPatch(order.id, mergeClientOrderRealtimePatch({
         status: toClientOrderStatus(patch.status),
         paymentStatus: patch.paymentStatus,
         driverName: patch.driverName,
@@ -1484,7 +1484,7 @@ function OrderStatusPage({
         driverLat: patch.driverLat,
         driverLng: patch.driverLng,
         driverLocationAt: patch.driverLocationAt
-      });
+      }));
     });
   }, [order?.id, syncOrderPatch]);
 
@@ -1934,15 +1934,36 @@ function OrdersPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
     }
   };
 
-  const renderOrder = (order: ClientOrder) => (
+  const renderOrder = (order: ClientOrder) => {
+    const restaurant = snapshot.restaurants.find((item) => item.slug === order.restaurantSlug);
+    const restaurantMapHref = restaurant
+      ? buildYandexMapsUrl({
+          addressLine: restaurant.addressLine,
+          lat: restaurant.lat ?? Number.NaN,
+          lng: restaurant.lng ?? Number.NaN
+        })
+      : '';
+
+    return (
     <article className="order-card" key={order.id}>
-      <span>
+      <span className="order-card__summary">
         <strong>{order.restaurantName}</strong>
         <small>{new Date(order.createdAt).toLocaleDateString('ru-RU')} · {formatPrice(order.totalAmount)}</small>
         <em>{statusLabels[order.status]}</em>
+        <small>{orderTypeLabels[order.orderType]} · {getDeliveryProviderLabel(order.deliveryProvider, order.orderType)}</small>
+        <small>{order.addressLine}</small>
       </span>
-      <div>
-        <Link to={`/r/${order.restaurantSlug}/order/${order.id}`}>Открыть</Link>
+      <div className="order-card__actions">
+        <Link to={`/r/${order.restaurantSlug}/order/${order.id}`}>
+          <ReceiptText />
+          Статус
+        </Link>
+        {restaurantMapHref && (
+          <a href={restaurantMapHref} target="_blank" rel="noreferrer">
+            <MapPin />
+            Ресторан
+          </a>
+        )}
         <button
           type="button"
           onClick={() => {
@@ -1965,6 +1986,21 @@ function OrdersPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
           Отзыв
         </button>
       </div>
+      {order.driverName && (
+        <section className="order-card__driver">
+          <span>
+            <Bike />
+            <strong>{order.driverName}</strong>
+            {order.driverLocationAt && <small>Обновлено {new Date(order.driverLocationAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</small>}
+          </span>
+          {order.driverPhone && (
+            <a href={`tel:${order.driverPhone}`}>
+              <Phone />
+              {order.driverPhone}
+            </a>
+          )}
+        </section>
+      )}
       {reviewOrderId === order.id && (
         <form className="order-review-form" onSubmit={(event) => void submitReview(event, order)}>
           <label>
@@ -1988,7 +2024,8 @@ function OrdersPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
         </form>
       )}
     </article>
-  );
+    );
+  };
 
   return (
     <>
