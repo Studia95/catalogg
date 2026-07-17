@@ -90,6 +90,19 @@ export type RestaurantOrder = {
   items: RestaurantOrderItem[];
 };
 
+export type RestaurantDispatchDriver = {
+  id: string;
+  name: string;
+  phone: string;
+  vehicleInfo: string;
+  carNumber: string;
+  rating: number;
+  isOnline: boolean;
+  status: string;
+  scope: 'restaurant' | 'platform';
+  servesOrder: boolean;
+};
+
 export type PublicRestaurantOrderStatus = {
   id: string;
   clientName: string;
@@ -420,6 +433,99 @@ const mapOrder = (row: OrderRow): RestaurantOrder => {
 const stringValue = (value: unknown, fallback = '') => (typeof value === 'string' ? value : fallback);
 const nullableStringValue = (value: unknown) => (typeof value === 'string' ? value : null);
 const numberValue = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : Number(value) || 0);
+const booleanValue = (value: unknown, fallback = false) => (typeof value === 'boolean' ? value : fallback);
+
+type DispatchDriverRow = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  vehicle_info: string | null;
+  car_number: string | null;
+  service_settlements?: string[] | null;
+  city_name?: string | null;
+  rating: number | null;
+  is_online: boolean | null;
+  status: string | null;
+};
+
+type RestaurantCourierRow = {
+  drivers?: MaybeArray<DispatchDriverRow> | null;
+};
+
+const errorText = (error: unknown) => {
+  if (!error) return '';
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object') {
+    const value = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+    return [value.code, value.message, value.details, value.hint]
+      .filter((part): part is string => typeof part === 'string')
+      .join(' ');
+  }
+  return '';
+};
+
+const relationMissing = (error: unknown) => {
+  const text = errorText(error).toLowerCase();
+  return (
+    text.includes('42p01') ||
+    text.includes('pgrst200') ||
+    text.includes('pgrst201') ||
+    text.includes('could not find') ||
+    text.includes('does not exist') ||
+    text.includes('schema cache')
+  );
+};
+
+const driverServesOrder = (driver: DispatchDriverRow, order: Pick<RestaurantOrder, 'deliveryCity' | 'deliverySettlement'>) => {
+  const city = order.deliveryCity.trim().toLocaleLowerCase('ru-RU');
+  const settlement = order.deliverySettlement.trim().toLocaleLowerCase('ru-RU');
+  const driverCity = (driver.city_name ?? '').trim().toLocaleLowerCase('ru-RU');
+  const serviceSettlements = Array.isArray(driver.service_settlements)
+    ? driver.service_settlements.map((item) => item.trim().toLocaleLowerCase('ru-RU')).filter(Boolean)
+    : [];
+
+  if (!driverCity && serviceSettlements.length === 0) return true;
+  return Boolean(
+    (city && driverCity === city) ||
+    (settlement && driverCity === settlement) ||
+    (city && serviceSettlements.includes(city)) ||
+    (settlement && serviceSettlements.includes(settlement))
+  );
+};
+
+const mapDispatchDriver = (
+  row: DispatchDriverRow,
+  order: Pick<RestaurantOrder, 'deliveryCity' | 'deliverySettlement'>,
+  scope: RestaurantDispatchDriver['scope']
+): RestaurantDispatchDriver => ({
+  id: row.id,
+  name: row.name ?? 'Водитель',
+  phone: row.phone ?? '',
+  vehicleInfo: row.vehicle_info ?? '',
+  carNumber: row.car_number ?? '',
+  rating: Number(row.rating ?? 5),
+  isOnline: booleanValue(row.is_online),
+  status: row.status ?? 'offline',
+  scope,
+  servesOrder: driverServesOrder(row, order)
+});
+
+const uniqueDispatchDrivers = (drivers: RestaurantDispatchDriver[]) => {
+  const byId = new Map<string, RestaurantDispatchDriver>();
+  for (const driver of drivers) {
+    const current = byId.get(driver.id);
+    if (!current || current.scope !== 'restaurant') {
+      byId.set(driver.id, driver);
+    }
+  }
+  return Array.from(byId.values());
+};
+
+const createPickupToken = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID().replace(/-/g, '');
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+};
 
 const mapPublicOrderStatus = (row: PublicRestaurantOrderStatusRow): PublicRestaurantOrderStatus => ({
   id: stringValue(row.id),
@@ -481,6 +587,65 @@ export async function getRestaurantOrders(slug: string): Promise<RestaurantOrder
 
   if (error) throw error;
   return ((data ?? []) as unknown as OrderRow[]).map(mapOrder);
+}
+
+export async function getRestaurantDispatchDrivers(order: RestaurantOrder): Promise<RestaurantDispatchDriver[]> {
+  if (!supabase) {
+    return [
+      {
+        id: 'driver-demo',
+        name: 'Алан М.',
+        phone: '+7 928 123-45-67',
+        vehicleInfo: 'Hyundai Solaris',
+        carNumber: 'A123BC 95',
+        rating: 4.9,
+        isOnline: true,
+        status: 'online',
+        scope: 'restaurant',
+        servesOrder: true
+      }
+    ];
+  }
+
+  const driverSelect = 'id, name, phone, vehicle_info, car_number, city_name, service_settlements, rating, is_online, status';
+  const restaurantResult = await supabase
+    .from('restaurants')
+    .select('id')
+    .eq('catalog_id', order.catalogId);
+
+  if (restaurantResult.error) throw restaurantResult.error;
+  const restaurantIds = ((restaurantResult.data ?? []) as Array<{ id: string }>).map((row) => row.id);
+  let restaurantDrivers: RestaurantDispatchDriver[] = [];
+
+  if (restaurantIds.length > 0) {
+    const ownResult = await supabase
+      .from('restaurant_couriers')
+      .select(`drivers(${driverSelect})`)
+      .in('restaurant_id', restaurantIds)
+      .eq('is_active', true);
+
+    if (ownResult.error && !relationMissing(ownResult.error)) throw ownResult.error;
+
+    restaurantDrivers = ((ownResult.data ?? []) as unknown as RestaurantCourierRow[])
+      .map((row) => firstRelation(row.drivers))
+      .filter((driver): driver is DispatchDriverRow => Boolean(driver))
+      .map((driver) => mapDispatchDriver(driver, order, 'restaurant'));
+  }
+
+  const platformResult = await supabase
+    .from('drivers')
+    .select(driverSelect)
+    .eq('is_active', true)
+    .eq('is_online', true)
+    .order('rating', { ascending: false });
+
+  if (platformResult.error) throw platformResult.error;
+
+  const platformDrivers = ((platformResult.data ?? []) as unknown as DispatchDriverRow[])
+    .map((driver) => mapDispatchDriver(driver, order, 'platform'))
+    .filter((driver) => driver.servesOrder);
+
+  return uniqueDispatchDrivers([...restaurantDrivers, ...platformDrivers]);
 }
 
 export function subscribeToRestaurantOrdersRealtime(catalogId: string | null | undefined, onChange: () => void) {
@@ -647,6 +812,75 @@ export async function updateRestaurantOrderStatus(
   });
   if (historyResult.error) throw historyResult.error;
 
+}
+
+export async function assignRestaurantOrderDriver(order: RestaurantOrder, driverId: string) {
+  if (!supabase) return;
+  if (!order.deliveryId) throw new Error('Сначала вызовите доставку, чтобы создать задачу для водителя.');
+
+  const pickupToken = createPickupToken();
+  const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
+  const deliveryResult = await supabase
+    .from('deliveries')
+    .update({
+      driver_id: driverId,
+      status: 'assigned',
+      delivery_provider: 'restaurant',
+      assigned_at: new Date().toISOString(),
+      pickup_qr_token: pickupToken,
+      pickup_qr_expires_at: expiresAt
+    })
+    .eq('id', order.deliveryId)
+    .eq('order_id', order.id);
+
+  if (deliveryResult.error) throw deliveryResult.error;
+
+  const orderResult = await supabase
+    .from('orders')
+    .update({ status: 'assigned_driver' })
+    .eq('id', order.id)
+    .eq('catalog_id', order.catalogId);
+
+  if (orderResult.error) throw orderResult.error;
+
+  const driverResult = await supabase
+    .from('drivers')
+    .update({ is_online: true, status: 'heading_to_restaurant' })
+    .eq('id', driverId);
+
+  if (driverResult.error) throw driverResult.error;
+}
+
+export async function sendRestaurantOrderToDriverPool(order: RestaurantOrder) {
+  if (!supabase) return;
+  if (!order.deliveryId) {
+    await updateRestaurantOrderStatus(order, 'waiting_driver');
+    return;
+  }
+
+  const deliveryResult = await supabase
+    .from('deliveries')
+    .update({
+      driver_id: null,
+      status: 'waiting_courier',
+      delivery_provider: 'platform',
+      assigned_at: null,
+      pickup_qr_token: null,
+      pickup_qr_expires_at: null
+    })
+    .eq('id', order.deliveryId)
+    .eq('order_id', order.id);
+
+  if (deliveryResult.error) throw deliveryResult.error;
+
+  const orderResult = await supabase
+    .from('orders')
+    .update({ status: 'waiting_driver' })
+    .eq('id', order.id)
+    .eq('catalog_id', order.catalogId);
+
+  if (orderResult.error) throw orderResult.error;
 }
 
 export async function updateRestaurantOrderPaymentStatus(

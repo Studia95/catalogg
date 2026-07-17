@@ -1032,19 +1032,146 @@
   background: linear-gradient(180deg, rgba(244, 247, 251, 0), #f4f7fb 28%);
 }
 
-.admin-order-actions button:last-child {
+.admin-order-actions button.admin-order-actions__success {
   background: #12b76a;
+  color: #ffffff;
 }
 
 .admin-order-actions button.admin-order-actions__danger {
-  grid-column: 1 / -1;
   border: 1px solid #fecaca;
   background: #fff5f5;
   color: #b42318;
 }
 
+.admin-order-actions button.admin-order-actions__wide,
 .admin-order-actions button:only-child {
   grid-column: 1 / -1;
+}
+
+.admin-driver-dispatch {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 12px;
+  border: 1px solid #d8e0ec;
+  border-radius: 18px;
+  padding: 14px;
+  background: #ffffff;
+  color: #111827;
+}
+
+.admin-driver-dispatch header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-driver-dispatch header div,
+.admin-driver-dispatch__assigned {
+  display: grid;
+  gap: 3px;
+}
+
+.admin-driver-dispatch header strong,
+.admin-driver-dispatch__assigned strong {
+  color: #111827;
+  font-size: 16px;
+}
+
+.admin-driver-dispatch header span,
+.admin-driver-dispatch p,
+.admin-driver-dispatch small,
+.admin-driver-dispatch__assigned span,
+.admin-driver-dispatch__assigned small {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.admin-driver-dispatch header button {
+  min-height: 36px;
+  border: 1px solid #d8e0ec;
+  border-radius: 12px;
+  padding: 0 12px;
+  background: #f8fafc;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.admin-driver-list {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-driver-list button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  border: 1px solid #d8e0ec;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  color: #111827;
+  text-align: left;
+}
+
+.admin-driver-list button[data-online='true'] {
+  border-color: rgba(18, 183, 106, 0.42);
+  background: #f6fef9;
+}
+
+.admin-driver-list button:disabled {
+  opacity: 0.65;
+}
+
+.admin-driver-list button span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.admin-driver-list button strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-driver-list button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-driver-list button b {
+  color: #12b76a;
+  font-size: 13px;
+}
+
+.admin-driver-dispatch__assigned {
+  border: 1px solid rgba(18, 183, 106, 0.34);
+  border-radius: 14px;
+  padding: 12px;
+  background: #f6fef9;
+}
+
+.admin-driver-dispatch__assigned a {
+  color: #067647;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.admin-driver-dispatch__search {
+  min-height: 46px;
+  border: 0;
+  border-radius: 14px;
+  background: #111827;
+  color: #ffffff;
+  font-weight: 950;
 }
 
 .delivery-settings-card label {

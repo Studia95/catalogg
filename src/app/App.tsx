@@ -98,14 +98,18 @@ import {
 } from '../shared/supabase';
 import {
   createRestaurantOrderFromCart,
+  assignRestaurantOrderDriver,
+  getRestaurantDispatchDrivers,
   getPublicOrderTracking,
   getPublicRestaurantOrderStatus,
   getCatalogIdBySlug,
   getRestaurantDeliverySettings,
   getRestaurantOrders,
   saveRestaurantDeliverySettings,
+  sendRestaurantOrderToDriverPool,
   subscribeToRestaurantOrdersRealtime,
   updateRestaurantOrderStatus,
+  type RestaurantDispatchDriver,
   type PublicRestaurantOrderStatus,
   type RestaurantDeliverySettings,
   type RestaurantOrder,
@@ -2744,8 +2748,8 @@ function RestaurantAdminShell({
     .filter((order) => !['cancelled'].includes(order.status))
     .reduce((total, order) => total + order.total, 0);
   const filteredOrders = filter === 'all' ? orders : orders.filter((order) => order.status === filter);
-  const selectedVisibleOrder = selectedOrder && filteredOrders.some((order) => order.id === selectedOrder.id)
-    ? selectedOrder
+  const selectedVisibleOrder = selectedOrder
+    ? filteredOrders.find((order) => order.id === selectedOrder.id) ?? null
     : null;
   const orderGroups = useMemo(() => groupOrdersByDate(filteredOrders), [filteredOrders]);
   const activeOrders = orders.filter((order) => !['completed', 'delivered', 'cancelled'].includes(order.status));
@@ -2985,6 +2989,7 @@ function RestaurantAdminShell({
                     onOrderStatus(selectedVisibleOrder, status, reason);
                     setSelectedOrder((current) => (current ? { ...current, status } : current));
                   }}
+                  onRefreshOrders={onRefreshOrders}
                   onDelete={() => {
                     onOrderDelete(selectedVisibleOrder);
                     setSelectedOrder(null);
@@ -3044,6 +3049,7 @@ function OrderDetailsPanel({
   paymentSettings,
   onClose,
   onStatus,
+  onRefreshOrders,
   onDelete
 }: {
   order: RestaurantOrder;
@@ -3051,12 +3057,61 @@ function OrderDetailsPanel({
   paymentSettings: RestaurantPaymentSettings;
   onClose: () => void;
   onStatus: (status: RestaurantOrderStatus, reason?: string) => void;
+  onRefreshOrders: () => void;
   onDelete: () => void;
 }) {
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(() => loadPaymentStatus(catalogSlug, order.id));
+  const [assigningDriverId, setAssigningDriverId] = useState('');
+  const [isSearchingDriver, setIsSearchingDriver] = useState(false);
+  const showDriverDispatch =
+    order.fulfillmentType === 'delivery' &&
+    (order.status === 'waiting_driver' || order.status === 'assigned_driver' || Boolean(order.deliveryId));
+  const dispatchDriversQuery = useQuery({
+    queryKey: ['restaurant-dispatch-drivers', order.id, order.catalogId, order.deliveryCity, order.deliverySettlement, order.driverName],
+    queryFn: () => getRestaurantDispatchDrivers(order),
+    enabled: showDriverDispatch,
+    staleTime: 20_000
+  });
+  const dispatchDrivers = dispatchDriversQuery.data ?? [];
+  const onlineDrivers = dispatchDrivers.filter((driver) => driver.isOnline && driver.servesOrder);
+  const ownDrivers = dispatchDrivers.filter((driver) => driver.scope === 'restaurant');
+  const ownOnlineDrivers = ownDrivers.filter((driver) => driver.isOnline && driver.servesOrder);
   const updatePaymentStatus = (status: PaymentStatus) => {
     savePaymentStatus(catalogSlug, order.id, status);
     setPaymentStatus(status);
+  };
+  const refreshDriverDispatch = () => {
+    onRefreshOrders();
+    void dispatchDriversQuery.refetch();
+  };
+  const assignDriver = (driver: RestaurantDispatchDriver) => {
+    if (!order.deliveryId) {
+      toast.error('Сначала нажмите «Вызвать доставку», чтобы создать задачу для водителя.');
+      return;
+    }
+
+    setAssigningDriverId(driver.id);
+    assignRestaurantOrderDriver(order, driver.id)
+      .then(() => {
+        toast.success(`Заказ отправлен водителю: ${driver.name}`);
+        refreshDriverDispatch();
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : 'Не удалось назначить водителя');
+      })
+      .finally(() => setAssigningDriverId(''));
+  };
+  const searchDriverPool = () => {
+    setIsSearchingDriver(true);
+    sendRestaurantOrderToDriverPool(order)
+      .then(() => {
+        toast.success('Заказ отправлен всем доступным водителям');
+        refreshDriverDispatch();
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : 'Не удалось отправить заказ водителям');
+      })
+      .finally(() => setIsSearchingDriver(false));
   };
   const phoneHref = getAdminOrderPhoneHref(order.clientPhone);
   const whatsappHref = getAdminOrderWhatsAppHref(order.clientPhone);
@@ -3149,15 +3204,15 @@ function OrderDetailsPanel({
         )}
         <div className="admin-order-actions">
           <button type="button" onClick={() => updatePaymentStatus('awaiting')}>Ожидает</button>
-          <button type="button" onClick={() => updatePaymentStatus('confirmed')}>Подтвердить</button>
-          <button type="button" onClick={() => updatePaymentStatus('declined')}>Отклонить</button>
+          <button className="admin-order-actions__success" type="button" onClick={() => updatePaymentStatus('confirmed')}>Подтвердить</button>
+          <button className="admin-order-actions__danger admin-order-actions__wide" type="button" onClick={() => updatePaymentStatus('declined')}>Отклонить</button>
         </div>
       </section>
       <footer className="admin-order-actions">
         {order.status === 'new' && (
           <>
-            <button type="button" onClick={() => onStatus('cancelled', 'restaurant_rejected')}>Отклонить</button>
-            <button type="button" onClick={() => onStatus('accepted')}>Принять заказ</button>
+            <button className="admin-order-actions__danger" type="button" onClick={() => onStatus('cancelled', 'restaurant_rejected')}>Отклонить</button>
+            <button className="admin-order-actions__success" type="button" onClick={() => onStatus('accepted')}>Принять заказ</button>
           </>
         )}
         {['accepted', 'confirmed'].includes(order.status) && (
@@ -3183,15 +3238,69 @@ function OrderDetailsPanel({
         {order.status === 'ready' && order.fulfillmentType !== 'delivery' && (
           <button type="button" onClick={() => onStatus('completed')}>Завершить</button>
         )}
-        {order.status === 'waiting_driver' && (
+        {(order.status === 'assigned_driver' || order.status === 'driver_assigned') && (
           <button type="button" onClick={() => onStatus('on_the_way')}>Передано водителю</button>
+        )}
+        {showDriverDispatch && (
+          <section className="admin-driver-dispatch">
+            <header>
+              <div>
+                <strong>Водители</strong>
+                <span>В сети: {onlineDrivers.length}</span>
+              </div>
+              <button type="button" onClick={() => void dispatchDriversQuery.refetch()} disabled={dispatchDriversQuery.isFetching}>
+                Обновить
+              </button>
+            </header>
+
+            {order.driverName ? (
+              <div className="admin-driver-dispatch__assigned">
+                <span>Назначен водитель</span>
+                <strong>{order.driverName}</strong>
+                {order.driverPhone && <a href={`tel:${order.driverPhone}`}>{order.driverPhone}</a>}
+                {order.driverLocationAt && <small>Был в сети: {new Date(order.driverLocationAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</small>}
+              </div>
+            ) : (
+              <>
+                {ownDrivers.length > 0 ? (
+                  <div className="admin-driver-list">
+                    {ownDrivers.map((driver) => {
+                      const canAssign = driver.isOnline && driver.servesOrder && assigningDriverId !== driver.id;
+                      return (
+                        <button
+                          type="button"
+                          key={driver.id}
+                          onClick={() => assignDriver(driver)}
+                          disabled={!canAssign || Boolean(assigningDriverId)}
+                          data-online={driver.isOnline}
+                        >
+                          <span>
+                            <strong>{driver.name}</strong>
+                            <small>{driver.vehicleInfo || 'Курьер'}{driver.carNumber ? ` · ${driver.carNumber}` : ''}</small>
+                          </span>
+                          <b>{driver.isOnline ? 'Отправить' : 'Не в сети'}</b>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p>Своих водителей в сети нет. Можно запустить общий поиск по платформе.</p>
+                )}
+
+                <button className="admin-driver-dispatch__search" type="button" onClick={searchDriverPool} disabled={isSearchingDriver}>
+                  {isSearchingDriver ? 'Ищем водителя...' : 'ПОИСК ВОДИТЕЛЯ'}
+                </button>
+                {ownOnlineDrivers.length === 0 && <small>Заказ увидят все подходящие онлайн-водители.</small>}
+              </>
+            )}
+          </section>
         )}
         {order.status === 'on_the_way' && (
           <button type="button" onClick={() => onStatus('delivered')}>Доставлен</button>
         )}
         {!['cancelled', 'canceled', 'completed', 'delivered'].includes(order.status) && (
           <button
-            className="admin-order-actions__danger"
+            className="admin-order-actions__danger admin-order-actions__wide"
             type="button"
             onClick={() => {
               if (window.confirm('Удалить заказ из работы ресторана?')) {
