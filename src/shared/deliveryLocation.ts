@@ -96,6 +96,18 @@ export const resolveStoredDeliveryLocation = ({
 export const deliveryGeolocationPermissionDeniedMessage =
   'Геолокация заблокирована. Разрешите доступ к местоположению в настройках сайта браузера и нажмите кнопку ещё раз.';
 
+export const getDeliveryLowAccuracyMessage = (accuracyM?: number | null) => {
+  const accuracyText =
+    typeof accuracyM === 'number' && Number.isFinite(accuracyM) && accuracyM > 0
+      ? ` Сейчас точность около ${Math.round(accuracyM)} м.`
+      : '';
+
+  return `Местоположение определилось неточно.${accuracyText} Нажмите кнопку ещё раз для улучшения результата или уточните точку на карте.`;
+};
+
+export const deliveryGeolocationTimeoutMessage =
+  'Не удалось быстро получить точную геолокацию. Нажмите кнопку ещё раз для улучшения результата или уточните точку на карте.';
+
 export const getDeliveryGeolocationErrorMessage = (
   error: Pick<GeolocationPositionError, 'code'> | null | undefined,
   fallback = 'Не удалось получить геолокацию. Проверьте разрешение браузера.'

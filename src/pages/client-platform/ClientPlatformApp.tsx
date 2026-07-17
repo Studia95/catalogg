@@ -85,6 +85,8 @@ import {
   DELIVERY_TARGET_ACCURACY_M,
   deliveryPositionIsAccurateEnough,
   getDeliveryGeolocationErrorMessage,
+  getDeliveryLowAccuracyMessage,
+  deliveryGeolocationTimeoutMessage,
   normalizeDeliveryCoordinates,
   type DeliveryCoordinates
 } from '../../shared/deliveryLocation';
@@ -1123,7 +1125,7 @@ function AddressPage({ restaurant }: { restaurant: ClientRestaurant }) {
       setTab('map');
 
       if (accuracyM > DELIVERY_TARGET_ACCURACY_M) {
-        setGeoError('Получили лучшее доступное местоположение, но точность ниже желаемой. Проверьте адрес.');
+        setGeoError(getDeliveryLowAccuracyMessage(accuracyM));
       }
     },
     [draft.deliveryAddress, restaurant.slug, updateDraft]
@@ -1179,7 +1181,7 @@ function AddressPage({ restaurant }: { restaurant: ClientRestaurant }) {
         DELIVERY_GEOLOCATION_OPTIONS
       );
       const timeoutId = window.setTimeout(
-        () => finish(bestCoordinates, 'Не удалось получить точную геолокацию. Проверьте адрес вручную.'),
+        () => finish(bestCoordinates, deliveryGeolocationTimeoutMessage),
         DELIVERY_LOCATION_TIMEOUT_MS + 1_000
       );
       locationSessionRef.current = { watchId, timeoutId };

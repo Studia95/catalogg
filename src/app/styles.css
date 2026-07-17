@@ -799,16 +799,24 @@
 }
 
 .restaurant-admin-nav button {
-  display: grid;
+  display: flex;
+  overflow: hidden;
   min-width: 0;
   min-height: 54px;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 3px;
   border: 0;
   border-radius: 16px;
+  padding: 5px 2px;
   background: transparent;
   color: #667085;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 
 .restaurant-admin-nav button.is-active {
@@ -1057,17 +1065,22 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  min-width: 0;
 }
 
 .delivery-settings-grid label {
   display: grid;
   grid-template-columns: 1fr;
   gap: 6px;
+  min-width: 0;
 }
 
 .delivery-settings-grid input,
 .delivery-settings-grid select,
 .delivery-settings-grid textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   min-height: 42px;
   border: 1px solid #d8e0ec;
   border-radius: 12px;
@@ -1083,6 +1096,12 @@
 
 .delivery-settings-grid__wide {
   grid-column: 1 / -1;
+}
+
+@media (max-width: 420px) {
+  .delivery-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .delivery-directory-picker {
@@ -2784,11 +2803,11 @@ a {
   display: grid;
   min-height: 110px;
   gap: 16px;
-  border: 1px solid rgba(245, 166, 35, 0.32);
+  border: 1px solid color-mix(in srgb, var(--settings-card-text) 14%, transparent);
   border-radius: 20px;
   padding: 18px;
-  background: rgba(0, 0, 0, 0.28);
-  color: var(--text);
+  background: var(--settings-card);
+  color: var(--settings-card-text);
 }
 
 .takeaway-note__message {
@@ -2800,17 +2819,18 @@ a {
 .takeaway-note__message svg {
   width: 34px;
   height: 34px;
-  color: #f5a623;
+  color: currentColor;
 }
 
 .takeaway-note strong {
   font-size: 18px;
+  line-height: 1.2;
 }
 
 .restaurant-address {
   display: grid;
   gap: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid color-mix(in srgb, var(--settings-card-text) 14%, transparent);
   padding-top: 14px;
 }
 
@@ -2840,13 +2860,13 @@ a {
 }
 
 .checkout-location-hint {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--muted);
+  background: color-mix(in srgb, var(--settings-card-text) 8%, transparent);
+  color: color-mix(in srgb, var(--settings-card-text) 72%, transparent);
 }
 
 .checkout-location-warning {
-  background: rgba(245, 166, 35, 0.12);
-  color: #f5a623;
+  background: color-mix(in srgb, var(--accent-2) 18%, transparent);
+  color: var(--settings-card-text);
 }
 
 .checkout-field {
@@ -2883,12 +2903,12 @@ a {
 }
 
 .restaurant-address > span {
-  color: var(--muted);
+  color: color-mix(in srgb, var(--settings-card-text) 70%, transparent);
   font-size: 14px;
 }
 
 .restaurant-address > strong {
-  color: var(--text);
+  color: var(--settings-card-text);
   font-size: 16px;
 }
 
@@ -2898,10 +2918,10 @@ a {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  border: 1px solid #f5a623;
+  border: 1px solid color-mix(in srgb, var(--settings-card-text) 28%, transparent);
   border-radius: var(--button-radius);
-  background: transparent;
-  color: #f5a623;
+  background: color-mix(in srgb, var(--settings-card-text) 8%, transparent);
+  color: var(--settings-card-text);
   font: inherit;
   font-weight: 800;
 }

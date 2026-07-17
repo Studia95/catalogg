@@ -5,9 +5,11 @@ import {
   DELIVERY_LOCATION_TIMEOUT_MS,
   DELIVERY_TARGET_ACCURACY_M,
   chooseMoreAccuratePosition,
+  deliveryGeolocationTimeoutMessage,
   deliveryPositionIsAccurateEnough,
   formatDeliveryLocationNote,
   getDeliveryGeolocationErrorMessage,
+  getDeliveryLowAccuracyMessage,
   normalizeDeliveryCoordinates,
   resolveStoredDeliveryLocation,
   type DeliveryCoordinates
@@ -64,6 +66,17 @@ describe('delivery location precision', () => {
     assert.equal(
       getDeliveryGeolocationErrorMessage({ code: 1 }),
       'Геолокация заблокирована. Разрешите доступ к местоположению в настройках сайта браузера и нажмите кнопку ещё раз.'
+    );
+  });
+
+  it('explains how to retry when browser accuracy is weak or slow', () => {
+    assert.equal(
+      getDeliveryLowAccuracyMessage(320),
+      'Местоположение определилось неточно. Сейчас точность около 320 м. Нажмите кнопку ещё раз для улучшения результата или уточните точку на карте.'
+    );
+    assert.equal(
+      deliveryGeolocationTimeoutMessage,
+      'Не удалось быстро получить точную геолокацию. Нажмите кнопку ещё раз для улучшения результата или уточните точку на карте.'
     );
   });
 
