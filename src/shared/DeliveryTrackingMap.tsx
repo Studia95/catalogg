@@ -1,4 +1,4 @@
-import { Home, Layers3, LocateFixed, MapPin, Minus, Navigation, Plus } from 'lucide-react';
+import { Home, Layers3, LocateFixed, MapPin, Minus, Navigation, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent, ReactNode } from 'react';
 import {
@@ -10,12 +10,14 @@ import {
   type DeliveryMapCoordinates,
   type DeliveryMapStyle
 } from './deliveryMap';
+import { searchDeliveryLocations, type DeliveryLocationSearchResult } from './deliveryGeocoder';
 import { loadRoadRoute, type RoadRoute } from './deliveryNavigation';
 import './delivery-tracking-map.css';
 
 type TrackingPoint = DeliveryMapCoordinates & {
   label: string;
   address?: string;
+  details?: readonly string[];
 };
 
 type DeliveryTrackingMapProps = {
@@ -26,6 +28,8 @@ type DeliveryTrackingMapProps = {
   initialStyle?: DeliveryMapStyle;
   routePoints?: ReadonlyArray<DeliveryMapCoordinates>;
   loadRoute?: (points: ReadonlyArray<DeliveryMapCoordinates>) => Promise<RoadRoute>;
+  enableSearch?: boolean;
+  searchLocations?: (query: string) => Promise<ReadonlyArray<DeliveryLocationSearchResult>>;
 };
 
 const mapSize = 640;
@@ -44,14 +48,24 @@ export function DeliveryTrackingMap({
   className = '',
   initialStyle = 'street',
   routePoints,
-  loadRoute = defaultRouteLoader
+  loadRoute = defaultRouteLoader,
+  enableSearch = false,
+  searchLocations = searchDeliveryLocations
 }: DeliveryTrackingMapProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragStartRef = useRef<{ x: number; y: number; center: DeliveryMapCoordinates; zoom: number } | null>(null);
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchStartRef = useRef<{ distance: number; zoom: number } | null>(null);
+  const wheelDeltaRef = useRef(0);
   const [scale, setScale] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const [mapStyle, setMapStyle] = useState<DeliveryMapStyle>(initialStyle);
   const [roadRoute, setRoadRoute] = useState<RoadRoute | null>(null);
+  const [selectedPointKind, setSelectedPointKind] = useState<'restaurant' | 'driver' | 'client' | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<ReadonlyArray<DeliveryLocationSearchResult>>([]);
+  const [searchMessage, setSearchMessage] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
   const points = useMemo(() => [restaurant, client, ...(driver ? [driver] : [])], [client, driver, restaurant]);
   const effectiveRoutePoints = useMemo(
     () => routePoints ?? [restaurant, client],
@@ -77,6 +91,14 @@ export function DeliveryTrackingMap({
   const restaurantPoint = projectedPoints[0];
   const clientPoint = projectedPoints[1];
   const driverPoint = driver ? projectedPoints[2] : null;
+  const selectedPoint =
+    selectedPointKind === 'restaurant'
+      ? restaurantPoint
+      : selectedPointKind === 'client'
+        ? clientPoint
+        : selectedPointKind === 'driver'
+          ? driverPoint
+          : null;
   const fallbackRoutePoints = useMemo(
     () => effectiveRoutePoints.map((point) => coordinatesToMapPoint(point, center, mapZoom, mapSize)),
     [center, effectiveRoutePoints, mapZoom]
@@ -135,21 +157,137 @@ export function DeliveryTrackingMap({
 
   const endDrag = () => {
     dragStartRef.current = null;
+    pinchStartRef.current = null;
+    activePointersRef.current.clear();
     setIsDragging(false);
+  };
+
+  const trackPointer = (event: PointerEvent<HTMLDivElement>) => {
+    activePointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  };
+
+  const getPinchDistance = () => {
+    const pointers = Array.from(activePointersRef.current.values());
+    if (pointers.length < 2) return null;
+    const [first, second] = pointers;
+    return Math.hypot(first.x - second.x, first.y - second.y);
+  };
+
+  const submitSearch = async () => {
+    const query = searchQuery.trim();
+    if (!query || isSearching) return;
+    setIsSearching(true);
+    setSearchMessage('');
+    setSearchResults([]);
+
+    try {
+      const results = await searchLocations(query);
+      setSearchResults(results);
+      if (results.length === 0) setSearchMessage('В Чеченской Республике ничего не найдено.');
+    } catch (searchError) {
+      setSearchMessage(searchError instanceof Error ? searchError.message : 'Не удалось выполнить поиск на карте.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const selectSearchResult = (result: DeliveryLocationSearchResult) => {
+    setCenter({ lat: result.lat, lng: result.lng });
+    setMapZoom(17);
+    setSearchQuery(result.name);
+    setSearchResults([]);
+    setSearchMessage('');
+  };
+
+  const focusPoint = (kind: 'restaurant' | 'driver' | 'client', point: TrackingPoint) => {
+    setSelectedPointKind(kind);
+    setCenter({ lat: point.lat, lng: point.lng });
+    setMapZoom((zoom) => Math.min(18, zoom + 1));
+  };
+
+  const centerOnDriver = () => {
+    if (driver) {
+      setCenter({ lat: driver.lat, lng: driver.lng });
+      setMapZoom(17);
+      return;
+    }
+    setCenter(defaultCenter);
+    setMapZoom(defaultMapZoom);
   };
 
   return (
     <section className={`delivery-tracking-map ${className}`.trim()} aria-label="Карта доставки">
+      {enableSearch && (
+        <div className="delivery-tracking-map__search-wrap">
+          <form
+            className="delivery-tracking-map__search"
+            role="search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitSearch();
+            }}
+          >
+            <Search aria-hidden="true" />
+            <input
+              type="search"
+              aria-label="Поиск на карте"
+              placeholder="Село, город или улица"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+            />
+            <button type="submit" disabled={isSearching || !searchQuery.trim()}>
+              {isSearching ? 'Ищем...' : 'Найти'}
+            </button>
+          </form>
+          <button className="delivery-tracking-map__locate" type="button" onClick={centerOnDriver} aria-label="Моё местоположение">
+            <LocateFixed />
+          </button>
+          {(searchResults.length > 0 || searchMessage) && (
+            <div className="delivery-tracking-map__search-results" aria-live="polite">
+              {searchResults.map((result) => (
+                <button type="button" key={result.id} onClick={() => selectSearchResult(result)}>
+                  <MapPin aria-hidden="true" />
+                  <span>{result.label}</span>
+                </button>
+              ))}
+              {searchMessage && <p>{searchMessage}</p>}
+            </div>
+          )}
+        </div>
+      )}
       <div
         className={isDragging ? 'delivery-tracking-map__canvas is-dragging' : 'delivery-tracking-map__canvas'}
         ref={canvasRef}
-        onPointerDown={startDrag}
-        onPointerMove={dragMap}
+        onPointerDown={(event) => {
+          if ((event.target as HTMLElement).closest('button, input')) return;
+          trackPointer(event);
+          if (activePointersRef.current.size === 2) {
+            const distance = getPinchDistance();
+            if (distance !== null) pinchStartRef.current = { distance, zoom: mapZoom };
+            return;
+          }
+          startDrag(event);
+        }}
+        onPointerMove={(event) => {
+          if (activePointersRef.current.has(event.pointerId)) trackPointer(event);
+          const pinchStart = pinchStartRef.current;
+          const pinchDistance = getPinchDistance();
+          if (pinchStart && pinchDistance !== null) {
+            const nextZoom = pinchStart.zoom + Math.trunc(Math.log2(pinchDistance / pinchStart.distance) * 0.65);
+            setMapZoom(Math.min(18, Math.max(10, nextZoom)));
+            return;
+          }
+          dragMap(event);
+        }}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onWheel={(event) => {
           event.preventDefault();
-          setMapZoom((value) => Math.min(18, Math.max(10, value + (event.deltaY < 0 ? 1 : -1))));
+          wheelDeltaRef.current += event.deltaY;
+          if (Math.abs(wheelDeltaRef.current) < 160) return;
+          const direction = wheelDeltaRef.current < 0 ? 1 : -1;
+          wheelDeltaRef.current = 0;
+          setMapZoom((value) => Math.min(18, Math.max(10, value + direction)));
         }}
       >
         <div className="delivery-tracking-map__scene" style={{ transform: `scale(${scale})` }}>
@@ -173,9 +311,29 @@ export function DeliveryTrackingMap({
                 .join(' ')}
             />
           </svg>
-          <TrackingMarker point={restaurantPoint} kind="restaurant" icon={<Home />} />
-          {driverPoint && <TrackingMarker point={driverPoint} kind="driver" icon={<Navigation />} />}
-          <TrackingMarker point={clientPoint} kind="client" icon={<MapPin />} />
+          <TrackingMarker point={restaurantPoint} kind="restaurant" icon={<Home />} onSelect={() => focusPoint('restaurant', restaurant)} />
+          {driverPoint && driver && <TrackingMarker point={driverPoint} kind="driver" icon={<Navigation />} onSelect={() => focusPoint('driver', driver)} />}
+          <TrackingMarker point={clientPoint} kind="client" icon={<MapPin />} onSelect={() => focusPoint('client', client)} />
+          {selectedPoint && (
+            <article
+              className="delivery-tracking-map__point-card"
+              style={{
+                left: Math.min(mapSize - 210, Math.max(12, selectedPoint.x + 14)),
+                top: Math.min(mapSize - 126, Math.max(12, selectedPoint.y - 70))
+              }}
+            >
+              <strong>
+                {selectedPointKind === 'restaurant'
+                  ? 'Ресторан'
+                  : selectedPointKind === 'driver'
+                    ? 'Водитель'
+                    : 'Клиент'}
+              </strong>
+              <b>{selectedPoint.label}</b>
+              {selectedPoint.address && <span>{selectedPoint.address}</span>}
+              {selectedPoint.details?.map((detail) => <small key={detail}>{detail}</small>)}
+            </article>
+          )}
         </div>
         <div className="delivery-tracking-map__controls" aria-label="Управление картой" onPointerDown={(event) => event.stopPropagation()}>
           <button type="button" onClick={() => setMapZoom((value) => Math.min(18, value + 1))} aria-label="Приблизить"><Plus /></button>
@@ -210,15 +368,23 @@ export function DeliveryTrackingMap({
 function TrackingMarker({
   point,
   kind,
-  icon
+  icon,
+  onSelect
 }: {
   point: { x: number; y: number; label: string; address?: string };
   kind: 'restaurant' | 'driver' | 'client';
   icon: ReactNode;
+  onSelect: () => void;
 }) {
   return (
-    <span className={`delivery-tracking-map__marker delivery-tracking-map__marker--${kind}`} style={{ left: point.x, top: point.y }} title={point.address || point.label}>
+    <button
+      className={`delivery-tracking-map__marker delivery-tracking-map__marker--${kind}`}
+      style={{ left: point.x, top: point.y }}
+      type="button"
+      title={point.address || point.label}
+      onClick={onSelect}
+    >
       {icon}
-    </span>
+    </button>
   );
 }

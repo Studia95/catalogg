@@ -93,6 +93,9 @@ type DeliveryRow = {
     delivery_lat: number | null;
     delivery_lng: number | null;
     delivery_comment: string | null;
+    delivery_comment_snapshot?: string | null;
+    client_address_comment?: string | null;
+    comment?: string | null;
     restaurant_address_snapshot: string | null;
     restaurant_lat_snapshot: number | null;
     restaurant_lng_snapshot: number | null;
@@ -158,9 +161,31 @@ type EarningRow = {
 
 type MaybeArray<T> = T | T[];
 
+type OrderContactRow = {
+  id: string;
+  customer_name: string | null;
+  customer_phone: string | null;
+  client_name: string | null;
+  client_phone: string | null;
+  delivery_comment: string | null;
+  delivery_comment_snapshot: string | null;
+  client_address_comment: string | null;
+  comment: string | null;
+};
+
 const firstRelation = <T,>(value: MaybeArray<T> | null | undefined): T | null =>
   Array.isArray(value) ? value[0] ?? null : value ?? null;
 type DeliveryOrderRow = NonNullable<NonNullable<DeliveryRow['orders']> extends MaybeArray<infer T> ? T : never>;
+
+const resolveOrderContactName = (order: Pick<OrderContactRow, 'customer_name' | 'client_name'>) =>
+  order.customer_name || order.client_name || '';
+
+const resolveOrderContactPhone = (order: Pick<OrderContactRow, 'customer_phone' | 'client_phone'>) =>
+  order.customer_phone || order.client_phone || '';
+
+const resolveOrderDeliveryComment = (
+  order: Pick<OrderContactRow, 'delivery_comment_snapshot' | 'delivery_comment' | 'client_address_comment' | 'comment'>
+) => order.delivery_comment_snapshot || order.delivery_comment || order.client_address_comment || order.comment || '';
 
 export const demoDriverId = 'driver-demo';
 
@@ -291,8 +316,8 @@ const rowToOffer = (row: DeliveryRow, viewerDriverId: string): DeliveryOffer | n
     orderType: normalizeOrderType(order),
     status: order.status,
     paymentStatus: order.payment_status,
-    clientName: order.client_name || order.customer_name || '',
-    clientPhone: order.client_phone || order.customer_phone || '',
+    clientName: resolveOrderContactName(order),
+    clientPhone: resolveOrderContactPhone(order),
     deliveryAddress: buildDeliveryDestinationAddress({
       address: order.delivery_address,
       settlement: order.delivery_settlement,
@@ -300,7 +325,7 @@ const rowToOffer = (row: DeliveryRow, viewerDriverId: string): DeliveryOffer | n
     }),
     deliveryLat: order.delivery_lat,
     deliveryLng: order.delivery_lng,
-    deliveryComment: order.delivery_comment ?? '',
+    deliveryComment: resolveOrderDeliveryComment(order),
     restaurantName: restaurant?.name ?? 'Ресторан',
     restaurantAddress: order.restaurant_address_snapshot ?? restaurant?.address_line ?? restaurant?.description ?? '',
     restaurantLat: order.restaurant_lat_snapshot ?? restaurant?.lat ?? null,
@@ -449,9 +474,36 @@ export async function getDriverDashboard(driverId = demoDriverId): Promise<Drive
 
   if (deliveriesResult.error) throw deliveriesResult.error;
 
-  const offers = ((deliveriesResult.data ?? []) as unknown as DeliveryRow[])
+  let offers = ((deliveriesResult.data ?? []) as unknown as DeliveryRow[])
     .map((row) => rowToOffer(row, profile.id))
     .filter((offer): offer is DeliveryOffer => Boolean(offer));
+
+  const assignedOrderIds = Array.from(new Set(offers
+    .filter((offer) => offer.isAssignedToViewer)
+    .map((offer) => offer.orderId)));
+  if (assignedOrderIds.length > 0) {
+    const contactsResult = await supabase
+      .from('orders')
+      .select('id, customer_name, customer_phone, client_name, client_phone, delivery_comment, delivery_comment_snapshot, client_address_comment, comment')
+      .in('id', assignedOrderIds);
+
+    if (!contactsResult.error) {
+      const contactsByOrderId = new Map(
+        ((contactsResult.data ?? []) as OrderContactRow[]).map((order) => [order.id, order])
+      );
+      offers = offers.map((offer) => {
+        const order = contactsByOrderId.get(offer.orderId);
+        if (!order || !offer.isAssignedToViewer) return offer;
+        return {
+          ...offer,
+          clientName: resolveOrderContactName(order) || offer.clientName,
+          clientPhone: resolveOrderContactPhone(order) || offer.clientPhone,
+          deliveryComment: resolveOrderDeliveryComment(order) || offer.deliveryComment
+        };
+      });
+    }
+  }
+
   const activeDelivery = offers.find((offer) => offer.isAssignedToViewer) ?? null;
   const availableDeliveries = profile.isOnline
     ? offers.filter((offer) => !offer.isAssignedToViewer && offer.status === 'waiting_courier')
@@ -625,9 +677,9 @@ export const buildLocalAcceptedOffer = (offer: DeliveryOffer, driverId: string):
     ...offer,
     status: 'assigned',
     isAssignedToViewer: true,
-    clientName: 'Адам М.',
-    clientPhone: '+7 928 123-45-67',
-    deliveryComment: 'Подъезд 2, домофон 45К',
+    clientName: offer.clientName,
+    clientPhone: offer.clientPhone,
+    deliveryComment: offer.deliveryComment,
     pickupQrToken: createPickupQrToken({
       orderId: offer.orderId,
       driverId,

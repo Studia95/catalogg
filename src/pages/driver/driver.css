@@ -405,9 +405,11 @@
 }
 
 .driver-qr-panel img {
-  width: min(260px, 78vw);
-  border: 1px solid #e4e7ec;
+  width: min(300px, 78vw);
+  border: 12px solid #ffffff;
   border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px #e4e7ec;
 }
 
 .driver-empty-block strong,
@@ -428,10 +430,14 @@
 
 .driver-map-preview {
   position: relative;
+  display: block;
+  width: 100%;
   min-height: 238px;
   overflow: hidden;
   border-radius: 8px;
   margin-bottom: 12px;
+  color: inherit;
+  text-decoration: none;
   background:
     linear-gradient(35deg, transparent 46%, rgba(91, 61, 244, 0.24) 47%, rgba(91, 61, 244, 0.24) 53%, transparent 54%),
     linear-gradient(90deg, rgba(17, 24, 39, 0.06) 1px, transparent 1px),

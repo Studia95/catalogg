@@ -7,6 +7,81 @@
   background: #eef2f1;
 }
 
+.delivery-tracking-map__search-wrap {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px;
+  gap: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.delivery-tracking-map__search {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  padding: 0 8px;
+  background: #ffffff;
+}
+
+.delivery-tracking-map__search input {
+  min-width: 0;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: #111827;
+  font: inherit;
+  outline: none;
+}
+
+.delivery-tracking-map__search button,
+.delivery-tracking-map__locate {
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: #5b3df4;
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.delivery-tracking-map__locate {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+}
+
+.delivery-tracking-map__search-results {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+}
+
+.delivery-tracking-map__search-results button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #111827;
+  text-align: left;
+}
+
+.delivery-tracking-map__search-results p {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .delivery-tracking-map__canvas {
   position: relative;
   width: 100%;
@@ -26,6 +101,7 @@
   width: 640px;
   height: 640px;
   transform-origin: top left;
+  transition: transform 180ms ease;
 }
 
 .delivery-tracking-map__controls {
@@ -58,6 +134,7 @@
   position: absolute;
   width: 256px;
   height: 256px;
+  transition: left 180ms ease, top 180ms ease;
 }
 
 .delivery-tracking-map__tile img {
@@ -98,9 +175,16 @@
   place-items: center;
   border: 3px solid #ffffff;
   border-radius: 50% 50% 50% 0;
+  padding: 0;
   box-shadow: 0 6px 16px rgb(15 23 42 / 22%);
   color: #ffffff;
+  appearance: none;
   transform: translate(-50%, -90%) rotate(-45deg);
+  transition: left 180ms ease, top 180ms ease, transform 160ms ease;
+}
+
+.delivery-tracking-map__marker:hover {
+  transform: translate(-50%, -90%) rotate(-45deg) scale(1.06);
 }
 
 .delivery-tracking-map__marker svg {
@@ -112,6 +196,39 @@
 .delivery-tracking-map__marker--restaurant { background: #5b3df4; }
 .delivery-tracking-map__marker--driver { background: #16a34a; }
 .delivery-tracking-map__marker--client { background: #ef4444; }
+
+.delivery-tracking-map__point-card {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  width: 198px;
+  gap: 3px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  padding: 10px;
+  background: rgb(255 255 255 / 94%);
+  color: #111827;
+  box-shadow: 0 14px 34px rgb(15 23 42 / 22%);
+}
+
+.delivery-tracking-map__point-card strong {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.delivery-tracking-map__point-card b {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.delivery-tracking-map__point-card span,
+.delivery-tracking-map__point-card small {
+  overflow-wrap: anywhere;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 800;
+}
 
 .delivery-tracking-map__legend {
   display: flex;

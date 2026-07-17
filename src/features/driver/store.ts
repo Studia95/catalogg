@@ -7,8 +7,10 @@ type DriverStore = {
   selectedDriverId: string;
   localActiveDelivery: DeliveryOffer | null;
   completedDeliveryIds: string[];
+  dismissedDeliveryIds: string[];
   bindDriver: (driverId: string) => void;
   acceptLocalOffer: (offer: DeliveryOffer, driverId?: string) => void;
+  dismissDeliveryOffer: (deliveryId: string) => void;
   updateLocalDeliveryStatus: (status: DeliveryStatus) => void;
   completeLocalDelivery: () => void;
   clearLocalActiveDelivery: () => void;
@@ -20,15 +22,20 @@ export const useDriverStore = create<DriverStore>()(
       selectedDriverId: demoDriverId,
       localActiveDelivery: null,
       completedDeliveryIds: [],
+      dismissedDeliveryIds: [],
       bindDriver: (driverId) =>
         set((state) =>
           state.selectedDriverId === driverId
             ? state
-            : { selectedDriverId: driverId, localActiveDelivery: null, completedDeliveryIds: [] }
+            : { selectedDriverId: driverId, localActiveDelivery: null, completedDeliveryIds: [], dismissedDeliveryIds: [] }
         ),
       acceptLocalOffer: (offer, driverId) =>
         set((state) => ({
           localActiveDelivery: buildLocalAcceptedOffer(offer, driverId ?? state.selectedDriverId)
+        })),
+      dismissDeliveryOffer: (deliveryId) =>
+        set((state) => ({
+          dismissedDeliveryIds: [deliveryId, ...state.dismissedDeliveryIds.filter((id) => id !== deliveryId)]
         })),
       updateLocalDeliveryStatus: (status) =>
         set((state) => ({
@@ -52,11 +59,17 @@ export const useDriverStore = create<DriverStore>()(
     }),
     {
       name: 'waycatalog-driver',
+      version: 2,
       storage: createJSONStorage(() => localStorage),
+      merge: (persisted, current) => ({
+        ...current,
+        ...(persisted as Partial<DriverStore>),
+        localActiveDelivery: null
+      }),
       partialize: (state) => ({
         selectedDriverId: state.selectedDriverId,
-        localActiveDelivery: state.localActiveDelivery,
-        completedDeliveryIds: state.completedDeliveryIds
+        completedDeliveryIds: state.completedDeliveryIds,
+        dismissedDeliveryIds: state.dismissedDeliveryIds
       })
     }
   )

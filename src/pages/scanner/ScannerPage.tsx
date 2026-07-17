@@ -13,6 +13,12 @@ type ParsedQr =
 
 function parseQr(raw: string): ParsedQr {
   const text = raw.trim();
+  if (text.startsWith('wc-delivery|')) {
+    const [, deliveryId, ...tokenParts] = text.split('|');
+    const token = tokenParts.join('|');
+    if (deliveryId && token) return { kind: 'delivery', deliveryId, token };
+  }
+
   try {
     const parsed = JSON.parse(text) as { type?: string; orderId?: string; deliveryId?: string; token?: string };
     if (parsed.type === 'order' && parsed.orderId) return { kind: 'order', orderId: parsed.orderId };
