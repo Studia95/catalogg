@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useDriverStore } from '../../features/driver/store';
 import {
   buildYandexMapsRouteAppUrl,
@@ -64,6 +64,16 @@ import { supabase } from '../../shared/supabase';
 import './driver.css';
 
 const formatPrice = (value: number) => `${new Intl.NumberFormat('ru-RU').format(value)} ₽`;
+
+const buildDriverPickupQrPayload = (delivery: Pick<DeliveryOffer, 'deliveryId' | 'orderId' | 'pickupQrToken'> | null) =>
+  delivery?.pickupQrToken
+    ? JSON.stringify({
+        type: 'delivery',
+        deliveryId: delivery.deliveryId,
+        orderId: delivery.orderId,
+        token: delivery.pickupQrToken
+      })
+    : '';
 
 const parseDriverSettlements = (value: string) =>
   Array.from(
@@ -514,7 +524,7 @@ function DriverDeliveryCard({
       className="driver-delivery-card driver-order-summary-card"
       data-compact={compact}
       data-highlighted={highlighted}
-      to={offer.isAssignedToViewer ? '/driver/active' : `/driver/orders/${offer.deliveryId}`}
+      to={`/driver/orders/${offer.deliveryId}`}
     >
       <span className="driver-order-summary-card__head">
         <strong>#{offer.orderNumber}</strong>
@@ -657,8 +667,8 @@ function DriverOrdersScreen({
   recentDeliveryIds: Set<string>;
   error: string;
 }) {
-  const { deliveryId } = useParams();
-  const selectedOffer = offers.find((offer) => offer.deliveryId === deliveryId) ?? null;
+  const location = useLocation();
+  const deliveryId = location.pathname.split('/').filter(Boolean)[2] ?? '';
   const visibleOffers = useMemo(
     () =>
       activeDelivery
@@ -666,13 +676,27 @@ function DriverOrdersScreen({
         : [...offers],
     [activeDelivery, offers]
   );
+  const selectedOffer = visibleOffers.find((offer) => offer.deliveryId === deliveryId) ?? null;
   const offerGroups = useMemo(() => groupOrdersByDate(visibleOffers), [visibleOffers]);
 
-  if (deliveryId && activeDelivery?.deliveryId === deliveryId) {
-    return <DriverActiveScreen delivery={activeDelivery} profile={profile} />;
+  if (selectedOffer?.isAssignedToViewer) {
+    return <DriverActiveScreen delivery={selectedOffer} profile={profile} />;
   }
 
   if (selectedOffer) return <DriverNewOrderScreen driverId={driverId} offer={selectedOffer} />;
+
+  if (deliveryId) {
+    return (
+      <>
+        <DriverHeader title="Заказ" />
+        <section className="driver-empty-block">
+          <ClipboardList />
+          <strong>Заказ не найден</strong>
+          <Link to="/driver/orders">К списку заказов</Link>
+        </section>
+      </>
+    );
+  }
 
   return (
     <>
@@ -714,6 +738,8 @@ function DriverNewOrderScreen({ driverId, offer }: { driverId: string; offer: De
   const [isRequestingPrice, setIsRequestingPrice] = useState(false);
   const [priceMessage, setPriceMessage] = useState('');
   const [error, setError] = useState('');
+  const qrPayload = buildDriverPickupQrPayload(offer);
+  const restaurantPickupLabel = [offer.restaurantName, offer.restaurantAddress].filter(Boolean).join(' · ');
 
   const accept = async () => {
     setIsAccepting(true);
@@ -750,16 +776,45 @@ function DriverNewOrderScreen({ driverId, offer }: { driverId: string; offer: De
 
   return (
     <>
-      <DriverHeader title="Новый заказ" action={<small>{offer.routeEtaMin} сек</small>} />
+      <DriverHeader title="Новый заказ" action={<small>{offer.routeEtaMin} мин</small>} />
       <DriverMapPreview offer={offer} />
       <section className="driver-order-panel">
         <span className="driver-badge">Доставка</span>
         <h2>Заказ №{offer.orderNumber}</h2>
-        <DriverRouteLine icon={<Home />} label={offer.restaurantName} value={offer.restaurantAddress} />
-        <DriverRouteLine icon={<MapPin />} label="Клиент" value={offer.deliveryAddress} />
+        <DriverRouteLine icon={<Home />} label="Забрать из" value={restaurantPickupLabel || 'Адрес ресторана уточняется'} />
+        <DriverRouteLine icon={<MapPin />} label="Доставить в" value={offer.deliveryAddress} />
         <DriverRouteLine icon={<Navigation />} label="Расстояние" value={`${offer.distanceKm} км от вас`} />
-        <strong>{formatPrice(offer.orderTotal > 0 ? offer.orderTotal : offer.deliveryFee)}</strong>
-        <small>{offer.paymentLabel} · доставка водителю {formatPrice(offer.deliveryFee)}</small>
+        <DriverRouteLine icon={<CircleDollarSign />} label="Стоимость заказа" value={formatPrice(offer.orderTotal)} />
+        <DriverRouteLine icon={<WalletCards />} label="Выплата за доставку" value={formatPrice(offer.deliveryFee)} />
+        <small>{offer.paymentLabel}</small>
+        <div className="driver-action-row driver-action-row--order">
+          <a href={offer.routeToRestaurantUrl} target="_blank" rel="noreferrer">
+            <Navigation />
+            К ресторану
+          </a>
+          {offer.routeToClientUrl ? (
+            <a href={offer.routeToClientUrl} target="_blank" rel="noreferrer">
+              <MapPin />
+              К клиенту
+            </a>
+          ) : (
+            <button type="button" disabled>
+              <MapPin />
+              К клиенту после принятия
+            </button>
+          )}
+          {qrPayload ? (
+            <Link to="/driver/qr">
+              <QrCode />
+              QR
+            </Link>
+          ) : (
+            <button type="button" disabled>
+              <QrCode />
+              QR после принятия
+            </button>
+          )}
+        </div>
         <div className="driver-price-request">
           <label>Предложить свою цену<input type="number" min="0" step="1" value={requestedAmount} onChange={(event) => setRequestedAmount(event.target.value)} /></label>
           <input value={priceComment} onChange={(event) => setPriceComment(event.target.value)} placeholder="Комментарий для супер-админа" />
@@ -877,14 +932,7 @@ function DriverActiveScreen({ delivery, profile }: { delivery: DeliveryOffer | n
 }
 
 function DriverQrScreen({ delivery }: { delivery: DeliveryOffer | null }) {
-  const qrPayload = delivery?.pickupQrToken
-    ? JSON.stringify({
-        type: 'delivery',
-        deliveryId: delivery.deliveryId,
-        orderId: delivery.orderId,
-        token: delivery.pickupQrToken
-      })
-    : '';
+  const qrPayload = buildDriverPickupQrPayload(delivery);
   const qrImageUrl = qrPayload
     ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrPayload)}`
     : '';

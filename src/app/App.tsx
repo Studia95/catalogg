@@ -3010,6 +3010,7 @@ function RestaurantAdminShell({
                 <button type="button" onClick={() => onOpenScreen('settings-categories')}><Tags />Категории</button>
                 <button type="button" onClick={() => onOpenScreen('settings-payments')}><CreditCard />Платежи</button>
                 <button type="button" onClick={() => onOpenScreen('settings-backup')}><CloudUpload />Импорт</button>
+                <button className="admin-quick-actions__exit" type="button" onClick={logout}><LogOut />Выход</button>
               </div>
             </section>
             <DeliverySettingsCard settings={deliverySettings ?? defaultAdminDeliverySettings} onSave={onSaveDeliverySettings} />

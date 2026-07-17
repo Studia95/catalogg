@@ -526,7 +526,8 @@
 .driver-primary,
 .driver-secondary,
 .driver-action-row a,
-.driver-action-row a:visited {
+.driver-action-row a:visited,
+.driver-action-row button {
   display: inline-flex;
   min-height: 48px;
   align-items: center;
@@ -652,6 +653,29 @@
   background: #f8fafc;
   color: #344054;
   font-size: 12px;
+}
+
+.driver-action-row button {
+  min-height: 44px;
+  background: #f8fafc;
+  color: #344054;
+  font-size: 12px;
+}
+
+.driver-action-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.driver-action-row--order {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.driver-action-row--order a,
+.driver-action-row--order button {
+  min-width: 0;
+  padding-inline: 8px;
+  text-align: center;
 }
 
 .driver-qr-panel {
