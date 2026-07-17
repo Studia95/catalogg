@@ -25,6 +25,7 @@ export type DeliveryMapStyle = 'street' | 'satellite';
 
 export type DeliveryMapTile = OsmTile & {
   readonly overlayUrls: readonly string[];
+  readonly size?: number;
 };
 
 type BuildMapTileGridInput = {
@@ -185,23 +186,41 @@ export const buildMapTileGrid = ({
   zoom,
   mapSize,
   style
-}: BuildMapTileGridInput): DeliveryMapTile[] => buildOsmTileGrid(center, zoom, mapSize).map((tile) => {
-  const [, tileX, tileY] = tile.key.split('-');
-  const coordinates = {
-    zoom,
-    tileX: Number(tileX),
-    tileY: Number(tileY)
-  };
+}: BuildMapTileGridInput): DeliveryMapTile[] => {
+  const tileZoom = Math.max(0, Math.floor(zoom));
+  const zoomScale = 2 ** (zoom - tileZoom);
+  const centerPixel = latLngToWorldPixel(center, zoom);
+  const startX = centerPixel.x - mapSize / 2;
+  const startY = centerPixel.y - mapSize / 2;
+  const scaledTileSize = tileSize * zoomScale;
+  const firstTileX = Math.floor(startX / scaledTileSize);
+  const firstTileY = Math.floor(startY / scaledTileSize);
+  const lastTileX = Math.floor((startX + mapSize) / scaledTileSize);
+  const lastTileY = Math.floor((startY + mapSize) / scaledTileSize);
+  const tileCount = 2 ** tileZoom;
   const isSatellite = style === 'satellite';
 
-  return {
-    ...tile,
-    url: resolveTileUrl({
-      template: isSatellite ? satelliteTileTemplate : streetTileTemplate,
-      ...coordinates
-    }),
-    overlayUrls: isSatellite
-      ? satelliteOverlayTemplates.map((template) => resolveTileUrl({ template, ...coordinates }))
-      : []
-  };
-});
+  const tiles: DeliveryMapTile[] = [];
+  for (let tileY = firstTileY; tileY <= lastTileY; tileY += 1) {
+    if (tileY < 0 || tileY >= tileCount) continue;
+    for (let tileX = firstTileX; tileX <= lastTileX; tileX += 1) {
+      const wrappedTileX = ((tileX % tileCount) + tileCount) % tileCount;
+      const coordinates = { zoom: tileZoom, tileX: wrappedTileX, tileY };
+      tiles.push({
+        key: `${tileZoom}-${wrappedTileX}-${tileY}`,
+        url: resolveTileUrl({
+          template: isSatellite ? satelliteTileTemplate : streetTileTemplate,
+          ...coordinates
+        }),
+        overlayUrls: isSatellite
+          ? satelliteOverlayTemplates.map((template) => resolveTileUrl({ template, ...coordinates }))
+          : [],
+        x: Math.round(tileX * scaledTileSize - startX),
+        y: Math.round(tileY * scaledTileSize - startY),
+        size: Math.ceil(scaledTileSize)
+      });
+    }
+  }
+
+  return tiles;
+};

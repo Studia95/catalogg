@@ -225,7 +225,7 @@ const demoOffers: readonly DeliveryOffer[] = [
   {
     ...buildDriverDeliveryView({ order: demoOrder(), assignment: null, viewerDriverId: demoDriverId }),
     deliveryId: 'delivery-demo-1',
-    orderNumber: '12347',
+    orderNumber: 'R2347',
     createdAt: new Date().toISOString(),
     itemsCount: 3,
     orderTotal: 1640,
@@ -247,7 +247,7 @@ const demoOffers: readonly DeliveryOffer[] = [
       viewerDriverId: demoDriverId
     }),
     deliveryId: 'delivery-demo-2',
-    orderNumber: '12346',
+    orderNumber: 'M2346',
     createdAt: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
     itemsCount: 2,
     orderTotal: 1180,
@@ -261,7 +261,7 @@ const demoHistory: readonly DriverEarning[] = [
   {
     id: 'earning-demo-1',
     deliveryId: 'delivery-history-1',
-    orderNumber: '12345',
+    orderNumber: 'R2345',
     restaurantName: 'Rizih',
     amount: 470,
     completedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString()
@@ -269,7 +269,7 @@ const demoHistory: readonly DriverEarning[] = [
   {
     id: 'earning-demo-2',
     deliveryId: 'delivery-history-2',
-    orderNumber: '12344',
+    orderNumber: 'S2344',
     restaurantName: 'Суши House',
     amount: 350,
     completedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
@@ -303,7 +303,52 @@ const normalizeOrderType = (order: DeliveryOrderRow): OrderLifecycleSnapshot['or
   return 'dine_in';
 };
 
-const orderNumber = (orderId: string) => orderId.slice(0, 8).toUpperCase();
+const restaurantInitials: Record<string, string> = {
+  А: 'A',
+  Б: 'B',
+  В: 'V',
+  Г: 'G',
+  Д: 'D',
+  Е: 'E',
+  Ё: 'E',
+  Ж: 'Z',
+  З: 'Z',
+  И: 'I',
+  Й: 'I',
+  К: 'K',
+  Л: 'L',
+  М: 'M',
+  Н: 'N',
+  О: 'O',
+  П: 'P',
+  Р: 'R',
+  С: 'S',
+  Т: 'T',
+  У: 'U',
+  Ф: 'F',
+  Х: 'H',
+  Ц: 'C',
+  Ч: 'C',
+  Ш: 'S',
+  Щ: 'S',
+  Ы: 'Y',
+  Э: 'E',
+  Ю: 'U',
+  Я: 'Y'
+};
+
+const orderNumberPrefix = (restaurantName?: string | null) => {
+  const first = restaurantName?.trim().charAt(0).toUpperCase() || 'W';
+  return /^[A-Z]$/.test(first) ? first : restaurantInitials[first] ?? 'W';
+};
+
+const orderNumberSequence = (orderId: string) => {
+  const hash = Array.from(orderId).reduce((value, char) => ((value * 31) + char.charCodeAt(0)) >>> 0, 7);
+  return String((hash % 9999) + 1).padStart(4, '0');
+};
+
+const orderNumber = (orderId: string, restaurantName?: string | null) =>
+  `${orderNumberPrefix(restaurantName)}${orderNumberSequence(orderId)}`;
 
 const rowToOffer = (row: DeliveryRow, viewerDriverId: string): DeliveryOffer | null => {
   const order = firstRelation(row.orders);
@@ -347,7 +392,7 @@ const rowToOffer = (row: DeliveryRow, viewerDriverId: string): DeliveryOffer | n
   return {
     ...buildDriverDeliveryView({ order: lifecycleOrder, assignment, viewerDriverId }),
     deliveryId: row.id,
-    orderNumber: orderNumber(row.order_id),
+    orderNumber: orderNumber(row.order_id, restaurant?.name),
     createdAt: order.created_at,
     itemsCount: (order.order_items ?? []).reduce((sum, item) => sum + Math.max(1, Number(item.quantity ?? 1)), 0),
     orderTotal: Number(order.total ?? order.total_amount ?? 0),
@@ -381,7 +426,7 @@ const rowToEarning = (row: EarningRow): DriverEarning => {
   return {
     id: row.id,
     deliveryId: row.delivery_id,
-    orderNumber: orderNumber(delivery?.order_id ?? row.delivery_id),
+    orderNumber: orderNumber(delivery?.order_id ?? row.delivery_id, restaurant?.name),
     restaurantName: restaurant?.name ?? 'Ресторан',
     amount: Number(row.net_amount ?? row.amount),
     completedAt: row.created_at

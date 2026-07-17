@@ -72,6 +72,7 @@ export function DeliveryTrackingMap({
     [client, restaurant, routePoints]
   );
   const routeKey = effectiveRoutePoints.map((point) => `${point.lat},${point.lng}`).join(';');
+  const fitKey = `${restaurant.lat},${restaurant.lng};${client.lat},${client.lng}`;
   const defaultCenter = useMemo(() => getMapCenter(points), [points]);
   const defaultMapZoom = useMemo(() => getMapZoomForPoints(points), [points]);
   const [center, setCenter] = useState(defaultCenter);
@@ -79,7 +80,8 @@ export function DeliveryTrackingMap({
   useEffect(() => {
     setCenter(defaultCenter);
     setMapZoom(defaultMapZoom);
-  }, [defaultCenter, defaultMapZoom]);
+    setSelectedPointKind(null);
+  }, [fitKey]);
   const tiles = useMemo(
     () => buildMapTileGrid({ center, zoom: mapZoom, mapSize, style: mapStyle }),
     [center, mapStyle, mapZoom]
@@ -115,7 +117,6 @@ export function DeliveryTrackingMap({
     }
 
     let active = true;
-    setRoadRoute(null);
     void loadRoute(effectiveRoutePoints)
       .then((route) => {
         if (active) setRoadRoute(route);
@@ -127,7 +128,7 @@ export function DeliveryTrackingMap({
     return () => {
       active = false;
     };
-  }, [effectiveRoutePoints, loadRoute, routeKey]);
+  }, [loadRoute, routeKey]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -260,6 +261,8 @@ export function DeliveryTrackingMap({
         ref={canvasRef}
         onPointerDown={(event) => {
           if ((event.target as HTMLElement).closest('button, input')) return;
+          event.preventDefault();
+          event.currentTarget.setPointerCapture(event.pointerId);
           trackPointer(event);
           if (activePointersRef.current.size === 2) {
             const distance = getPinchDistance();
@@ -273,7 +276,8 @@ export function DeliveryTrackingMap({
           const pinchStart = pinchStartRef.current;
           const pinchDistance = getPinchDistance();
           if (pinchStart && pinchDistance !== null) {
-            const nextZoom = pinchStart.zoom + Math.trunc(Math.log2(pinchDistance / pinchStart.distance) * 0.65);
+            event.preventDefault();
+            const nextZoom = pinchStart.zoom + Math.log2(pinchDistance / pinchStart.distance) * 1.15;
             setMapZoom(Math.min(18, Math.max(10, nextZoom)));
             return;
           }
@@ -292,7 +296,7 @@ export function DeliveryTrackingMap({
       >
         <div className="delivery-tracking-map__scene" style={{ transform: `scale(${scale})` }}>
           {tiles.map((tile) => (
-            <span className="delivery-tracking-map__tile" key={tile.key} style={{ left: tile.x, top: tile.y }}>
+            <span className="delivery-tracking-map__tile" key={tile.key} style={{ left: tile.x, top: tile.y, width: tile.size, height: tile.size }}>
               <img src={tile.url} alt="" aria-hidden="true" draggable={false} />
               {tile.overlayUrls.map((url) => (
                 <img className="delivery-tracking-map__tile-overlay" key={url} src={url} alt="" aria-hidden="true" draggable={false} />

@@ -34,7 +34,7 @@
 .driver-header,
 .driver-topbar {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(44px, auto);
   align-items: center;
   gap: 8px;
   min-height: 48px;
@@ -53,8 +53,30 @@
 }
 
 .driver-header h1 {
-  font-size: 18px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: clamp(15px, 4.6vw, 18px);
   text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.driver-header > span {
+  display: grid;
+  min-width: 0;
+  max-width: min(104px, 30vw);
+  justify-items: end;
+}
+
+.driver-header > span > small {
+  display: block;
+  max-width: 100%;
+  color: #344054;
+  font-size: clamp(10px, 3vw, 12px);
+  font-weight: 900;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .driver-header button,

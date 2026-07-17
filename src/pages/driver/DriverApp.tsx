@@ -258,7 +258,7 @@ export function DriverApp() {
         playDriverNewOrderSound();
         newOffers.slice(0, 3).forEach((offer) => {
           void showRestaurantOrderNotification({
-            title: `Новая доставка #${offer.orderNumber}`,
+            title: `Новая доставка ${offer.orderNumber}`,
             body: `${offer.restaurantName} · ${offer.deliveryAddress}`,
             tag: `driver-delivery-${offer.deliveryId}`,
             url: `${window.location.origin}${window.location.pathname}${window.location.search}#/driver/orders/${offer.deliveryId}`
@@ -610,7 +610,7 @@ function DriverDeliveryCard({
       to={`/driver/orders/${offer.deliveryId}`}
     >
       <span className="driver-order-summary-card__head">
-        <strong>#{offer.orderNumber}</strong>
+        <strong>{offer.orderNumber}</strong>
         <time dateTime={offer.createdAt}>{formatOrderTime(offer.createdAt)}</time>
       </span>
       <span className="driver-order-summary-card__meta">
@@ -870,7 +870,7 @@ function DriverNewOrderScreen({ driverId, offer }: { driverId: string; offer: De
       <DriverMapPreview offer={offer} />
       <section className="driver-order-panel">
         <span className="driver-badge">Доставка</span>
-        <h2>Заказ №{offer.orderNumber}</h2>
+        <h2>Заказ {offer.orderNumber}</h2>
         <DriverRouteLine icon={<Home />} label="Забрать из" value={restaurantPickupLabel || 'Адрес ресторана уточняется'} />
         <DriverRouteLine icon={<MapPin />} label="Доставить в" value={displayDeliveryAddress} />
         <DriverRouteLine icon={<Navigation />} label="Расстояние" value={`${offer.distanceKm} км от вас`} />
@@ -984,7 +984,7 @@ function DriverActiveScreen({ delivery, profile }: { delivery: DeliveryOffer | n
 
   return (
     <>
-      <DriverHeader title={`Заказ №${delivery.orderNumber}`} action={<small>{deliveryStatusLabels[delivery.status]}</small>} />
+      <DriverHeader title={`Заказ ${delivery.orderNumber}`} action={<small>{deliveryStatusLabels[delivery.status]}</small>} />
       {completeMapData ? (
         <DeliveryTrackingMap
           className="driver-tracking-map"
@@ -1041,7 +1041,7 @@ function DriverQrScreen({ delivery }: { delivery: DeliveryOffer | null }) {
       <DriverHeader title="QR заказа" />
       <section className="driver-qr-panel">
         {qrImageUrl ? <img src={qrImageUrl} alt="QR выдачи заказа" /> : <QrCode />}
-        <strong>{delivery ? `Код выдачи заказа №${delivery.orderNumber}` : 'QR появится после принятия заказа'}</strong>
+        <strong>{delivery ? `Код выдачи заказа ${delivery.orderNumber}` : 'QR появится после принятия заказа'}</strong>
         <small>Покажите этот экран ресторану перед выдачей заказа.</small>
       </section>
       <Link className="driver-primary driver-link-button" to="/driver/active">
@@ -1133,7 +1133,7 @@ function DriverEarningsScreen({ snapshot }: { snapshot: DriverDashboardSnapshot 
         {snapshot.history.map((earning) => (
           <article className="driver-history-row" key={earning.id}>
             <span>
-              <strong>№{earning.orderNumber}</strong>
+              <strong>{earning.orderNumber}</strong>
               <small>{earning.restaurantName} · {new Date(earning.completedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</small>
             </span>
             <b>{formatPrice(earning.amount)}</b>
