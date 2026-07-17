@@ -38,7 +38,6 @@ import {
   acceptDeliveryOffer,
   changeDriverPassword,
   completeDeliveryProgress,
-  confirmDriverPickup,
   getAuthenticatedDriverId,
   getDriverDashboard,
   saveDriverServiceSettlements,
@@ -937,7 +936,7 @@ function DriverActiveScreen({ delivery, profile }: { delivery: DeliveryOffer | n
     if (!delivery) return null;
     if (delivery.status === 'assigned') return { label: 'Я на месте в ресторане', status: 'arrived_to_restaurant' as const };
     if (delivery.status === 'arrived_to_restaurant') return { label: 'Показать QR', status: 'arrived_to_restaurant' as const, to: '/driver/qr' };
-    if (delivery.status === 'handed_over') return { label: 'В пути к клиенту', status: 'on_the_way' as const };
+    if (delivery.status === 'handed_over') return { label: 'Я взял заказ', status: 'on_the_way' as const };
     if (delivery.status === 'on_the_way') return { label: 'Я на месте у клиента', status: 'arrived_to_client' as const };
     if (delivery.status === 'arrived_to_client') return { label: 'Заказ доставлен', status: 'delivered' as const };
     return null;
@@ -960,13 +959,6 @@ function DriverActiveScreen({ delivery, profile }: { delivery: DeliveryOffer | n
     } catch (statusError) {
       setError(statusError instanceof Error ? statusError.message : 'Не удалось обновить статус');
     }
-  };
-
-  const confirmPickup = async () => {
-    if (!delivery) return;
-    const confirmed = await confirmDriverPickup(delivery.deliveryId);
-    if (!confirmed) throw new Error('Заказ уже передан или недоступен.');
-    updateLocalDeliveryStatus('handed_over');
   };
 
   if (!delivery) {
@@ -1018,13 +1010,13 @@ function DriverActiveScreen({ delivery, profile }: { delivery: DeliveryOffer | n
           {delivery.clientPhone && <a href={`tel:${delivery.clientPhone}`}><Phone />Позвонить</a>}
           <Link to="/driver/qr"><QrCode />QR</Link>
         </div>
-        <DriverYandexNavigationActions delivery={delivery} onConfirmPickup={confirmPickup} />
-        {error && <p className="driver-error">{error}</p>}
         {nextAction && (
           <button className="driver-primary" type="button" onClick={() => void updateStatus(nextAction.status, nextAction.to)}>
             {nextAction.label}
           </button>
         )}
+        <DriverYandexNavigationActions delivery={delivery} />
+        {error && <p className="driver-error">{error}</p>}
       </section>
     </>
   );

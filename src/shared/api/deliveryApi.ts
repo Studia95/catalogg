@@ -8,6 +8,7 @@ import {
   type OrderLifecycleSnapshot
 } from '../../features/order/orderLifecycle';
 import { clearPwaResumePath } from '../pwaSession';
+import { parseRestaurantCoordinatesFromMapLink } from '../restaurantLocation';
 import { supabase } from '../supabase';
 
 export type DriverProfile = {
@@ -99,6 +100,8 @@ type DeliveryRow = {
     restaurant_address_snapshot: string | null;
     restaurant_lat_snapshot: number | null;
     restaurant_lng_snapshot: number | null;
+    catalog_id?: string | null;
+    restaurant_id?: string | null;
     delivery_fee: number | null;
     total: number | null;
     total_amount: number | null;
@@ -114,6 +117,7 @@ type DeliveryRow = {
       address_line: string | null;
       lat: number | null;
       lng: number | null;
+      map_url?: string | null;
     }> | null;
   }> | null;
 };
@@ -163,6 +167,8 @@ type MaybeArray<T> = T | T[];
 
 type OrderContactRow = {
   id: string;
+  catalog_id?: string | null;
+  restaurant_id?: string | null;
   customer_name?: string | null;
   customer_phone?: string | null;
   client_name?: string | null;
@@ -171,11 +177,34 @@ type OrderContactRow = {
   delivery_comment_snapshot?: string | null;
   client_address_comment?: string | null;
   comment?: string | null;
+  restaurant_address_snapshot?: string | null;
+  restaurant_lat_snapshot?: number | null;
+  restaurant_lng_snapshot?: number | null;
+};
+
+type CatalogLocationRow = {
+  id: string;
+  address: string | null;
+  map_url: string | null;
+};
+
+type RestaurantLocationRow = {
+  id: string;
+  catalog_id: string | null;
+  address_line: string | null;
+  lat: number | null;
+  lng: number | null;
 };
 
 const firstRelation = <T,>(value: MaybeArray<T> | null | undefined): T | null =>
   Array.isArray(value) ? value[0] ?? null : value ?? null;
 type DeliveryOrderRow = NonNullable<NonNullable<DeliveryRow['orders']> extends MaybeArray<infer T> ? T : never>;
+
+const coordinateValue = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
 
 const resolveOrderContactName = (order: Pick<OrderContactRow, 'customer_name' | 'client_name'>) =>
   order.customer_name || order.client_name || '';
@@ -354,6 +383,7 @@ const rowToOffer = (row: DeliveryRow, viewerDriverId: string): DeliveryOffer | n
   const order = firstRelation(row.orders);
   if (!order) return null;
   const restaurant = firstRelation(order.restaurants);
+  const restaurantMapCoordinates = restaurant?.map_url ? parseRestaurantCoordinatesFromMapLink(restaurant.map_url) : null;
 
   const deliveryFee = Number(row.offered_fee ?? 0) > 0 ? Number(row.offered_fee) : Number(order.delivery_fee ?? 0);
   const lifecycleOrder: OrderLifecycleSnapshot = {
@@ -373,8 +403,8 @@ const rowToOffer = (row: DeliveryRow, viewerDriverId: string): DeliveryOffer | n
     deliveryComment: resolveOrderDeliveryComment(order),
     restaurantName: restaurant?.name ?? 'Ресторан',
     restaurantAddress: order.restaurant_address_snapshot ?? restaurant?.address_line ?? restaurant?.description ?? '',
-    restaurantLat: order.restaurant_lat_snapshot ?? restaurant?.lat ?? null,
-    restaurantLng: order.restaurant_lng_snapshot ?? restaurant?.lng ?? null,
+    restaurantLat: restaurantMapCoordinates?.lat ?? coordinateValue(restaurant?.lat) ?? coordinateValue(order.restaurant_lat_snapshot),
+    restaurantLng: restaurantMapCoordinates?.lng ?? coordinateValue(restaurant?.lng) ?? coordinateValue(order.restaurant_lng_snapshot),
     deliveryFee,
     distanceKm: 1.8
   };
@@ -529,21 +559,84 @@ export async function getDriverDashboard(driverId = demoDriverId): Promise<Drive
   if (assignedOrderIds.length > 0) {
     const contactsResult = await supabase
       .from('orders')
-      .select('id, customer_name, customer_phone, client_name, client_phone, delivery_comment, delivery_comment_snapshot, client_address_comment, comment')
+      .select('id, catalog_id, restaurant_id, customer_name, customer_phone, client_name, client_phone, delivery_comment, delivery_comment_snapshot, client_address_comment, comment, restaurant_address_snapshot, restaurant_lat_snapshot, restaurant_lng_snapshot')
       .in('id', assignedOrderIds);
 
     if (!contactsResult.error) {
+      const contactRows = (contactsResult.data ?? []) as OrderContactRow[];
       const contactsByOrderId = new Map(
-        ((contactsResult.data ?? []) as OrderContactRow[]).map((order) => [order.id, order])
+        contactRows.map((order) => [order.id, order])
       );
+      const catalogIds = Array.from(new Set(contactRows.map((order) => order.catalog_id).filter((id): id is string => Boolean(id))));
+      const restaurantIds = Array.from(new Set(contactRows.map((order) => order.restaurant_id).filter((id): id is string => Boolean(id))));
+      const catalogLocationsById = new Map<string, CatalogLocationRow>();
+      const restaurantLocationsById = new Map<string, RestaurantLocationRow>();
+      const restaurantLocationsByCatalogId = new Map<string, RestaurantLocationRow>();
+
+      if (catalogIds.length > 0) {
+        const catalogLocationsResult = await supabase
+          .from('catalogs')
+          .select('id, address, map_url')
+          .in('id', catalogIds);
+        if (!catalogLocationsResult.error) {
+          ((catalogLocationsResult.data ?? []) as CatalogLocationRow[])
+            .forEach((catalog) => catalogLocationsById.set(catalog.id, catalog));
+        }
+
+        const restaurantLocationsByCatalogResult = await supabase
+          .from('restaurants')
+          .select('id, catalog_id, address_line, lat, lng')
+          .in('catalog_id', catalogIds);
+        if (!restaurantLocationsByCatalogResult.error) {
+          ((restaurantLocationsByCatalogResult.data ?? []) as RestaurantLocationRow[])
+            .forEach((restaurantLocation) => {
+              if (restaurantLocation.catalog_id && !restaurantLocationsByCatalogId.has(restaurantLocation.catalog_id)) {
+                restaurantLocationsByCatalogId.set(restaurantLocation.catalog_id, restaurantLocation);
+              }
+            });
+        }
+      }
+
+      if (restaurantIds.length > 0) {
+        const restaurantLocationsResult = await supabase
+          .from('restaurants')
+          .select('id, catalog_id, address_line, lat, lng')
+          .in('id', restaurantIds);
+        if (!restaurantLocationsResult.error) {
+          ((restaurantLocationsResult.data ?? []) as RestaurantLocationRow[])
+            .forEach((restaurantLocation) => restaurantLocationsById.set(restaurantLocation.id, restaurantLocation));
+        }
+      }
+
       offers = offers.map((offer) => {
         const order = contactsByOrderId.get(offer.orderId);
         if (!order || !offer.isAssignedToViewer) return offer;
+        const restaurantLocation =
+          (order.restaurant_id ? restaurantLocationsById.get(order.restaurant_id) : null) ??
+          (order.catalog_id ? restaurantLocationsByCatalogId.get(order.catalog_id) : null) ??
+          null;
+        const catalogLocation = order.catalog_id ? catalogLocationsById.get(order.catalog_id) : null;
+        const catalogMapCoordinates = catalogLocation?.map_url
+          ? parseRestaurantCoordinatesFromMapLink(catalogLocation.map_url)
+          : null;
+        const restaurantLat =
+          catalogMapCoordinates?.lat ??
+          coordinateValue(restaurantLocation?.lat) ??
+          coordinateValue(order.restaurant_lat_snapshot) ??
+          offer.restaurantLat;
+        const restaurantLng =
+          catalogMapCoordinates?.lng ??
+          coordinateValue(restaurantLocation?.lng) ??
+          coordinateValue(order.restaurant_lng_snapshot) ??
+          offer.restaurantLng;
         return {
           ...offer,
           clientName: resolveOrderContactName(order) || offer.clientName,
           clientPhone: resolveOrderContactPhone(order) || offer.clientPhone,
-          deliveryComment: resolveOrderDeliveryComment(order) || offer.deliveryComment
+          deliveryComment: resolveOrderDeliveryComment(order) || offer.deliveryComment,
+          restaurantAddress: restaurantLocation?.address_line || order.restaurant_address_snapshot || catalogLocation?.address || offer.restaurantAddress,
+          restaurantLat,
+          restaurantLng
         };
       });
     }

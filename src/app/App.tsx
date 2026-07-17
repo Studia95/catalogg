@@ -149,6 +149,12 @@ import { DeliveryMapPicker } from '../shared/DeliveryMapPicker';
 import type { DeliveryLocationSearchResult } from '../shared/deliveryGeocoder';
 import { DeliveryTrackingMap } from '../shared/DeliveryTrackingMap';
 import {
+  buildYandexMapLink,
+  makeRestaurantCoordinates,
+  parseCoordinateInput,
+  parseRestaurantCoordinatesFromMapLink
+} from '../shared/restaurantLocation';
+import {
   loadPaymentSettings,
   loadPaymentStatus,
   savePaymentSettings,
@@ -343,52 +349,6 @@ const makeLoadingRestaurant = (catalogSlug: string): Restaurant => ({
   logo_url: '',
   banner_url: ''
 });
-
-const parseCoordinateInput = (value: string) => {
-  const normalized = value.trim().replace(',', '.');
-  if (!normalized) return null;
-  const number = Number(normalized);
-  return Number.isFinite(number) ? Number(number.toFixed(7)) : null;
-};
-
-const isValidRestaurantCoordinates = (lat: number | null, lng: number | null) =>
-  lat !== null &&
-  lng !== null &&
-  Math.abs(lat) <= 90 &&
-  Math.abs(lng) <= 180;
-
-const makeRestaurantCoordinates = (lat: number | null, lng: number | null) =>
-  typeof lat === 'number' &&
-  typeof lng === 'number' &&
-  Math.abs(lat) <= 90 &&
-  Math.abs(lng) <= 180
-    ? { lat, lng }
-    : null;
-
-const buildYandexMapLink = (lat: number, lng: number) =>
-  `https://yandex.ru/maps/?ll=${lng},${lat}&z=16&pt=${lng},${lat},pm2rdm`;
-
-const parseRestaurantCoordinatesFromMapLink = (value: string) => {
-  const text = value.trim();
-  if (!text) return null;
-  try {
-    const url = new URL(text);
-    const point = url.searchParams.get('pt') ?? url.searchParams.get('ll');
-    const match = point?.match(/(-?\d+(?:[.,]\d+)?)\s*,\s*(-?\d+(?:[.,]\d+)?)/);
-    if (match) {
-      const lng = parseCoordinateInput(match[1]);
-      const lat = parseCoordinateInput(match[2]);
-      return makeRestaurantCoordinates(lat, lng);
-    }
-  } catch {
-    // Fall back to parsing pasted coordinate text below.
-  }
-  const match = text.match(/(-?\d{1,3}(?:[.,]\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:[.,]\d+)?)/);
-  if (!match) return null;
-  const lat = parseCoordinateInput(match[1]);
-  const lng = parseCoordinateInput(match[2]);
-  return makeRestaurantCoordinates(lat, lng);
-};
 
 const loadStockTargets = (): StockTargets => {
   try {
@@ -3632,12 +3592,20 @@ function ProfileSettings({
         return;
       }
     }
-    if ((draft.lat !== null || draft.lng !== null) && !isValidRestaurantCoordinates(draft.lat, draft.lng)) {
+    const coordinatesFromFields = makeRestaurantCoordinates(draft.lat, draft.lng);
+    const coordinatesFromLink = parseRestaurantCoordinatesFromMapLink(draft.mapLink);
+    if ((draft.lat !== null || draft.lng !== null) && !coordinatesFromFields && !coordinatesFromLink) {
       setError('Укажите корректные координаты ресторана.');
       return;
     }
-    const coordinates = makeRestaurantCoordinates(draft.lat, draft.lng);
-    onSave({ ...draft, name: draft.name.trim(), mapLink: draft.mapLink || (coordinates ? buildYandexMapLink(coordinates.lat, coordinates.lng) : '') });
+    const coordinates = coordinatesFromLink ?? coordinatesFromFields;
+    onSave({
+      ...draft,
+      name: draft.name.trim(),
+      lat: coordinates?.lat ?? null,
+      lng: coordinates?.lng ?? null,
+      mapLink: draft.mapLink || (coordinates ? buildYandexMapLink(coordinates.lat, coordinates.lng) : '')
+    });
     setError('Сохранено');
   };
 

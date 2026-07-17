@@ -3,6 +3,7 @@ import { cabins, categories, products, restaurant, themeSettings } from '../data
 import type { Cabin, CatalogTag, Category, Product, Restaurant, ThemeSettings } from '../entities/models';
 import { catalogAccessAllowsAdmin } from './adminSession';
 import { clearPwaResumePath } from './pwaSession';
+import { makeRestaurantCoordinates, parseRestaurantCoordinatesFromMapLink } from './restaurantLocation';
 
 type SupabaseConfig = {
   url?: string;
@@ -165,12 +166,15 @@ const mapPlatformRestaurant = (value: PlatformCatalogRow): Restaurant => ({
 const withRestaurantLocation = (
   value: Restaurant,
   location?: Pick<PlatformRestaurantLocationRow, 'address_line' | 'lat' | 'lng'> | null
-): Restaurant => ({
-  ...value,
-  address: value.address || location?.address_line || '',
-  lat: location?.lat ?? value.lat ?? null,
-  lng: location?.lng ?? value.lng ?? null
-});
+): Restaurant => {
+  const linkCoordinates = parseRestaurantCoordinatesFromMapLink(value.mapLink);
+  return {
+    ...value,
+    address: value.address || location?.address_line || '',
+    lat: linkCoordinates?.lat ?? location?.lat ?? value.lat ?? null,
+    lng: linkCoordinates?.lng ?? location?.lng ?? value.lng ?? null
+  };
+};
 
 const parseCategoryMeta = (value?: string | null) => {
   if (!value) return {};
@@ -253,16 +257,32 @@ async function getPlatformRestaurantLocation(catalogId: string) {
 
 async function savePlatformRestaurantLocation(catalogId: string, value: Restaurant) {
   if (!supabase) return;
+  const coordinates = parseRestaurantCoordinatesFromMapLink(value.mapLink) ?? makeRestaurantCoordinates(value.lat, value.lng);
   const payload = {
     address_line: value.address,
-    lat: value.lat,
-    lng: value.lng
+    lat: coordinates?.lat ?? null,
+    lng: coordinates?.lng ?? null
   };
   const existing = await getPlatformRestaurantLocation(catalogId);
   if (existing?.id) {
     const { error } = await supabase.from('restaurants').update(payload).eq('id', existing.id);
     if (error) throw error;
+    return;
   }
+
+  const slug = normalizeCatalogSlug(value.id);
+  const { error } = await supabase.from('restaurants').upsert({
+    catalog_id: catalogId,
+    name: value.name || slug,
+    slug,
+    description: value.subtitle,
+    logo_url: value.logo_url,
+    cover_url: value.banner_url,
+    address_line: value.address,
+    lat: payload.lat,
+    lng: payload.lng
+  }, { onConflict: 'slug' });
+  if (error) throw error;
 }
 
 export async function signInAdmin(email: string, password: string, catalogSlug?: string) {
