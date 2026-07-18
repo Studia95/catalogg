@@ -1,4 +1,5 @@
 import { Camera, Flashlight, QrCode, RotateCcw } from 'lucide-react';
+import jsQR from 'jsqr';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { confirmDeliveryPickupQr } from '../../shared/api/deliveryApi';
@@ -43,11 +44,31 @@ function parseQr(raw: string): ParsedQr {
   return { kind: 'unknown', raw: text };
 }
 
+function scanVideoFrame(video: HTMLVideoElement, canvas: HTMLCanvasElement | null) {
+  if (!canvas || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) {
+    return '';
+  }
+
+  const maxScanSize = 720;
+  const scale = Math.min(1, maxScanSize / Math.max(video.videoWidth, video.videoHeight));
+  canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+  canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) return '';
+
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  return jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' })?.data ?? '';
+}
+
 export function ScannerPage() {
   const navigate = useNavigate();
   const { slug = '' } = useParams();
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const handledQrRef = useRef(false);
   const [rawValue, setRawValue] = useState('');
   const [message, setMessage] = useState('Наведите камеру на QR-код');
   const [cameraMode, setCameraMode] = useState<'environment' | 'user'>('environment');
@@ -103,6 +124,7 @@ export function ScannerPage() {
   useEffect(() => {
     let disposed = false;
     let raf = 0;
+    handledQrRef.current = false;
 
     const start = async () => {
       const detectorConstructor = (window as unknown as { BarcodeDetector?: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } }).BarcodeDetector;
@@ -122,23 +144,35 @@ export function ScannerPage() {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
         }
+        setMessage(detectorConstructor ? 'Камера работает, ищу QR-код.' : 'Камера работает, ищу QR-код через резервный сканер.');
 
-        if (!detectorConstructor || !videoRef.current) return;
-        const detector = new detectorConstructor({ formats: ['qr_code'] });
+        const detector = detectorConstructor ? new detectorConstructor({ formats: ['qr_code'] }) : null;
         const tick = async () => {
-          if (disposed || !videoRef.current) return;
+          if (disposed || handledQrRef.current || !videoRef.current) return;
           try {
-            const codes = await detector.detect(videoRef.current);
-            const value = codes[0]?.rawValue;
+            const nativeCodes = detector ? await detector.detect(videoRef.current) : [];
+            const nativeValue = nativeCodes[0]?.rawValue;
+            const fallbackValue = nativeValue ? '' : scanVideoFrame(videoRef.current, canvasRef.current);
+            const value = nativeValue || fallbackValue;
             if (value) {
+              handledQrRef.current = true;
               stopCamera();
               void handleParsed(parseQr(value));
               return;
             }
-          } catch {
-            setMessage('Камера работает, но браузер не дал распознать QR автоматически.');
+          } catch (error) {
+            const fallbackValue = scanVideoFrame(videoRef.current, canvasRef.current);
+            if (fallbackValue) {
+              handledQrRef.current = true;
+              stopCamera();
+              void handleParsed(parseQr(fallbackValue));
+              return;
+            }
+            if (error instanceof Error && error.name === 'NotAllowedError') {
+              setMessage('Браузер не дал доступ к камере. Разрешите доступ или вставьте QR-текст вручную.');
+            }
           }
-          raf = window.setTimeout(tick, 450);
+          raf = window.setTimeout(tick, 220);
         };
         void tick();
       } catch {
@@ -170,6 +204,7 @@ export function ScannerPage() {
     <main className="scanner-page">
       <section className="scanner-camera">
         <video ref={videoRef} playsInline muted />
+        <canvas ref={canvasRef} aria-hidden="true" />
         <div className="scanner-frame">
           <QrCode />
           <span>{scannerTitle}</span>

@@ -2295,9 +2295,13 @@ function SubscriptionsPage() {
       warningPercent: billing.warningPercent
     };
     try {
-      await savePlatformBillingSettings(settings);
+      const savedRemote = await savePlatformBillingSettings(settings);
       window.localStorage.setItem(billingDraftStorageKey, JSON.stringify(billing));
-      toast.success('Тарифы сохранены');
+      if (savedRemote) {
+        toast.success('Тарифы сохранены');
+      } else {
+        toast.warning('Тарифы сохранены локально. Для общего сохранения примените Supabase migration.');
+      }
       void queryClient.invalidateQueries({ queryKey: ['platform-billing-settings'] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Не удалось сохранить тарифы');
@@ -2306,12 +2310,16 @@ function SubscriptionsPage() {
 
   const saveCustomTariff = async () => {
     try {
-      await savePlatformCustomTariff({
+      const savedRemote = await savePlatformCustomTariff({
         subject: billing.customSubject,
         tariffPercent: billing.customTariff
       });
       window.localStorage.setItem(billingDraftStorageKey, JSON.stringify(billing));
-      toast.success('Индивидуальный тариф сохранён');
+      if (savedRemote) {
+        toast.success('Индивидуальный тариф сохранён');
+      } else {
+        toast.warning('Тариф сохранён локально. Для общего сохранения примените Supabase migration.');
+      }
       void queryClient.invalidateQueries({ queryKey: ['platform-custom-tariffs'] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Не удалось сохранить индивидуальный тариф');

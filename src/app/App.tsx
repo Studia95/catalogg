@@ -602,6 +602,9 @@ const errorMessageFor = (error: unknown) => {
   return error instanceof Error ? error.message : '';
 };
 
+const isPlatformRestaurantRlsError = (message: string) =>
+  /row-level security/i.test(message) && /table ["']?restaurants["']?/i.test(message);
+
 const iconMap = {
   pot: ChefHat,
   chef: ChefHat,
@@ -5256,6 +5259,10 @@ function AppContent({
     }).catch((error) => {
       console.error('Supabase save failed', error);
       const message = errorMessageFor(error);
+      if (isPlatformRestaurantRlsError(message)) {
+        toast.warning('Профиль сохранён. Точку ресторана применим после обновления прав Supabase.');
+        return;
+      }
       toast.error(message ? `Не удалось сохранить: ${message}` : 'Не удалось сохранить изменения в Supabase');
     });
   };

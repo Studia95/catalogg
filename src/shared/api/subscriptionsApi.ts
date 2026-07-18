@@ -79,8 +79,8 @@ export async function getPlatformBillingSettings(): Promise<PlatformBillingSetti
   return mapBillingSettings(data as PlatformBillingSettingsRow | null);
 }
 
-export async function savePlatformBillingSettings(input: PlatformBillingSettings) {
-  if (!supabase) return;
+export async function savePlatformBillingSettings(input: PlatformBillingSettings): Promise<boolean> {
+  if (!supabase) return false;
 
   const { error } = await supabase.from('platform_billing_settings').upsert({
     id: 'global',
@@ -93,7 +93,8 @@ export async function savePlatformBillingSettings(input: PlatformBillingSettings
     updated_at: new Date().toISOString()
   }, { onConflict: 'id' });
 
-  if (error) throw error;
+  if (error) return false;
+  return true;
 }
 
 export async function getPlatformCustomTariffs(): Promise<PlatformCustomTariff[]> {
@@ -117,8 +118,8 @@ export async function getPlatformCustomTariffs(): Promise<PlatformCustomTariff[]
 export async function savePlatformCustomTariff(input: {
   subject: string;
   tariffPercent: number;
-}) {
-  if (!supabase) return;
+}): Promise<boolean> {
+  if (!supabase) return false;
 
   const [subjectType, subjectId] = input.subject.split(':');
   const tariffPercent = Number(input.tariffPercent);
@@ -134,5 +135,6 @@ export async function savePlatformCustomTariff(input: {
     updated_at: new Date().toISOString()
   }, { onConflict: 'subject_type,subject_id' });
 
-  if (error) throw error;
+  if (error) return false;
+  return true;
 }
