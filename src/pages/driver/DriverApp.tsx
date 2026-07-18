@@ -93,16 +93,34 @@ const coordinatesFromAddress = (address: string) => {
   return { lat, lng };
 };
 
-const fallbackRestaurantCoordinates = (delivery: Pick<DeliveryOffer, 'restaurantName'>) => {
-  const name = delivery.restaurantName.trim().toLocaleLowerCase('ru-RU');
-  return name.includes('мангал') ? { lat: 43.3178, lng: 45.6986 } : null;
+const coordinatesFromRouteUrl = (url: string | undefined, position: 'first' | 'last') => {
+  if (!url) return null;
+  const readPairs = (value: string) => {
+    const decodedValue = decodeURIComponent(value);
+    const routeMatch = decodedValue.match(/(?:^|[?&])rtext=([^&]+)/);
+    return (routeMatch?.[1] ?? decodedValue).match(coordinatePairPattern) ?? [];
+  };
+
+  let pairs: string[] = [];
+  try {
+    const parsedUrl = new URL(url);
+    pairs = readPairs(parsedUrl.searchParams.get('rtext') ?? url);
+  } catch {
+    pairs = readPairs(url);
+  }
+
+  const coordinatePair = position === 'first' ? pairs[0] : pairs[pairs.length - 1];
+  return coordinatePair ? coordinatesFromAddress(coordinatePair) : null;
 };
 
 const getDriverDeliveryMapData = (delivery: DeliveryOffer) => {
-  const restaurantFallback = fallbackRestaurantCoordinates(delivery);
-  const clientFallback = coordinatesFromAddress(delivery.deliveryAddress);
-  const restaurantLat = delivery.restaurantLat ?? restaurantFallback?.lat ?? null;
-  const restaurantLng = delivery.restaurantLng ?? restaurantFallback?.lng ?? null;
+  const restaurantFromRoute =
+    coordinatesFromRouteUrl(delivery.routeToClientUrl, 'first') ??
+    coordinatesFromRouteUrl(delivery.routeToRestaurantUrl, 'last');
+  const clientFromRoute = coordinatesFromRouteUrl(delivery.routeToClientUrl, 'last');
+  const clientFallback = coordinatesFromAddress(delivery.deliveryAddress) ?? clientFromRoute;
+  const restaurantLat = delivery.restaurantLat ?? restaurantFromRoute?.lat ?? null;
+  const restaurantLng = delivery.restaurantLng ?? restaurantFromRoute?.lng ?? null;
   const deliveryLat = delivery.deliveryLat ?? clientFallback?.lat ?? null;
   const deliveryLng = delivery.deliveryLng ?? clientFallback?.lng ?? null;
 
@@ -135,6 +153,16 @@ const hasCompleteDriverDeliveryMapData = (
   mapData.restaurantLng !== null &&
   mapData.deliveryLat !== null &&
   mapData.deliveryLng !== null;
+
+const getDriverMapUnavailableMessage = (mapData: ReturnType<typeof getDriverDeliveryMapData> | null) => {
+  if (!mapData) return 'Выберите заказ, чтобы открыть его маршрут';
+  const restaurantMissing = mapData.restaurantLat === null || mapData.restaurantLng === null;
+  const clientMissing = mapData.deliveryLat === null || mapData.deliveryLng === null;
+  if (restaurantMissing && clientMissing) return 'У заказа нет сохранённых точек ресторана и клиента.';
+  if (restaurantMissing) return 'У ресторана не сохранена точка на карте.';
+  if (clientMissing) return 'У заказа не сохранена точка клиента.';
+  return 'Для этого заказа не сохранены координаты маршрута';
+};
 
 const parseDriverSettlements = (value: string) =>
   Array.from(
@@ -1002,7 +1030,7 @@ function DriverActiveScreen({ delivery, profile }: { delivery: DeliveryOffer | n
             ? { lat: profile.lastLat, lng: profile.lastLng, label: 'Моё местоположение' }
             : null}
         />
-      ) : <DriverMapUnavailable />}
+      ) : <DriverMapUnavailable message={getDriverMapUnavailableMessage(mapData)} />}
       <section className="driver-order-panel">
         <h2>{delivery.restaurantName}</h2>
         <DriverRouteLine icon={<MapPin />} label="Адрес клиента" value={displayDeliveryAddress} />
@@ -1092,7 +1120,7 @@ function DriverMapScreen({ delivery, profile }: { delivery: DeliveryOffer | null
                 ? { lat: profile.lastLat, lng: profile.lastLng, label: 'Моё местоположение' }
                 : null}
             />
-          ) : <DriverMapUnavailable tall />}
+          ) : <DriverMapUnavailable tall message={getDriverMapUnavailableMessage(mapData)} />}
         </>
       )}
       {!delivery && <DriverMapUnavailable tall message="Выберите заказ, чтобы открыть его маршрут" />}

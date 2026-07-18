@@ -933,9 +933,46 @@ function ProductTile({
   onAdd?: (product: Product) => void;
 }) {
   const add = useCartStore((state) => state.add);
+  const items = useCartStore((state) => state.items);
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const currentStock = getCurrentStock(product);
   const soldOut = isLimitedProduct(product) && currentStock <= 0;
+  const quantity = items.find((item) => item.product.id === product.id)?.quantity ?? 0;
+  const [flyer, setFlyer] = useState<{
+    id: number;
+    startX: number;
+    startY: number;
+    midX: number;
+    midY: number;
+    endX: number;
+    endY: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!flyer) return undefined;
+    const timeoutId = window.setTimeout(() => setFlyer(null), 720);
+    return () => window.clearTimeout(timeoutId);
+  }, [flyer]);
+
+  const playAddAnimation = (button: HTMLButtonElement) => {
+    const buttonRect = button.getBoundingClientRect();
+    const target = document.querySelector('.cart-bar__icon, .cart-icon') as HTMLElement | null;
+    const targetRect = target?.getBoundingClientRect();
+    const startX = buttonRect.left + buttonRect.width / 2;
+    const startY = buttonRect.top + buttonRect.height / 2;
+    const endX = targetRect ? targetRect.left + targetRect.width / 2 : Math.max(50, window.innerWidth * 0.18);
+    const endY = targetRect ? targetRect.top + targetRect.height / 2 : window.innerHeight - 54;
+
+    setFlyer({
+      id: Date.now(),
+      startX,
+      startY,
+      midX: (startX + endX) / 2,
+      midY: Math.min(startY, endY) - 90,
+      endX,
+      endY
+    });
+  };
 
   return (
     <article
@@ -949,6 +986,7 @@ function ProductTile({
             <Star />
           </span>
         )}
+        {quantity > 0 && <b className="product-tile__quantity-badge">{quantity}</b>}
         {product.is_hidden && <span className="product-state product-state--hidden">Скрыто</span>}
         {soldOut && <span className="product-state product-state--sold-out">Закончилось</span>}
         {isAdmin && (
@@ -1003,6 +1041,7 @@ function ProductTile({
             aria-label={`Добавить ${product.title}`}
             onClick={(event) => {
               event.stopPropagation();
+              playAddAnimation(event.currentTarget);
               add(product);
               onAdd?.(product);
             }}
@@ -1011,6 +1050,23 @@ function ProductTile({
           </button>
         </div>
       </div>
+      {flyer && (
+        <span
+          className="cart-flyer"
+          style={{
+            '--flyer-start-x': `${flyer.startX}px`,
+            '--flyer-start-y': `${flyer.startY}px`,
+            '--flyer-mid-x': `${flyer.midX}px`,
+            '--flyer-mid-y': `${flyer.midY}px`,
+            '--flyer-end-x': `${flyer.endX}px`,
+            '--flyer-end-y': `${flyer.endY}px`
+          } as React.CSSProperties}
+          key={flyer.id}
+          aria-hidden="true"
+        >
+          <Plus />
+        </span>
+      )}
     </article>
   );
 }
