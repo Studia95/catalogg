@@ -89,6 +89,11 @@ type LegacyProductRow = {
   sort_order: number;
 };
 
+type LegacyRestaurantRow = {
+  id: string;
+  banner_url: string | null;
+};
+
 type ProductImageRow = {
   product_id: string;
   url: string;
@@ -583,7 +588,9 @@ export function subscribeClientPlatformSnapshotRealtime(onChange: () => void) {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'product_images' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_delivery_settings' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'platform_banners' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_settlements' }, onChange)
     .subscribe();
 
   return () => {
@@ -616,7 +623,8 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
     restaurantProfilesResult,
     bannersResult,
     settingsResult,
-    deliverySettlementsResult
+    deliverySettlementsResult,
+    legacyRestaurantsResult
   ] =
     await Promise.all([
       supabase
@@ -659,7 +667,8 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
         .select('city_name, settlement_name, is_active')
         .eq('is_active', true)
         .order('city_name', { ascending: true })
-        .order('settlement_name', { ascending: true })
+        .order('settlement_name', { ascending: true }),
+      supabase.from('restaurant').select('id, banner_url')
     ]);
 
   let categories = (categoriesResult.data ?? []) as CategoryRow[];
@@ -674,6 +683,11 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
   const deliverySettlementRows = deliverySettlementsResult.error
     ? []
     : ((deliverySettlementsResult.data ?? []) as DeliverySettlementRow[]);
+  const legacyRestaurantBannerBySlug = new Map(
+    ((legacyRestaurantsResult.data ?? []) as LegacyRestaurantRow[])
+      .filter((restaurant) => Boolean(restaurant.banner_url))
+      .map((restaurant) => [restaurant.id, restaurant.banner_url ?? ''])
+  );
 
   const mangalCatalog = catalogs.find((catalog) => catalog.slug === 'mangal');
   if (mangalCatalog) {
@@ -757,19 +771,20 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
     };
   });
 
+  const approvedSettlementNames = deliverySettlementRows.flatMap((settlement) => [
+    settlement.city_name,
+    settlement.settlement_name
+  ]);
+  const configuredRestaurantSettlements = deliverySettings.flatMap((settings) => [
+    settings.primary_city,
+    ...(settings.service_settlements ?? [])
+  ]);
   const cityNames = unique(
-    [
-      ...deliverySettlementRows.flatMap((settlement) => [
-        settlement.city_name,
-        settlement.settlement_name
-      ]),
-      ...deliverySettings.flatMap((settings) => [
-        settings.primary_city || fallbackCityName,
-        ...(settings.service_settlements ?? [])
-      ])
-    ].map((name) => name.trim()).filter(Boolean)
+    (approvedSettlementNames.length > 0 ? approvedSettlementNames : configuredRestaurantSettlements)
+      .map((name) => name.trim())
+      .filter(Boolean)
   );
-  const cities: ClientCity[] = (cityNames.length > 0 ? cityNames : [fallbackCityName]).map((name) => ({
+  const cities: ClientCity[] = cityNames.map((name) => ({
     id: getCityId(name),
     slug: getCityId(name),
     name,
@@ -796,7 +811,7 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
       serviceCityIds: serviceSettlements.map(getCityId),
       categorySlugs: unique(catalogCategories.map((category) => category.slug)),
       logoUrl: catalog.logo_url,
-      coverUrl: catalog.banner_url || catalogCategories.find((category) => category.image_url)?.image_url || '',
+      coverUrl: catalog.banner_url || legacyRestaurantBannerBySlug.get(catalog.slug) || catalogCategories.find((category) => category.image_url)?.image_url || '',
       rating: 4.7,
       minOrderAmount: settings?.minimum_order_amount ?? 0,
       freeDeliveryFrom: settings?.free_delivery_from ?? 0,

@@ -7,7 +7,6 @@ import {
   Building2,
   Car,
   Check,
-  ChevronLeft,
   ChevronRight,
   CircleUserRound,
   Clock,
@@ -42,7 +41,7 @@ import type { CSSProperties, FormEvent } from 'react';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { buildOrderAfterClientPaymentNotice, buildRestaurantPublicPath, buildSupportWhatsappUrl, buildYandexMapsUrl, calculateCartSummary, filterRestaurantsWithCityFallback, getDeliveryProviderLabel, mergeClientOrderRealtimePatch, requireSavedRestaurantOrderId, resolveCheckoutSettlement, selectClientOrderForStatus } from '../../features/client-platform/clientPlatformLogic';
+import { buildOrderAfterClientPaymentNotice, buildRestaurantPublicPath, buildSupportWhatsappUrl, buildYandexMapsUrl, calculateCartSummary, filterRestaurants, filterRestaurantsWithCityFallback, getDeliveryProviderLabel, mergeClientOrderRealtimePatch, requireSavedRestaurantOrderId, resolveCheckoutSettlement, selectClientOrderForStatus } from '../../features/client-platform/clientPlatformLogic';
 import { clientPlatformSnapshot, fallbackPaymentSettings } from '../../features/client-platform/mockData';
 import {
   selectAllCartCount,
@@ -97,6 +96,14 @@ import { clearPwaResumePath, rememberPwaResumePath } from '../../shared/pwaSessi
 import './client-platform.css';
 
 const clientPlatformQueryClient = new QueryClient();
+const clientPlatformLoadingSnapshot: ClientPlatformSnapshot = {
+  ...clientPlatformSnapshot,
+  cities: [],
+  restaurants: [],
+  restaurantCategories: [],
+  dishes: [],
+  banners: []
+};
 
 const formatPrice = (value: number) => `${new Intl.NumberFormat('ru-RU').format(value)} ₽`;
 
@@ -200,6 +207,20 @@ const getPromoDetailPath = (banner: PlatformBanner) => `/promo/${encodeURICompon
 
 const isVideoMediaUrl = (url: string) => /\.(mp4|webm|ogg)(?:[?#].*)?$/i.test(url.trim());
 
+const countRestaurantsForCity = (snapshot: ClientPlatformSnapshot, cityId: string) =>
+  filterRestaurants(snapshot.restaurants, { cityId, categorySlug: 'all', query: '' }).length;
+
+const formatRestaurantCount = (count: number) => {
+  const lastTwoDigits = count % 100;
+  const lastDigit = count % 10;
+  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) return `${count} ресторанов`;
+  if (lastDigit === 1) return `${count} ресторан`;
+  if (lastDigit >= 2 && lastDigit <= 4) return `${count} ресторана`;
+  return `${count} ресторанов`;
+};
+
+const getCityRestaurantsPath = (cityId?: string) => cityId ? `/restaurants?city=${encodeURIComponent(cityId)}` : '/restaurants';
+
 const getDeliveryFee = (restaurant: ClientRestaurant, draft: ClientCheckoutDraft, summary: { subtotal: number }) =>
   draft.orderType === 'delivery' && summary.subtotal > 0 && summary.subtotal < restaurant.freeDeliveryFrom ? 120 : 0;
 
@@ -208,7 +229,7 @@ function usePlatformData() {
     queryKey: ['client-platform'],
     queryFn: getClientPlatformSnapshot,
     staleTime: 60_000,
-    placeholderData: (previous) => previous ?? clientPlatformSnapshot
+    placeholderData: (previous) => previous
   });
 }
 
@@ -222,7 +243,7 @@ export function ClientPlatformApp() {
 
 function ClientPlatformContent() {
   const { data } = usePlatformData();
-  const snapshot = data ?? clientPlatformSnapshot;
+  const snapshot = data ?? clientPlatformLoadingSnapshot;
   const queryClient = useQueryClient();
   const location = useLocation();
   const { slug } = useParams();
@@ -399,12 +420,20 @@ function HomePage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
 
       <PromoCarousel banners={banners.length > 0 ? banners : snapshot.banners.slice(0, 1)} />
 
-      <SectionHeader title="Популярные рестораны" to="/restaurants" />
-      <div className="restaurant-grid">
-        {restaurants.slice(0, 4).map((restaurant) => (
-          <RestaurantCard restaurant={restaurant} categories={snapshot.categories} key={restaurant.id} />
-        ))}
-      </div>
+      <SectionHeader title="Популярные рестораны" to={getCityRestaurantsPath(city?.id)} />
+      {restaurants.length > 0 ? (
+        <div className="restaurant-grid">
+          {restaurants.slice(0, 4).map((restaurant) => (
+            <RestaurantCard restaurant={restaurant} categories={snapshot.categories} key={restaurant.id} />
+          ))}
+        </div>
+      ) : (
+        <section className="empty-state empty-state--compact">
+          <Store />
+          <strong>Рестораны пока не подключены</strong>
+          <Link to="/city">Выбрать другое место</Link>
+        </section>
+      )}
 
       <SectionHeader title="Категории" to="/categories" />
       <div className="category-quick-grid">
@@ -440,10 +469,6 @@ function PromoCarousel({ banners }: { banners: PlatformBanner[] }) {
 
   if (!activeBanner) return null;
 
-  const goTo = (direction: -1 | 1) => {
-    setActiveIndex((index) => (index + direction + banners.length) % banners.length);
-  };
-
   return (
     <section className="promo-carousel" aria-label="Баннеры">
       <article className={activeBanner.imageUrl ? 'promo-band promo-band--media' : 'promo-band'}>
@@ -460,27 +485,18 @@ function PromoCarousel({ banners }: { banners: PlatformBanner[] }) {
         </div>
         <Link to={getPromoDetailPath(activeBanner)}>Подробнее</Link>
       </article>
-      {banners.length > 1 && (
-        <div className="promo-carousel__controls">
-          <button type="button" onClick={() => goTo(-1)} aria-label="Предыдущий баннер">
-            <ChevronLeft />
-          </button>
-          <span>
-            {banners.map((banner, index) => (
-              <button
-                className={index === activeIndex ? 'is-active' : ''}
-                type="button"
-                onClick={() => setActiveIndex(index)}
-                aria-label={`Баннер ${index + 1}`}
-                key={banner.id}
-              />
-            ))}
-          </span>
-          <button type="button" onClick={() => goTo(1)} aria-label="Следующий баннер">
-            <ChevronRight />
-          </button>
-        </div>
-      )}
+      <div className="promo-carousel__dots" aria-label={`Баннер ${activeIndex + 1} из ${banners.length}`}>
+        {banners.map((banner, index) => (
+          <button
+            className={index === activeIndex ? 'is-active' : ''}
+            type="button"
+            onClick={() => setActiveIndex(index)}
+            aria-label={`Показать баннер ${index + 1}`}
+            aria-current={index === activeIndex ? 'true' : undefined}
+            key={banner.id}
+          />
+        ))}
+      </div>
     </section>
   );
 }
@@ -558,7 +574,13 @@ function CityPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
   const [otherSettlement, setOtherSettlement] = useState('');
   const [requestMessage, setRequestMessage] = useState('');
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
-  const filteredCities = snapshot.cities.filter((city) =>
+  const citiesWithRestaurantsFirst = snapshot.cities
+    .slice()
+    .sort((left, right) => countRestaurantsForCity(snapshot, right.id) - countRestaurantsForCity(snapshot, left.id));
+  const nearestCityId = citiesWithRestaurantsFirst.find((city) => countRestaurantsForCity(snapshot, city.id) > 0)?.id ??
+    citiesWithRestaurantsFirst[0]?.id ??
+    '';
+  const filteredCities = citiesWithRestaurantsFirst.filter((city) =>
     `${city.name} ${city.region}`.toLocaleLowerCase('ru-RU').includes(query.toLocaleLowerCase('ru-RU').trim())
   );
   const recentCities = recentCityIds
@@ -600,9 +622,9 @@ function CityPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
           type="search"
         />
       </label>
-      <button className="wide-action" type="button" onClick={() => chooseCity('grozny')}>
+      <button className="wide-action" type="button" disabled={!nearestCityId} onClick={() => chooseCity(nearestCityId)}>
         <LocateFixed />
-        Определить автоматически
+        Показать ближайшие рестораны
       </button>
       {recentCities.length > 0 && (
         <section className="plain-section">
@@ -616,6 +638,7 @@ function CityPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
                 key={city.id}
               >
                 {city.name}
+                <small>{formatRestaurantCount(countRestaurantsForCity(snapshot, city.id))}</small>
               </button>
             ))}
           </div>
@@ -623,17 +646,26 @@ function CityPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
       )}
       <section className="plain-section">
         <h2>Все города и сёла</h2>
-        <div className="city-list">
-          {filteredCities.map((city) => (
-            <button className="city-row" type="button" onClick={() => chooseCity(city.id)} key={city.id}>
-              <span>
-                <strong>{city.name}</strong>
-                <small>{city.region}</small>
-              </span>
-              {city.id === selectedCityId ? <Check /> : <ChevronRight />}
-            </button>
-          ))}
-        </div>
+        {filteredCities.length > 0 ? (
+          <div className="city-list">
+            {filteredCities.map((city) => (
+              <button className="city-row" type="button" onClick={() => chooseCity(city.id)} key={city.id}>
+                <span>
+                  <strong>{city.name}</strong>
+                  <small>
+                    {countRestaurantsForCity(snapshot, city.id) > 0
+                      ? formatRestaurantCount(countRestaurantsForCity(snapshot, city.id))
+                      : 'Пока нет ресторанов'}
+                    {city.region ? ` · ${city.region}` : ''}
+                  </small>
+                </span>
+                {city.id === selectedCityId ? <Check /> : <ChevronRight />}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="city-list-empty">Населённые пункты не найдены.</p>
+        )}
       </section>
       <section className="plain-section city-other-section">
         <h2>Другие села</h2>
@@ -743,6 +775,13 @@ function RestaurantCard({
     .map((category) => category.name)
     .slice(0, 3)
     .join(' · ');
+  const providerLabel = restaurant.deliveryProvider === 'platform'
+    ? 'Водитель платформы'
+    : restaurant.deliveryProvider === 'restaurant'
+      ? 'Курьер ресторана'
+      : restaurant.deliveryProvider === 'pickup'
+        ? 'Самовывоз'
+        : 'В зале';
 
   return (
     <Link className="restaurant-card" to={buildRestaurantPublicPath(restaurant)}>
@@ -757,7 +796,7 @@ function RestaurantCard({
         <small>{categoryNames}</small>
         <b>от {formatPrice(restaurant.minOrderAmount)} · {restaurant.deliveryTimeFrom}-{restaurant.deliveryTimeTo} мин</b>
         <em>
-          {getDeliveryProviderLabel(restaurant.deliveryProvider)}
+          {providerLabel}
           {restaurant.freeDeliveryFrom > 0 && ` · бесплатно от ${formatPrice(restaurant.freeDeliveryFrom)}`}
         </em>
       </span>

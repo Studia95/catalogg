@@ -609,7 +609,7 @@ export async function deleteCategoryFromSupabase(categoryId: string) {
 
 export async function saveRestaurantToSupabase(value: Restaurant) {
   if (!supabase) return;
-  if (activePlatformCatalogId) {
+  const savePlatformCatalogFields = async (catalogId: string) => {
     await throwOnError(
       supabase
         .from('catalogs')
@@ -623,8 +623,12 @@ export async function saveRestaurantToSupabase(value: Restaurant) {
           address: value.address,
           map_url: value.mapLink
         })
-        .eq('id', activePlatformCatalogId)
+        .eq('id', catalogId)
     );
+  };
+
+  if (activePlatformCatalogId) {
+    await savePlatformCatalogFields(activePlatformCatalogId);
     await savePlatformRestaurantLocation(activePlatformCatalogId, value);
     return;
   }
@@ -643,6 +647,7 @@ export async function saveRestaurantToSupabase(value: Restaurant) {
   await throwOnError(supabase.from('restaurant').upsert(legacyRestaurant, { onConflict: 'id' }));
   const platformCatalogId = await getPlatformCatalogId(value.id);
   if (platformCatalogId) {
+    await savePlatformCatalogFields(platformCatalogId);
     await savePlatformRestaurantLocation(platformCatalogId, value);
   }
 }
