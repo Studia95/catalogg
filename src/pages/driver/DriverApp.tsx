@@ -995,6 +995,7 @@ function DriverActiveScreen({ delivery, profile }: { delivery: DeliveryOffer | n
             restaurant: { lat: completeMapData.restaurantLat, lng: completeMapData.restaurantLng },
             client: { lat: completeMapData.deliveryLat, lng: completeMapData.deliveryLng }
           })}
+          followDriverHeading={profile.lastLat !== null && profile.lastLng !== null}
           driver={profile.lastLat !== null && profile.lastLng !== null
             ? { lat: profile.lastLat, lng: profile.lastLng, label: 'Моё местоположение' }
             : null}
@@ -1084,6 +1085,7 @@ function DriverMapScreen({ delivery, profile }: { delivery: DeliveryOffer | null
                 details: [delivery.clientPhone, delivery.deliveryComment].filter((detail): detail is string => Boolean(detail))
               }}
               routePoints={currentRoutePoints}
+              followDriverHeading={profile.lastLat !== null && profile.lastLng !== null}
               driver={profile.lastLat !== null && profile.lastLng !== null
                 ? { lat: profile.lastLat, lng: profile.lastLng, label: 'Моё местоположение' }
                 : null}

@@ -3,10 +3,12 @@ import { describe, it } from 'node:test';
 import {
   buildMapTileGrid,
   buildOsmTileGrid,
+  calculateBearing,
   getMapCenter,
   getMapZoomForPoints,
   mapPointToCoordinates,
   coordinatesToMapPoint,
+  rotateMapPoint,
   type DeliveryMapPoint
 } from './deliveryMap';
 import { buildRoadRouteRequestUrl, parseRoadRoutePayload } from './deliveryNavigation';
@@ -41,6 +43,18 @@ describe('delivery map picker geometry', () => {
     assert.deepEqual(point, { x: 160, y: 160 });
     assert.equal(Number(next.lat.toFixed(7)), center.lat);
     assert.equal(Number(next.lng.toFixed(7)), center.lng);
+  });
+
+  it('calculates driver heading bearings for a map arrow', () => {
+    assert.equal(Math.round(calculateBearing({ lat: 43, lng: 45 }, { lat: 44, lng: 45 })), 0);
+    assert.equal(Math.round(calculateBearing({ lat: 43, lng: 45 }, { lat: 43, lng: 46 })), 90);
+    assert.equal(Math.round(calculateBearing({ lat: 43, lng: 45 }, { lat: 42, lng: 45 })), 180);
+  });
+
+  it('rotates projected map points around the viewport center', () => {
+    const point = rotateMapPoint({ x: 160, y: 60 }, 90, { x: 160, y: 160 });
+
+    assert.deepEqual({ x: Math.round(point.x), y: Math.round(point.y) }, { x: 260, y: 160 });
   });
 
   it('clamps dragged markers inside the map viewport', () => {

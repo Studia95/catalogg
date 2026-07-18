@@ -1,12 +1,14 @@
 import { Home, Layers3, LocateFixed, MapPin, Minus, Navigation, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent, ReactNode } from 'react';
+import type { CSSProperties, PointerEvent, ReactNode } from 'react';
 import {
   buildMapTileGrid,
+  calculateBearing,
   coordinatesToMapPoint,
   getMapCenter,
   getMapZoomForPoints,
   mapPointToCoordinates,
+  rotateMapPoint,
   type DeliveryMapCoordinates,
   type DeliveryMapStyle
 } from './deliveryMap';
@@ -30,6 +32,7 @@ type DeliveryTrackingMapProps = {
   loadRoute?: (points: ReadonlyArray<DeliveryMapCoordinates>) => Promise<RoadRoute>;
   enableSearch?: boolean;
   searchLocations?: (query: string) => Promise<ReadonlyArray<DeliveryLocationSearchResult>>;
+  followDriverHeading?: boolean;
 };
 
 const mapSize = 640;
@@ -50,7 +53,8 @@ export function DeliveryTrackingMap({
   routePoints,
   loadRoute = defaultRouteLoader,
   enableSearch = false,
-  searchLocations = searchDeliveryLocations
+  searchLocations = searchDeliveryLocations,
+  followDriverHeading = false
 }: DeliveryTrackingMapProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragStartRef = useRef<{ x: number; y: number; center: DeliveryMapCoordinates; zoom: number } | null>(null);
@@ -109,6 +113,15 @@ export function DeliveryTrackingMap({
   const restaurantPoint = projectedPoints[0];
   const clientPoint = projectedPoints[1];
   const driverPoint = driver ? projectedPoints[2] : null;
+  const driverHeading = useMemo(() => {
+    if (!driver) return 0;
+    const routeTarget = effectiveRoutePoints.find((point) =>
+      Math.abs(point.lat - driver.lat) > 0.000001 || Math.abs(point.lng - driver.lng) > 0.000001
+    );
+    if (routeTarget) return calculateBearing(driver, routeTarget);
+    return calculateBearing(driver, client);
+  }, [client, driver, effectiveRoutePoints]);
+  const mapRotation = followDriverHeading && driver ? -driverHeading : 0;
   const selectedPoint =
     selectedPointKind === 'restaurant'
       ? restaurantPoint
@@ -117,6 +130,9 @@ export function DeliveryTrackingMap({
         : selectedPointKind === 'driver'
           ? driverPoint
           : null;
+  const selectedPointPosition = selectedPoint
+    ? rotateMapPoint(selectedPoint, mapRotation, { x: mapSize / 2, y: mapSize / 2 })
+    : null;
   const fallbackRoutePoints = useMemo(
     () => effectiveRoutePoints.map((point) => coordinatesToMapPoint(point, center, mapZoom, mapSize, { clampToViewport: false })),
     [center, effectiveRoutePoints, mapZoom]
@@ -156,6 +172,12 @@ export function DeliveryTrackingMap({
     observer.observe(canvas);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!followDriverHeading || !driver) return;
+    setCenter({ lat: driver.lat, lng: driver.lng });
+    setMapZoom((zoom) => Math.max(17, zoom));
+  }, [driver, followDriverHeading]);
 
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest('button')) return;
@@ -311,35 +333,45 @@ export function DeliveryTrackingMap({
         }}
       >
         <div className="delivery-tracking-map__scene" style={{ transform: `scale(${scale})` }}>
-          {tiles.map((tile) => (
-            <span className="delivery-tracking-map__tile" key={tile.key} style={{ left: tile.x, top: tile.y, width: tile.size, height: tile.size }}>
-              <img src={tile.url} alt="" aria-hidden="true" draggable={false} loading="eager" decoding="async" />
-              {tile.overlayUrls.map((url) => (
-                <img className="delivery-tracking-map__tile-overlay" key={url} src={url} alt="" aria-hidden="true" draggable={false} loading="eager" decoding="async" />
-              ))}
-            </span>
-          ))}
-          <svg
-            className="delivery-tracking-map__route"
-            data-testid="delivery-road-route"
-            viewBox={`0 0 ${mapSize} ${mapSize}`}
-            aria-hidden="true"
-          >
-            <polyline
-              points={projectedRoadRoute
-                .map((point) => `${point.x},${point.y}`)
-                .join(' ')}
-            />
-          </svg>
-          <TrackingMarker point={restaurantPoint} kind="restaurant" icon={<Home />} onSelect={() => focusPoint('restaurant', restaurant)} />
-          {driverPoint && driver && <TrackingMarker point={driverPoint} kind="driver" icon={<Navigation />} onSelect={() => focusPoint('driver', driver)} />}
-          <TrackingMarker point={clientPoint} kind="client" icon={<MapPin />} onSelect={() => focusPoint('client', client)} />
-          {selectedPoint && (
+          <div className="delivery-tracking-map__rotator" style={{ transform: `rotate(${mapRotation}deg)` }}>
+            {tiles.map((tile) => (
+              <span className="delivery-tracking-map__tile" key={tile.key} style={{ left: tile.x, top: tile.y, width: tile.size, height: tile.size }}>
+                <img src={tile.url} alt="" aria-hidden="true" draggable={false} loading="eager" decoding="async" />
+                {tile.overlayUrls.map((url) => (
+                  <img className="delivery-tracking-map__tile-overlay" key={url} src={url} alt="" aria-hidden="true" draggable={false} loading="eager" decoding="async" />
+                ))}
+              </span>
+            ))}
+            <svg
+              className="delivery-tracking-map__route"
+              data-testid="delivery-road-route"
+              viewBox={`0 0 ${mapSize} ${mapSize}`}
+              aria-hidden="true"
+            >
+              <polyline
+                points={projectedRoadRoute
+                  .map((point) => `${point.x},${point.y}`)
+                  .join(' ')}
+              />
+            </svg>
+            <TrackingMarker point={restaurantPoint} kind="restaurant" icon={<Home />} onSelect={() => focusPoint('restaurant', restaurant)} />
+            {driverPoint && driver && (
+              <TrackingMarker
+                point={driverPoint}
+                kind="driver"
+                heading={driverHeading}
+                icon={<Navigation />}
+                onSelect={() => focusPoint('driver', driver)}
+              />
+            )}
+            <TrackingMarker point={clientPoint} kind="client" icon={<MapPin />} onSelect={() => focusPoint('client', client)} />
+          </div>
+          {selectedPoint && selectedPointPosition && (
             <article
               className="delivery-tracking-map__point-card"
               style={{
-                left: Math.min(mapSize - 210, Math.max(12, selectedPoint.x + 14)),
-                top: Math.min(mapSize - 126, Math.max(12, selectedPoint.y - 70))
+                left: Math.min(mapSize - 210, Math.max(12, selectedPointPosition.x + 14)),
+                top: Math.min(mapSize - 126, Math.max(12, selectedPointPosition.y - 70))
               }}
             >
               <strong>
@@ -388,18 +420,26 @@ export function DeliveryTrackingMap({
 function TrackingMarker({
   point,
   kind,
+  heading = 0,
   icon,
   onSelect
 }: {
   point: { x: number; y: number; label: string; address?: string };
   kind: 'restaurant' | 'driver' | 'client';
+  heading?: number;
   icon: ReactNode;
   onSelect: () => void;
 }) {
+  const style = {
+    left: point.x,
+    top: point.y,
+    '--driver-heading': `${heading}deg`
+  } as CSSProperties;
+
   return (
     <button
       className={`delivery-tracking-map__marker delivery-tracking-map__marker--${kind}`}
-      style={{ left: point.x, top: point.y }}
+      style={style}
       type="button"
       title={point.address || point.label}
       onClick={onSelect}

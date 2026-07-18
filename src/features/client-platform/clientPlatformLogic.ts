@@ -90,6 +90,18 @@ export const filterRestaurants = (
   });
 };
 
+export const filterRestaurantsWithCityFallback = (
+  restaurants: ClientRestaurant[],
+  filters: RestaurantFilter
+) => {
+  const filtered = filterRestaurants(restaurants, filters);
+  const hasNarrowingFilter = Boolean(filters.query?.trim()) ||
+    (filters.categorySlug !== undefined && filters.categorySlug !== '' && filters.categorySlug !== 'all');
+
+  if (filtered.length > 0 || hasNarrowingFilter) return filtered;
+  return restaurants;
+};
+
 export const buildRestaurantPublicPath = (restaurant: Pick<ClientRestaurant, 'slug' | 'publicPath'>) =>
   restaurant.publicPath ?? `/${restaurant.slug}`;
 

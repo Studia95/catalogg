@@ -2251,12 +2251,12 @@ function PlatformSettingsPage() {
           </select>
         </label>
         <label>
-          Ссылка
-          <input value={bannerLink} onChange={(event) => setBannerLink(event.target.value)} />
+          Ссылка действия
+          <input value={bannerLink} onChange={(event) => setBannerLink(event.target.value)} placeholder="/restaurants или https://..." />
         </label>
         <label>
-          Фото
-          <input value={bannerImage} onChange={(event) => setBannerImage(event.target.value)} placeholder="https://..." />
+          Фото или видео
+          <input value={bannerImage} onChange={(event) => setBannerImage(event.target.value)} placeholder="https://...jpg или https://...mp4" />
         </label>
         <button type="submit">
           <Plus />

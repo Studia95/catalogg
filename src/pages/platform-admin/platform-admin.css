@@ -857,6 +857,11 @@
   box-shadow: var(--platform-shadow);
 }
 
+.platform-template-create > *,
+.platform-settings-form > * {
+  min-width: 0;
+}
+
 .platform-template-create label {
   display: grid;
   gap: 8px;
@@ -866,6 +871,7 @@
 }
 
 .platform-template-create input {
+  width: 100%;
   min-height: 44px;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
@@ -1217,6 +1223,7 @@
 
 .platform-settings-form input,
 .platform-settings-form select {
+  width: 100%;
   min-height: 44px;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
@@ -2049,6 +2056,38 @@
     width: 44px;
     padding: 0;
     font-size: 0;
+  }
+
+  .platform-template-create,
+  .platform-settings-form,
+  .platform-settings-form--banner {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .platform-template-create button,
+  .platform-settings-form button {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .platform-banner-card {
+    grid-template-columns: minmax(0, 1fr) 42px;
+    gap: 8px 10px;
+  }
+
+  .platform-banner-card span,
+  .platform-banner-card strong,
+  .platform-banner-card small {
+    grid-column: 1;
+    min-width: 0;
+  }
+
+  .platform-banner-card button {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    align-self: center;
   }
 
   .platform-stats {

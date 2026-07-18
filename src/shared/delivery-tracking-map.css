@@ -104,6 +104,13 @@
   transition: transform 180ms ease;
 }
 
+.delivery-tracking-map__rotator {
+  position: absolute;
+  inset: 0;
+  transform-origin: center;
+  transition: transform 220ms ease;
+}
+
 .delivery-tracking-map__controls {
   position: absolute;
   top: 12px;
@@ -193,7 +200,27 @@
 }
 
 .delivery-tracking-map__marker--restaurant { background: #5b3df4; }
-.delivery-tracking-map__marker--driver { background: #16a34a; }
+.delivery-tracking-map__marker--driver {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #0ea5e9;
+  color: #ffffff;
+  transform: translate(-50%, -50%) rotate(var(--driver-heading, 0deg));
+}
+
+.delivery-tracking-map__marker--driver:hover {
+  transform: translate(-50%, -50%) rotate(var(--driver-heading, 0deg)) scale(1.06);
+}
+
+.delivery-tracking-map__marker--driver svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+  stroke-width: 2.6;
+  transform: rotate(45deg);
+}
+
 .delivery-tracking-map__marker--client { background: #ef4444; }
 
 .delivery-tracking-map__point-card {

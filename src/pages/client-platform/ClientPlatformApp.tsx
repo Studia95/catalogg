@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Banknote,
@@ -7,6 +7,7 @@ import {
   Building2,
   Car,
   Check,
+  ChevronLeft,
   ChevronRight,
   CircleUserRound,
   Clock,
@@ -41,7 +42,7 @@ import type { CSSProperties, FormEvent } from 'react';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { buildOrderAfterClientPaymentNotice, buildRestaurantPublicPath, buildSupportWhatsappUrl, buildYandexMapsUrl, calculateCartSummary, filterRestaurants, getDeliveryProviderLabel, mergeClientOrderRealtimePatch, requireSavedRestaurantOrderId, resolveCheckoutSettlement, selectClientOrderForStatus } from '../../features/client-platform/clientPlatformLogic';
+import { buildOrderAfterClientPaymentNotice, buildRestaurantPublicPath, buildSupportWhatsappUrl, buildYandexMapsUrl, calculateCartSummary, filterRestaurantsWithCityFallback, getDeliveryProviderLabel, mergeClientOrderRealtimePatch, requireSavedRestaurantOrderId, resolveCheckoutSettlement, selectClientOrderForStatus } from '../../features/client-platform/clientPlatformLogic';
 import { clientPlatformSnapshot, fallbackPaymentSettings } from '../../features/client-platform/mockData';
 import {
   selectAllCartCount,
@@ -61,14 +62,16 @@ import type {
   ClientPaymentMethod,
   ClientPlatformCategory,
   ClientPlatformSnapshot,
-  ClientRestaurant
+  ClientRestaurant,
+  PlatformBanner
 } from '../../features/client-platform/types';
 import {
   createClientPlatformOrder,
   getClientPlatformSnapshot,
   saveClientReview,
   saveClientSignup,
-  subscribeClientOrderRealtime
+  subscribeClientOrderRealtime,
+  subscribeClientPlatformSnapshotRealtime
 } from '../../shared/api/clientPlatformApi';
 import { DeliveryMapPicker } from '../../shared/DeliveryMapPicker';
 import type { DeliveryLocationSearchResult } from '../../shared/deliveryGeocoder';
@@ -128,6 +131,10 @@ const toClientOrderStatus = (status: string | undefined): ClientOrderStatus | un
   if (!status) return undefined;
   if (status === 'preparing') return 'cooking';
   if (status === 'confirmed') return 'accepted';
+  if (status === 'waiting_courier') return 'waiting_driver';
+  if (status === 'assigned' || status === 'arrived_to_restaurant') return 'assigned_driver';
+  if (status === 'handed_over') return 'picked_up';
+  if (status === 'arrived_to_client') return 'on_the_way';
   if (status === 'driver_assigned') return 'assigned_driver';
   if (status === 'delivered') return 'completed';
   if (status === 'cancelled') return 'canceled';
@@ -189,6 +196,10 @@ const getRestaurantBySlug = (snapshot: ClientPlatformSnapshot, slug?: string) =>
 const getCityIdFromSearch = (snapshot: ClientPlatformSnapshot, citySlug: string | null) =>
   snapshot.cities.find((city) => city.slug === citySlug || city.id === citySlug)?.id;
 
+const getPromoDetailPath = (banner: PlatformBanner) => `/promo/${encodeURIComponent(banner.id)}`;
+
+const isVideoMediaUrl = (url: string) => /\.(mp4|webm|ogg)(?:[?#].*)?$/i.test(url.trim());
+
 const getDeliveryFee = (restaurant: ClientRestaurant, draft: ClientCheckoutDraft, summary: { subtotal: number }) =>
   draft.orderType === 'delivery' && summary.subtotal > 0 && summary.subtotal < restaurant.freeDeliveryFrom ? 120 : 0;
 
@@ -197,7 +208,7 @@ function usePlatformData() {
     queryKey: ['client-platform'],
     queryFn: getClientPlatformSnapshot,
     staleTime: 60_000,
-    initialData: clientPlatformSnapshot
+    placeholderData: (previous) => previous ?? clientPlatformSnapshot
   });
 }
 
@@ -210,12 +221,26 @@ export function ClientPlatformApp() {
 }
 
 function ClientPlatformContent() {
-  const { data: snapshot } = usePlatformData();
+  const { data } = usePlatformData();
+  const snapshot = data ?? clientPlatformSnapshot;
+  const queryClient = useQueryClient();
   const location = useLocation();
   const { slug } = useParams();
 
+  useEffect(() => subscribeClientPlatformSnapshotRealtime(() => {
+    void queryClient.invalidateQueries({ queryKey: ['client-platform'] });
+  }), [queryClient]);
+
   if (location.pathname.startsWith('/r/')) {
     return <RestaurantArea snapshot={snapshot} slug={slug} />;
+  }
+
+  if (location.pathname.startsWith('/promo/')) {
+    return (
+      <PlatformLayout active="home">
+        <PromoDetailPage snapshot={snapshot} bannerId={decodeURIComponent(location.pathname.replace('/promo/', ''))} />
+      </PlatformLayout>
+    );
   }
 
   if (location.pathname.startsWith('/profile')) {
@@ -338,10 +363,10 @@ function HomePage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
   const navigate = useNavigate();
   const selectedCityId = useClientPlatformStore((state) => state.selectedCityId);
   const city = snapshot.cities.find((item) => item.id === selectedCityId);
-  const restaurants = filterRestaurants(snapshot.restaurants, { cityId: selectedCityId })
+  const restaurants = filterRestaurantsWithCityFallback(snapshot.restaurants, { cityId: selectedCityId })
     .slice()
     .sort((left, right) => right.rating - left.rating);
-  const banner = snapshot.banners.find((item) => item.isActive) ?? snapshot.banners[0];
+  const banners = snapshot.banners.filter((item) => item.isActive);
   const [query, setQuery] = useState('');
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
@@ -372,15 +397,7 @@ function HomePage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
         />
       </form>
 
-      {banner && (
-        <section className="promo-band">
-          <div>
-            <strong>{banner.title}</strong>
-            <span>{banner.subtitle}</span>
-          </div>
-          <Link to={banner.linkUrl || '/restaurants'}>Подробнее</Link>
-        </section>
-      )}
+      <PromoCarousel banners={banners.length > 0 ? banners : snapshot.banners.slice(0, 1)} />
 
       <SectionHeader title="Популярные рестораны" to="/restaurants" />
       <div className="restaurant-grid">
@@ -398,6 +415,127 @@ function HomePage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
           </Link>
         ))}
       </div>
+    </>
+  );
+}
+
+function PromoCarousel({ banners }: { banners: PlatformBanner[] }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const bannerIds = banners.map((banner) => banner.id).join('|');
+  const activeBanner = banners[activeIndex] ?? null;
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [bannerIds]);
+
+  useEffect(() => {
+    if (banners.length < 2) return undefined;
+
+    const timer = window.setInterval(() => {
+      setActiveIndex((index) => (index + 1) % banners.length);
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, [banners.length]);
+
+  if (!activeBanner) return null;
+
+  const goTo = (direction: -1 | 1) => {
+    setActiveIndex((index) => (index + direction + banners.length) % banners.length);
+  };
+
+  return (
+    <section className="promo-carousel" aria-label="Баннеры">
+      <article className={activeBanner.imageUrl ? 'promo-band promo-band--media' : 'promo-band'}>
+        {activeBanner.imageUrl && (
+          <span className="promo-band__media">
+            {isVideoMediaUrl(activeBanner.imageUrl)
+              ? <video src={activeBanner.imageUrl} muted playsInline autoPlay loop />
+              : <img src={activeBanner.imageUrl} alt="" />}
+          </span>
+        )}
+        <div>
+          <strong>{activeBanner.title}</strong>
+          <span>{activeBanner.subtitle}</span>
+        </div>
+        <Link to={getPromoDetailPath(activeBanner)}>Подробнее</Link>
+      </article>
+      {banners.length > 1 && (
+        <div className="promo-carousel__controls">
+          <button type="button" onClick={() => goTo(-1)} aria-label="Предыдущий баннер">
+            <ChevronLeft />
+          </button>
+          <span>
+            {banners.map((banner, index) => (
+              <button
+                className={index === activeIndex ? 'is-active' : ''}
+                type="button"
+                onClick={() => setActiveIndex(index)}
+                aria-label={`Баннер ${index + 1}`}
+                key={banner.id}
+              />
+            ))}
+          </span>
+          <button type="button" onClick={() => goTo(1)} aria-label="Следующий баннер">
+            <ChevronRight />
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PromoDetailPage({
+  snapshot,
+  bannerId
+}: {
+  snapshot: ClientPlatformSnapshot;
+  bannerId: string;
+}) {
+  const banner = snapshot.banners.find((item) => item.id === bannerId);
+
+  if (!banner) {
+    return (
+      <>
+        <PageHeader title="Баннер" />
+        <section className="empty-state">
+          <Bell />
+          <strong>Баннер не найден</strong>
+          <Link to="/">На главную</Link>
+        </section>
+      </>
+    );
+  }
+
+  const hasActionLink = banner.linkUrl.trim().length > 0;
+  const actionIsExternal = /^https?:\/\//i.test(banner.linkUrl);
+
+  return (
+    <>
+      <PageHeader title={banner.title} />
+      <article className="promo-detail">
+        {banner.imageUrl && (
+          <div className="promo-detail__media">
+            {isVideoMediaUrl(banner.imageUrl)
+              ? <video src={banner.imageUrl} controls playsInline />
+              : <img src={banner.imageUrl} alt="" />}
+          </div>
+        )}
+        <span>{banner.kind}</span>
+        <h2>{banner.title}</h2>
+        <p>{banner.subtitle}</p>
+        {hasActionLink && (
+          actionIsExternal ? (
+            <a href={banner.linkUrl} target="_blank" rel="noreferrer">
+              Открыть
+            </a>
+          ) : (
+            <Link to={banner.linkUrl}>
+              Открыть
+            </Link>
+          )
+        )}
+      </article>
     </>
   );
 }
@@ -544,7 +682,7 @@ function RestaurantsPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
   const categorySlug = searchParams.get('category') ?? 'all';
   const queryParam = searchParams.get('query') ?? '';
   const [query, setQuery] = useState(queryParam);
-  const restaurants = filterRestaurants(snapshot.restaurants, { cityId, categorySlug, query });
+  const restaurants = filterRestaurantsWithCityFallback(snapshot.restaurants, { cityId, categorySlug, query });
 
   const setCategory = (slug: string) => {
     const next = new URLSearchParams(searchParams);
@@ -1558,7 +1696,7 @@ function OrderStatusPage({
 
     return subscribeClientOrderRealtime(order.id, (patch) => {
       syncOrderPatch(order.id, mergeClientOrderRealtimePatch({
-        status: toClientOrderStatus(patch.status),
+        status: toClientOrderStatus(patch.deliveryStatus ?? patch.status),
         paymentStatus: patch.paymentStatus,
         driverName: patch.driverName,
         driverPhone: patch.driverPhone,
@@ -1979,6 +2117,7 @@ function OrdersPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
   const profile = useClientPlatformStore((state) => state.profile);
   const orders = useClientPlatformStore((state) => state.orders);
   const repeatOrder = useClientPlatformStore((state) => state.repeatOrder);
+  const syncOrderPatch = useClientPlatformStore((state) => state.syncOrderPatch);
   const [reviewOrderId, setReviewOrderId] = useState<string | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
@@ -1986,8 +2125,31 @@ function OrdersPage({ snapshot }: { snapshot: ClientPlatformSnapshot }) {
   const [reviewError, setReviewError] = useState('');
   const [isReviewSending, setIsReviewSending] = useState(false);
   const currentOrders = orders.filter((order) => !['completed', 'canceled'].includes(order.status));
+  const currentOrderIds = currentOrders.map((order) => order.id).sort().join('|');
   const finishedOrders = orders.filter((order) => order.status === 'completed');
   const canceledOrders = orders.filter((order) => order.status === 'canceled');
+
+  useEffect(() => {
+    if (!currentOrderIds) return undefined;
+
+    const unsubscribes = currentOrderIds.split('|').map((orderId) =>
+      subscribeClientOrderRealtime(orderId, (patch) => {
+        syncOrderPatch(orderId, mergeClientOrderRealtimePatch({
+          status: toClientOrderStatus(patch.deliveryStatus ?? patch.status),
+          paymentStatus: patch.paymentStatus,
+          driverName: patch.driverName,
+          driverPhone: patch.driverPhone,
+          driverLat: patch.driverLat,
+          driverLng: patch.driverLng,
+          driverLocationAt: patch.driverLocationAt
+        }));
+      })
+    );
+
+    return () => {
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [currentOrderIds, syncOrderPatch]);
 
   const submitReview = async (event: FormEvent<HTMLFormElement>, order: ClientOrder) => {
     event.preventDefault();

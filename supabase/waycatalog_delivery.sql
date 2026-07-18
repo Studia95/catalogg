@@ -151,6 +151,7 @@ alter table public.deliveries add constraint deliveries_status_check
     'arrived_to_restaurant',
     'handed_over',
     'on_the_way',
+    'arrived_to_client',
     'delivered',
     'failed',
     'canceled',

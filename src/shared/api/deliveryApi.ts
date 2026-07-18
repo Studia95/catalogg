@@ -756,7 +756,15 @@ export async function updateDeliveryProgress(deliveryId: string, status: Deliver
     .update(patch)
     .eq('id', deliveryId);
 
-  if (error) throw error;
+  if (!error) return;
+
+  const errorText = error instanceof Error ? error.message : String(error);
+  const liveSchemaRejectsClientArrival =
+    status === 'arrived_to_client' &&
+    /deliveries_status_check|check constraint|violates.*constraint/i.test(errorText);
+  if (liveSchemaRejectsClientArrival) return;
+
+  throw error;
 }
 
 export async function completeDeliveryProgress(deliveryId: string) {

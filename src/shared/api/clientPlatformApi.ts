@@ -507,6 +507,7 @@ export async function createClientPlatformOrder(input: ClientPlatformOrderInput)
 export type ClientOrderRealtimePatch = {
   readonly id: string;
   readonly status?: string;
+  readonly deliveryStatus?: string;
   readonly paymentStatus?: ClientPaymentStatus;
   readonly driverName?: string;
   readonly driverPhone?: string;
@@ -527,6 +528,7 @@ export function subscribeClientOrderRealtime(orderId: string, onChange: (patch: 
     const status = statusData as {
       id?: unknown;
       status?: unknown;
+      delivery_status?: unknown;
       payment_status?: unknown;
       driver_name?: unknown;
       driver_phone?: unknown;
@@ -545,6 +547,7 @@ export function subscribeClientOrderRealtime(orderId: string, onChange: (patch: 
     onChange({
       id: String(status.id ?? orderId),
       status: String(status.status ?? 'new'),
+      deliveryStatus: status.delivery_status ? String(status.delivery_status) : undefined,
       paymentStatus: status.payment_status as ClientPaymentStatus,
       driverName: status.driver_name ? String(status.driver_name) : undefined,
       driverPhone: status.driver_phone ? String(status.driver_phone) : undefined,
@@ -568,6 +571,26 @@ export function subscribeClientOrderRealtime(orderId: string, onChange: (patch: 
   };
 }
 
+export function subscribeClientPlatformSnapshotRealtime(onChange: () => void) {
+  const client = supabase;
+  if (!client) return () => undefined;
+
+  const channel = client
+    .channel('client-platform-snapshot')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'catalogs' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'product_images' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_delivery_settings' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'platform_banners' }, onChange)
+    .subscribe();
+
+  return () => {
+    void client.removeChannel(channel);
+  };
+}
+
 export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapshot> {
   if (!supabase) return clientPlatformSnapshot;
 
@@ -577,7 +600,8 @@ export async function getClientPlatformSnapshot(): Promise<ClientPlatformSnapsho
     .eq('status', 'published')
     .order('name');
 
-  if (catalogsResult.error || !catalogsResult.data?.length) return clientPlatformSnapshot;
+  if (catalogsResult.error) throw catalogsResult.error;
+  if (!catalogsResult.data?.length) return clientPlatformSnapshot;
 
   const catalogs = catalogsResult.data as CatalogRow[];
   const catalogIds = catalogs.map((catalog) => catalog.id);

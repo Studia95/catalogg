@@ -39,6 +39,37 @@ const tileSize = 256;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+export const normalizeBearing = (value: number) => ((value % 360) + 360) % 360;
+
+export const calculateBearing = (from: DeliveryMapCoordinates, to: DeliveryMapCoordinates) => {
+  const fromLat = (from.lat * Math.PI) / 180;
+  const toLat = (to.lat * Math.PI) / 180;
+  const lngDelta = ((to.lng - from.lng) * Math.PI) / 180;
+  const y = Math.sin(lngDelta) * Math.cos(toLat);
+  const x =
+    Math.cos(fromLat) * Math.sin(toLat) -
+    Math.sin(fromLat) * Math.cos(toLat) * Math.cos(lngDelta);
+
+  return normalizeBearing((Math.atan2(y, x) * 180) / Math.PI);
+};
+
+export const rotateMapPoint = (
+  point: DeliveryMapPoint,
+  angleDeg: number,
+  origin: DeliveryMapPoint
+): DeliveryMapPoint => {
+  const angle = (angleDeg * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const dx = point.x - origin.x;
+  const dy = point.y - origin.y;
+
+  return {
+    x: origin.x + dx * cos - dy * sin,
+    y: origin.y + dx * sin + dy * cos
+  };
+};
+
 export const getMapCenter = (points: readonly DeliveryMapCoordinateInput[]): DeliveryMapCoordinates => {
   const validPoints = points.filter(
     (point): point is { lat: number; lng: number } =>

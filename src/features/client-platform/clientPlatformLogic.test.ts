@@ -12,6 +12,7 @@ import {
   buildSupportWhatsappUrl,
   calculateCartSummary,
   filterRestaurants,
+  filterRestaurantsWithCityFallback,
   getDeliveryProviderLabel,
   resolveCheckoutSettlement
 } from './clientPlatformLogic';
@@ -183,6 +184,21 @@ describe('client platform restaurant filtering', () => {
       result.map((restaurant) => restaurant.slug),
       ['rizih']
     );
+  });
+
+  it('keeps the platform populated when a stale city has no matches yet', () => {
+    const result = filterRestaurantsWithCityFallback(restaurants, { cityId: 'temporary-city', categorySlug: 'all', query: '' });
+
+    assert.deepEqual(
+      result.map((restaurant) => restaurant.slug),
+      ['rizih', 'mangal', 'berkat']
+    );
+  });
+
+  it('keeps real empty search results empty instead of replacing them with every restaurant', () => {
+    const result = filterRestaurantsWithCityFallback(restaurants, { cityId: 'grozny', categorySlug: 'all', query: 'нет такого ресторана' });
+
+    assert.deepEqual(result, []);
   });
 });
 
