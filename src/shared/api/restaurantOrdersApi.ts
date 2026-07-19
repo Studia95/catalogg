@@ -567,11 +567,18 @@ const mapPublicOrderStatus = (row: PublicRestaurantOrderStatusRow): PublicRestau
   })
 });
 
+const catalogIdBySlugCache = new Map<string, string>();
+
 export async function getCatalogIdBySlug(slug: string) {
   if (!supabase) return null;
-  const { data, error } = await supabase.from('catalogs').select('id').eq('slug', slug).maybeSingle();
+  const normalizedSlug = slug.trim().toLowerCase();
+  const cachedCatalogId = catalogIdBySlugCache.get(normalizedSlug);
+  if (cachedCatalogId) return cachedCatalogId;
+  const { data, error } = await supabase.from('catalogs').select('id').eq('slug', normalizedSlug).maybeSingle();
   if (error || !data) return null;
-  return String(data.id);
+  const catalogId = String(data.id);
+  catalogIdBySlugCache.set(normalizedSlug, catalogId);
+  return catalogId;
 }
 
 export async function getRestaurantOrders(slug: string): Promise<RestaurantOrder[]> {

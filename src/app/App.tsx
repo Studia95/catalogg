@@ -5358,7 +5358,7 @@ function AppContent({
         refreshOrders();
       }
     };
-    const intervalId = window.setInterval(refreshWhenVisible, 12_000);
+    const intervalId = window.setInterval(refreshWhenVisible, 30_000);
 
     window.addEventListener('focus', refreshWhenVisible);
     window.addEventListener('pageshow', refreshWhenVisible);

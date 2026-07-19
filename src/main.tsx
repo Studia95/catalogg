@@ -1,14 +1,7 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import { HashRouter, Route, Routes } from 'react-router-dom';
-import { ClientPlatformApp } from './pages/client-platform/ClientPlatformApp';
-import { DriverApp } from './pages/driver/DriverApp';
-import { LoginPage } from './pages/login/LoginPage';
-import { PlatformAdminApp } from './pages/platform-admin/PlatformAdminApp';
-import { PrivacyPage } from './pages/privacy/PrivacyPage';
-import { PaymentsPage } from './pages/payments/PaymentsPage';
-import { ScannerPage } from './pages/scanner/ScannerPage';
 import {
   CatalogAdminRoute,
   PwaHomeRoute,
@@ -18,6 +11,28 @@ import {
 } from './PwaRoutes';
 import './app/styles.css';
 import './features/dish-editor/styles.css';
+
+const ClientPlatformApp = lazy(() =>
+  import('./pages/client-platform/ClientPlatformApp').then((module) => ({ default: module.ClientPlatformApp }))
+);
+const DriverApp = lazy(() =>
+  import('./pages/driver/DriverApp').then((module) => ({ default: module.DriverApp }))
+);
+const LoginPage = lazy(() =>
+  import('./pages/login/LoginPage').then((module) => ({ default: module.LoginPage }))
+);
+const PlatformAdminApp = lazy(() =>
+  import('./pages/platform-admin/PlatformAdminApp').then((module) => ({ default: module.PlatformAdminApp }))
+);
+const PrivacyPage = lazy(() =>
+  import('./pages/privacy/PrivacyPage').then((module) => ({ default: module.PrivacyPage }))
+);
+const PaymentsPage = lazy(() =>
+  import('./pages/payments/PaymentsPage').then((module) => ({ default: module.PaymentsPage }))
+);
+const ScannerPage = lazy(() =>
+  import('./pages/scanner/ScannerPage').then((module) => ({ default: module.ScannerPage }))
+);
 
 let reloadingForUpdate = false;
 
@@ -73,25 +88,27 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <HashRouter>
       <PwaResumeTracker />
-      <Routes>
-        <Route path="/" element={<PwaHomeRoute />} />
-        <Route path="/city" element={<ClientPlatformApp />} />
-        <Route path="/categories" element={<ClientPlatformApp />} />
-        <Route path="/restaurants" element={<ClientPlatformApp />} />
-        <Route path="/cart" element={<ClientPlatformApp />} />
-        <Route path="/profile/*" element={<ClientPlatformApp />} />
-        <Route path="/r/:slug/*" element={<RestaurantRouteRedirect />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/privacy" element={<PrivacyPage />} />
-        <Route path="/scanner" element={<ScannerPage />} />
-        <Route path="/:slug/scanner" element={<ScannerPage />} />
-        <Route path="/admin/catalogs/:slug" element={<CatalogAdminRoute />} />
-        <Route path="/admin/payments" element={<PaymentsPage />} />
-        <Route path="/admin/*" element={<PlatformAdminApp />} />
-        <Route path="/driver/*" element={<DriverApp />} />
-        <Route path="/:slug/*" element={<RestaurantPublicRoute />} />
-        <Route path="/:slug" element={<RestaurantPublicRoute />} />
-      </Routes>
+      <Suspense fallback={<main className="platform-state platform-state--full">Загрузка...</main>}>
+        <Routes>
+          <Route path="/" element={<PwaHomeRoute />} />
+          <Route path="/city" element={<ClientPlatformApp />} />
+          <Route path="/categories" element={<ClientPlatformApp />} />
+          <Route path="/restaurants" element={<ClientPlatformApp />} />
+          <Route path="/cart" element={<ClientPlatformApp />} />
+          <Route path="/profile/*" element={<ClientPlatformApp />} />
+          <Route path="/r/:slug/*" element={<RestaurantRouteRedirect />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/scanner" element={<ScannerPage />} />
+          <Route path="/:slug/scanner" element={<ScannerPage />} />
+          <Route path="/admin/catalogs/:slug" element={<CatalogAdminRoute />} />
+          <Route path="/admin/payments" element={<PaymentsPage />} />
+          <Route path="/admin/*" element={<PlatformAdminApp />} />
+          <Route path="/driver/*" element={<DriverApp />} />
+          <Route path="/:slug/*" element={<RestaurantPublicRoute />} />
+          <Route path="/:slug" element={<RestaurantPublicRoute />} />
+        </Routes>
+      </Suspense>
     </HashRouter>
   </React.StrictMode>
 );

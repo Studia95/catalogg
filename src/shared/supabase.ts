@@ -4,6 +4,11 @@ import type { Cabin, CatalogTag, Category, Product, Restaurant, ThemeSettings } 
 import { catalogAccessAllowsAdmin } from './adminSession';
 import { clearPwaResumePath } from './pwaSession';
 import { makeRestaurantCoordinates, parseRestaurantCoordinatesFromMapLink } from './restaurantLocation';
+import {
+  getSupabaseAuthScope,
+  getSupabaseAuthStorageKey,
+  getSupabaseAuthStorageKeyForRedirect
+} from './supabaseAuthScope';
 
 type SupabaseConfig = {
   url?: string;
@@ -16,6 +21,20 @@ const config: SupabaseConfig = {
     import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined
 };
 
+const currentAuthScope = getSupabaseAuthScope(typeof window === 'undefined' ? '/' : window.location.hash);
+const currentAuthStorageKey = getSupabaseAuthStorageKey(currentAuthScope);
+
+if (typeof window !== 'undefined') {
+  try {
+    if (!window.localStorage.getItem(currentAuthStorageKey)) {
+      const legacySession = window.localStorage.getItem('waycatalog-auth');
+      if (legacySession) window.localStorage.setItem(currentAuthStorageKey, legacySession);
+    }
+  } catch {
+    // Supabase falls back to an in-memory session when browser storage is unavailable.
+  }
+}
+
 export const supabase: SupabaseClient | null =
   config.url && config.anonKey
     ? createClient(config.url, config.anonKey, {
@@ -23,10 +42,21 @@ export const supabase: SupabaseClient | null =
           autoRefreshToken: true,
           detectSessionInUrl: true,
           persistSession: true,
-          storageKey: 'waycatalog-auth'
+          storageKey: currentAuthStorageKey
         }
       })
     : null;
+
+export const preserveSupabaseSessionForRedirect = (redirect: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const serializedSession = window.localStorage.getItem(currentAuthStorageKey);
+    if (!serializedSession) return;
+    window.localStorage.setItem(getSupabaseAuthStorageKeyForRedirect(redirect), serializedSession);
+  } catch {
+    // The active tab still keeps the authenticated session in memory.
+  }
+};
 
 const legacyCatalogSlug = 'mangal';
 let activePlatformCatalogId: string | null = null;

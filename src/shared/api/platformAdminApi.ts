@@ -1,3 +1,4 @@
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
 import { clearPwaResumePath } from '../pwaSession';
 
@@ -7,7 +8,7 @@ export type PlatformAdminAccess = {
   email: string | null;
 };
 
-export async function getPlatformAdminAccess(): Promise<PlatformAdminAccess> {
+export async function getPlatformAdminAccess(knownSession?: Session | null): Promise<PlatformAdminAccess> {
   if (!supabase) {
     return {
       hasSession: true,
@@ -16,8 +17,9 @@ export async function getPlatformAdminAccess(): Promise<PlatformAdminAccess> {
     };
   }
 
-  const { data: sessionData } = await supabase.auth.getSession();
-  const session = sessionData.session;
+  const session = knownSession !== undefined
+    ? knownSession
+    : (await supabase.auth.getSession()).data.session;
   if (!session) {
     return {
       hasSession: false,
@@ -37,14 +39,14 @@ export async function getPlatformAdminAccess(): Promise<PlatformAdminAccess> {
 export async function signInPlatformAdmin(email: string, password: string) {
   if (!supabase) return getPlatformAdminAccess();
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: email.trim().toLowerCase(),
     password
   });
 
   if (error) throw new Error(error.message);
 
-  return getPlatformAdminAccess();
+  return getPlatformAdminAccess(data.session);
 }
 
 export async function signOutPlatformAdmin() {

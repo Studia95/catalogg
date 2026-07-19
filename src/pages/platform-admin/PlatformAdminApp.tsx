@@ -1438,7 +1438,10 @@ function ClientsPage({
   const [pageSize, setPageSize] = useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
-  const templatesQuery = useQuery({ queryKey: ['platform-templates'], queryFn: getTemplateOptions });
+  const templatesQuery = useQuery({
+    queryKey: ['platform-templates'],
+    queryFn: getTemplateOptions
+  });
   const statsQuery = useQuery({ queryKey: ['platform-stats'], queryFn: getPlatformStats });
   const clientsQuery = useQuery({
     queryKey: ['platform-clients', debouncedSearch, status, payment, templateId, page, pageSize],
@@ -2749,9 +2752,13 @@ function PlatformAdminContent() {
 
   const platformAdminQuery = useQuery({
     queryKey: ['platform-admin-session'],
-    queryFn: getPlatformAdminAccess
+    queryFn: () => getPlatformAdminAccess()
   });
-  const templatesQuery = useQuery({ queryKey: ['platform-templates'], queryFn: getTemplateOptions });
+  const templatesQuery = useQuery({
+    queryKey: ['platform-templates'],
+    queryFn: getTemplateOptions,
+    enabled: platformAdminQuery.data?.isPlatformAdmin === true
+  });
   const [notificationPermission, setNotificationPermission] = useState(() => getRestaurantOrderNotificationPermission());
 
   useEffect(() => {

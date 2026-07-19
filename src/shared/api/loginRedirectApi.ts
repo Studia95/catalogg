@@ -1,4 +1,5 @@
-import { supabase } from '../supabase';
+import type { Session } from '@supabase/supabase-js';
+import { preserveSupabaseSessionForRedirect, supabase } from '../supabase';
 import { getAuthenticatedDriverId } from './deliveryApi';
 
 const getClientCatalogSlug = (client: { catalogs?: { slug?: string } | { slug?: string }[] | null } | null) => {
@@ -12,11 +13,8 @@ const metadataRole = (metadata: unknown) => {
   return typeof role === 'string' ? role : '';
 };
 
-export async function resolveSessionRedirect(emailFallback = '') {
+async function resolveSessionRedirectLegacy(user: Session['user'], emailFallback = '') {
   if (!supabase) return null;
-  const { data: sessionData } = await supabase.auth.getSession();
-  const user = sessionData.session?.user;
-  if (!user) return '/';
   const normalizedEmail = user.email?.trim().toLowerCase() || emailFallback.trim().toLowerCase();
 
   const authenticatedDriverId = await getAuthenticatedDriverId();
@@ -76,16 +74,29 @@ export async function resolveSessionRedirect(emailFallback = '') {
   return '/';
 }
 
+export async function resolveSessionRedirect(emailFallback = '', knownSession?: Session | null) {
+  if (!supabase) return null;
+  const session = knownSession ?? (await supabase.auth.getSession()).data.session;
+  if (!session) return '/';
+
+  const { data: redirect, error } = await supabase.rpc('resolve_current_login_redirect');
+  if (!error && typeof redirect === 'string' && redirect.startsWith('/')) return redirect;
+
+  return resolveSessionRedirectLegacy(session.user, emailFallback);
+}
+
 export async function resolveLoginRedirect(email: string, password: string) {
   if (!supabase) {
     return email.trim().toLowerCase() === 'admin' && password.trim() === '1234' ? '/mangal/dashboard' : null;
   }
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: email.trim().toLowerCase(),
     password
   });
   if (error) throw new Error(error.message);
 
-  return resolveSessionRedirect(email);
+  const redirect = await resolveSessionRedirect(email, data.session);
+  if (redirect) preserveSupabaseSessionForRedirect(redirect);
+  return redirect;
 }

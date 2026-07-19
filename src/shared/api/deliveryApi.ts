@@ -138,13 +138,6 @@ type DriverRow = {
   last_location_at: string | null;
 };
 
-type DriverUserRow = {
-  id: string;
-  auth_user_id: string | null;
-  email?: string | null;
-  role?: string | null;
-};
-
 type EarningRow = {
   id: string;
   delivery_id: string;
@@ -465,65 +458,17 @@ const rowToEarning = (row: EarningRow): DriverEarning => {
 
 export const getAuthenticatedDriverId = async (): Promise<string | null> => {
   if (!supabase) return demoDriverId;
+  const { data: rpcDriverId, error: rpcDriverError } = await supabase.rpc('current_driver_id');
+  if (!rpcDriverError) {
+    return typeof rpcDriverId === 'string' && rpcDriverId ? rpcDriverId : null;
+  }
+
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   const authUser = sessionData.session?.user;
   if (sessionError || !authUser?.id) return null;
-
-  const { data: rpcDriverId, error: rpcDriverError } = await supabase.rpc('current_driver_id');
-  if (!rpcDriverError && typeof rpcDriverId === 'string' && rpcDriverId) {
-    return rpcDriverId;
-  }
-
   const metadataDriverId =
     typeof authUser.app_metadata?.driver_id === 'string' ? authUser.app_metadata.driver_id : '';
-  if (metadataDriverId) {
-    return metadataDriverId;
-  }
-
-  const metadataPublicUserId =
-    typeof authUser.app_metadata?.public_user_id === 'string' ? authUser.app_metadata.public_user_id : '';
-  if (metadataPublicUserId) {
-    const { data: metadataDriver, error: metadataDriverError } = await supabase
-      .from('drivers')
-      .select('id')
-      .eq('user_id', metadataPublicUserId)
-      .maybeSingle();
-    if (!metadataDriverError && metadataDriver) return (metadataDriver as Pick<DriverRow, 'id'>).id;
-  }
-
-  const { data: publicUserByAuth, error: publicUserByAuthError } = await supabase
-    .from('users')
-    .select('id, auth_user_id, email, role')
-    .eq('auth_user_id', authUser.id)
-    .eq('role', 'driver')
-    .maybeSingle();
-  const publicUsers: DriverUserRow[] = [];
-  if (!publicUserByAuthError && publicUserByAuth) {
-    publicUsers.push(publicUserByAuth as DriverUserRow);
-  }
-
-  if (authUser.email) {
-    const { data: publicUserByEmail, error: publicUserByEmailError } = await supabase
-      .from('users')
-      .select('id, auth_user_id, email, role')
-      .eq('email', authUser.email.trim().toLowerCase())
-      .eq('role', 'driver')
-      .maybeSingle();
-    if (!publicUserByEmailError && publicUserByEmail) {
-      publicUsers.push(publicUserByEmail as DriverUserRow);
-    }
-  }
-
-  for (const publicUser of publicUsers) {
-    const { data: driver, error: driverError } = await supabase
-      .from('drivers')
-      .select('id')
-      .eq('user_id', publicUser.id)
-      .maybeSingle();
-    if (!driverError && driver) return (driver as Pick<DriverRow, 'id'>).id;
-  }
-
-  return null;
+  return metadataDriverId || null;
 };
 
 const resolveCurrentDriverId = async (fallbackDriverId: string) => {
@@ -685,20 +630,16 @@ export async function setDriverAvailability(isOnline: boolean) {
 }
 
 export async function updateDriverLocation(
-  driverId: string,
+  _driverId: string,
   location: { lat: number; lng: number; accuracy?: number | null }
 ) {
   if (!supabase) return;
 
-  const { error } = await supabase
-    .from('drivers')
-    .update({
-      last_lat: location.lat,
-      last_lng: location.lng,
-      last_location_accuracy: location.accuracy ?? null,
-      last_location_at: new Date().toISOString()
-    })
-    .eq('id', driverId);
+  const { error } = await supabase.rpc('update_current_driver_location', {
+    next_lat: location.lat,
+    next_lng: location.lng,
+    next_accuracy: location.accuracy ?? null
+  });
 
   if (error) throw error;
 }
@@ -800,14 +741,24 @@ export async function confirmDriverPickup(deliveryId: string): Promise<boolean> 
 export function subscribeToDriverRealtime(driverId: string, onChange: () => void) {
   if (!supabase) return () => undefined;
 
+  let refreshTimer: number | null = null;
+  const scheduleRefresh = () => {
+    if (refreshTimer !== null) return;
+    refreshTimer = window.setTimeout(() => {
+      refreshTimer = null;
+      onChange();
+    }, 180);
+  };
+
   const channel = supabase
     .channel(`driver-deliveries-${driverId}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, onChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_status_history' }, onChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers', filter: `id=eq.${driverId}` }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, scheduleRefresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_status_history' }, scheduleRefresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers', filter: `id=eq.${driverId}` }, scheduleRefresh)
     .subscribe();
 
   return () => {
+    if (refreshTimer !== null) window.clearTimeout(refreshTimer);
     void supabase?.removeChannel(channel);
   };
 }

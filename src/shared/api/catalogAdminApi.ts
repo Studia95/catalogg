@@ -1,3 +1,4 @@
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
 import { clearPwaResumePath } from '../pwaSession';
 
@@ -77,8 +78,13 @@ async function loadCatalogBySlug(slug: string) {
   return mapCatalog(data as CatalogRow);
 }
 
-export async function getCatalogAdminAccess(slug: string): Promise<CatalogAdminAccess> {
-  const catalog = await loadCatalogBySlug(slug);
+export async function getCatalogAdminAccess(slug: string, knownSession?: Session | null): Promise<CatalogAdminAccess> {
+  const [catalog, sessionResult] = await Promise.all([
+    loadCatalogBySlug(slug),
+    knownSession !== undefined || !supabase
+      ? Promise.resolve(knownSession ?? null)
+      : supabase.auth.getSession().then(({ data }) => data.session)
+  ]);
 
   if (!supabase) {
     return {
@@ -92,8 +98,7 @@ export async function getCatalogAdminAccess(slug: string): Promise<CatalogAdminA
     };
   }
 
-  const { data: sessionData } = await supabase.auth.getSession();
-  const session = sessionData.session;
+  const session = sessionResult;
 
   if (!session) {
     return {
@@ -119,20 +124,23 @@ export async function getCatalogAdminAccess(slug: string): Promise<CatalogAdminA
     };
   }
 
-  const { data: member, error } = await supabase
-    .from('catalog_members')
-    .select('role')
-    .eq('catalog_id', catalog.id)
-    .eq('user_id', session.user.id)
-    .maybeSingle();
+  const [memberResult, clientResult] = await Promise.all([
+    supabase
+      .from('catalog_members')
+      .select('role')
+      .eq('catalog_id', catalog.id)
+      .eq('user_id', session.user.id)
+      .maybeSingle(),
+    supabase
+      .from('clients')
+      .select('catalog_id, first_login, consent_given')
+      .eq('owner_user_id', session.user.id)
+      .maybeSingle()
+  ]);
 
+  const { data: member, error } = memberResult;
+  const { data: client, error: clientError } = clientResult;
   if (error) throw new Error(error.message);
-
-  const { data: client, error: clientError } = await supabase
-    .from('clients')
-    .select('catalog_id, first_login, consent_given')
-    .eq('owner_user_id', session.user.id)
-    .maybeSingle();
 
   if (clientError) throw new Error(clientError.message);
   const clientOwnsCatalog = client?.catalog_id === catalog.id;
@@ -151,13 +159,13 @@ export async function getCatalogAdminAccess(slug: string): Promise<CatalogAdminA
 export async function signInCatalogAdmin(slug: string, email: string, password: string) {
   if (!supabase) return getCatalogAdminAccess(slug);
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: email.trim().toLowerCase(),
     password
   });
 
   if (error) throw new Error(error.message);
-  return getCatalogAdminAccess(slug);
+  return getCatalogAdminAccess(slug, data.session);
 }
 
 export async function signOutCatalogAdmin() {

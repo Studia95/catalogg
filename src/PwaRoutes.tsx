@@ -1,8 +1,5 @@
-import React from 'react';
+import React, { lazy } from 'react';
 import { Navigate, useLocation, useNavigationType, useParams } from 'react-router-dom';
-import { App } from './app/App';
-import { ClientPlatformApp } from './pages/client-platform/ClientPlatformApp';
-import { CatalogAdminApp } from './pages/catalog-admin/CatalogAdminApp';
 import { resolveSessionRedirect } from './shared/api/loginRedirectApi';
 import {
   appIsRunningStandalone,
@@ -11,6 +8,14 @@ import {
   rememberPwaResumePath,
   resolvePwaHomeTarget
 } from './shared/pwaSession';
+
+const App = lazy(() => import('./app/App').then((module) => ({ default: module.App })));
+const ClientPlatformApp = lazy(() =>
+  import('./pages/client-platform/ClientPlatformApp').then((module) => ({ default: module.ClientPlatformApp }))
+);
+const CatalogAdminApp = lazy(() =>
+  import('./pages/catalog-admin/CatalogAdminApp').then((module) => ({ default: module.CatalogAdminApp }))
+);
 
 export function CatalogAdminRoute() {
   const { slug = '' } = useParams();

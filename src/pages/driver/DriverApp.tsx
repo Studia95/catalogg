@@ -38,6 +38,7 @@ import {
   acceptDeliveryOffer,
   changeDriverPassword,
   completeDeliveryProgress,
+  demoDriverId,
   getAuthenticatedDriverId,
   getDriverDashboard,
   saveDriverServiceSettlements,
@@ -319,32 +320,37 @@ export function DriverApp() {
   }, [selectedDriverId]);
 
   useEffect(() => {
-    void loadDashboard();
-  }, [loadDashboard]);
-
-  useEffect(() => {
     if (!supabase) return;
 
     let isMounted = true;
-    void getAuthenticatedDriverId().then((driverId) => {
-      if (!isMounted) return;
-      if (driverId) {
-        bindDriver(driverId);
-      }
-      setHasDriverAccess(Boolean(driverId));
-      setAuthChecked(true);
-    });
+    void getAuthenticatedDriverId()
+      .then((driverId) => {
+        if (!isMounted) return;
+        if (driverId) bindDriver(driverId);
+        setHasDriverAccess(Boolean(driverId));
+      })
+      .catch(() => {
+        if (isMounted) setHasDriverAccess(false);
+      })
+      .finally(() => {
+        if (isMounted) setAuthChecked(true);
+      });
 
     return () => {
       isMounted = false;
     };
   }, [bindDriver]);
 
+  useEffect(() => {
+    if (!authChecked || !hasDriverAccess || selectedDriverId === demoDriverId) return;
+    void loadDashboard();
+  }, [authChecked, hasDriverAccess, loadDashboard, selectedDriverId]);
+
   const profile: DriverProfile = {
     ...snapshot.profile,
     status: localActiveDelivery ? 'busy' : snapshot.profile.status
   };
-  const effectiveDriverId = profile.id || selectedDriverId;
+  const effectiveDriverId = hasDriverAccess ? selectedDriverId : '';
 
   useEffect(() => {
     if (!authChecked || !hasDriverAccess || !effectiveDriverId) return;
@@ -354,28 +360,62 @@ export function DriverApp() {
     });
   }, [authChecked, effectiveDriverId, hasDriverAccess]);
 
-  useEffect(() => subscribeToDriverRealtime(effectiveDriverId, loadDashboard), [effectiveDriverId, loadDashboard]);
+  useEffect(() => {
+    if (!authChecked || !hasDriverAccess || !effectiveDriverId) return undefined;
+    return subscribeToDriverRealtime(effectiveDriverId, loadDashboard);
+  }, [authChecked, effectiveDriverId, hasDriverAccess, loadDashboard]);
 
   useEffect(() => {
     if (!authChecked || !hasDriverAccess || !snapshot.profile.isOnline || !effectiveDriverId || !navigator.geolocation) {
       return undefined;
     }
 
+    let lastSentAt = 0;
+    let pendingTimer: number | null = null;
+    let latestLocation: { lat: number; lng: number; accuracy: number | null } | null = null;
+    const sendLocation = () => {
+      if (!latestLocation) return;
+      lastSentAt = Date.now();
+      const location = latestLocation;
+      latestLocation = null;
+      void updateDriverLocation(effectiveDriverId, location).catch(() => undefined);
+    };
     const onPosition = (position: GeolocationPosition) => {
-      void updateDriverLocation(effectiveDriverId, {
+      latestLocation = {
         lat: position.coords.latitude,
         lng: position.coords.longitude,
-        accuracy: position.coords.accuracy
-      }).catch(() => undefined);
+        accuracy: position.coords.accuracy ?? null
+      };
+      setSnapshot((current) => ({
+        ...current,
+        profile: {
+          ...current.profile,
+          lastLat: position.coords.latitude,
+          lastLng: position.coords.longitude,
+          lastLocationAt: new Date().toISOString()
+        }
+      }));
+      const waitMs = Math.max(0, 5_000 - (Date.now() - lastSentAt));
+      if (waitMs === 0) {
+        sendLocation();
+      } else if (pendingTimer === null) {
+        pendingTimer = window.setTimeout(() => {
+          pendingTimer = null;
+          sendLocation();
+        }, waitMs);
+      }
     };
 
     const watchId = navigator.geolocation.watchPosition(onPosition, () => undefined, {
       enableHighAccuracy: true,
-      maximumAge: 10_000,
-      timeout: 15_000
+      maximumAge: 5_000,
+      timeout: 10_000
     });
 
-    return () => navigator.geolocation.clearWatch(watchId);
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      if (pendingTimer !== null) window.clearTimeout(pendingTimer);
+    };
   }, [authChecked, effectiveDriverId, hasDriverAccess, snapshot.profile.isOnline]);
 
   useEffect(() => {
@@ -389,7 +429,7 @@ export function DriverApp() {
         refreshDriverDashboard();
       }
     };
-    const intervalId = window.setInterval(refreshWhenVisible, 12_000);
+    const intervalId = window.setInterval(refreshWhenVisible, 30_000);
 
     window.addEventListener('focus', refreshWhenVisible);
     window.addEventListener('pageshow', refreshWhenVisible);
@@ -493,6 +533,16 @@ export function DriverApp() {
             availableDeliveries={availableDeliveries}
             error={error}
             onRefresh={loadDashboard}
+            onAvailabilityChanged={(isOnline) => {
+              setSnapshot((current) => ({
+                ...current,
+                profile: {
+                  ...current.profile,
+                  isOnline,
+                  status: isOnline ? 'online' : 'offline'
+                }
+              }));
+            }}
           />
         )}
         <DriverBottomNav active={route} />
@@ -527,7 +577,8 @@ function DriverHomeScreen({
   activeDelivery,
   availableDeliveries,
   error,
-  onRefresh
+  onRefresh,
+  onAvailabilityChanged
 }: {
   profile: DriverProfile;
   snapshot: DriverDashboardSnapshot;
@@ -535,6 +586,7 @@ function DriverHomeScreen({
   availableDeliveries: readonly DeliveryOffer[];
   error: string;
   onRefresh: () => Promise<void>;
+  onAvailabilityChanged: (isOnline: boolean) => void;
 }) {
   const [availabilityError, setAvailabilityError] = useState('');
   const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
@@ -550,14 +602,17 @@ function DriverHomeScreen({
     const nextOnline = !displayedOnline;
     setIsUpdatingAvailability(true);
     setAvailabilityError('');
+    setOptimisticOnline(nextOnline);
+    onAvailabilityChanged(nextOnline);
     try {
       await setDriverAvailability(nextOnline);
-      setOptimisticOnline(nextOnline);
       void onRefresh();
       if (nextOnline) {
         void requestRestaurantOrderNotificationPermission({ role: 'driver', driverId: profile.id });
       }
     } catch (availabilityUpdateError) {
+      setOptimisticOnline(!nextOnline);
+      onAvailabilityChanged(!nextOnline);
       setAvailabilityError(
         availabilityUpdateError instanceof Error ? availabilityUpdateError.message : 'Не удалось изменить онлайн-статус'
       );
