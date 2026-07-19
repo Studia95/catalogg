@@ -760,13 +760,34 @@ function ProductImageCarousel({ product, hero = false }: { product: Product; her
       : [];
   const [activeIndex, setActiveIndex] = useState(0);
   const touchStartX = useRef<number | null>(null);
+  const pointerStartX = useRef<number | null>(null);
+  const pointerStartY = useRef<number | null>(null);
+  const pointerId = useRef<number | null>(null);
   const didSwipe = useRef(false);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => setActiveIndex(0), [product.id]);
 
   const move = (direction: number) => {
     if (images.length < 2) return;
     setActiveIndex((index) => (index + direction + images.length) % images.length);
+  };
+
+  const finishSwipe = (deltaX: number) => {
+    setDragOffset(0);
+    setIsDragging(false);
+    if (images.length < 2 || Math.abs(deltaX) < 42) return;
+    didSwipe.current = true;
+    move(deltaX < 0 ? 1 : -1);
+  };
+
+  const resetPointerSwipe = () => {
+    pointerStartX.current = null;
+    pointerStartY.current = null;
+    pointerId.current = null;
+    setDragOffset(0);
+    setIsDragging(false);
   };
 
   return (
@@ -777,26 +798,58 @@ function ProductImageCarousel({ product, hero = false }: { product: Product; her
         event.stopPropagation();
         didSwipe.current = false;
       }}
+      onPointerDown={(event) => {
+        if (images.length < 2 || event.pointerType === 'mouse') return;
+        pointerStartX.current = event.clientX;
+        pointerStartY.current = event.clientY;
+        pointerId.current = event.pointerId;
+        didSwipe.current = false;
+        setIsDragging(true);
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        if (pointerId.current !== event.pointerId || pointerStartX.current === null || pointerStartY.current === null) return;
+        const deltaX = event.clientX - pointerStartX.current;
+        const deltaY = event.clientY - pointerStartY.current;
+        if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 12) {
+          resetPointerSwipe();
+          return;
+        }
+        setDragOffset(Math.max(-72, Math.min(72, deltaX)));
+      }}
+      onPointerUp={(event) => {
+        if (pointerId.current !== event.pointerId || pointerStartX.current === null) return;
+        const deltaX = event.clientX - pointerStartX.current;
+        pointerStartX.current = null;
+        pointerStartY.current = null;
+        pointerId.current = null;
+        finishSwipe(deltaX);
+      }}
+      onPointerCancel={resetPointerSwipe}
       onTouchStart={(event) => {
+        if (pointerId.current !== null) return;
         touchStartX.current = event.touches[0]?.clientX ?? null;
         didSwipe.current = false;
       }}
       onTouchEnd={(event) => {
+        if (pointerId.current !== null) return;
         if (touchStartX.current === null) return;
         const delta = (event.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current;
         touchStartX.current = null;
-        if (Math.abs(delta) < 36) return;
-        didSwipe.current = true;
-        move(delta < 0 ? 1 : -1);
+        finishSwipe(delta);
       }}
     >
-      <div className="product-photo-carousel__track" style={{ transform: `translateX(-${activeIndex * 100}%)` }}>
+      <div
+        className={isDragging ? 'product-photo-carousel__track is-dragging' : 'product-photo-carousel__track'}
+        style={{ transform: `translateX(calc(-${activeIndex * 100}% + ${dragOffset}px))` }}
+      >
         {(images.length ? images : ['']).map((image, index) => (
           <SafeImage
             className={hero ? 'product-hero' : undefined}
             src={image}
             alt={index === 0 ? product.title : `${product.title}, фото ${index + 1}`}
             loading={hero ? undefined : 'lazy'}
+            draggable={false}
             key={`${image}-${index}`}
           />
         ))}
