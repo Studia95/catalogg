@@ -2968,6 +2968,7 @@ function RestaurantAdminShell({
   paymentSettings,
   deliverySettings,
   onOpenScreen,
+  onOpenCatalog,
   onAddDish,
   onOrderStatus,
   onOrderDelete,
@@ -2984,6 +2985,7 @@ function RestaurantAdminShell({
   paymentSettings: RestaurantPaymentSettings;
   deliverySettings: RestaurantDeliverySettings | null;
   onOpenScreen: (screen: SettingsScreen) => void;
+  onOpenCatalog: () => void;
   onAddDish: () => void;
   onOrderStatus: (order: RestaurantOrder, status: RestaurantOrderStatus, reason?: string) => void;
   onOrderDelete: (order: RestaurantOrder) => void;
@@ -3098,7 +3100,7 @@ function RestaurantAdminShell({
         <Logo compact />
         <nav aria-label="Разделы админки">
           <button className={tab === 'home' ? 'is-active' : ''} type="button" onClick={() => openTab('home')}><Home />Главная</button>
-          <button className={tab === 'dishes' ? 'is-active' : ''} type="button" onClick={() => openTab('dishes')}><Utensils />Блюда</button>
+          <button className={tab === 'dishes' ? 'is-active' : ''} type="button" onClick={() => openTab('dishes')}><Utensils />Каталог</button>
           <button className={tab === 'orders' ? 'is-active' : ''} type="button" onClick={() => openTab('orders')}><ClipboardList />Заказы</button>
           <button className={tab === 'scanner' ? 'is-active' : ''} type="button" onClick={() => openTab('scanner')}><QrCode />Сканер</button>
           <button className={tab === 'settings' ? 'is-active' : ''} type="button" onClick={() => openTab('settings')}><Settings />Настройки</button>
@@ -3162,9 +3164,10 @@ function RestaurantAdminShell({
         {tab === 'dishes' && (
           <section className="restaurant-admin__content">
             <section className="admin-section-card">
-              <h2>Блюда и каталог</h2>
-              <p>Существующее ядро каталога сохранено. Эти кнопки открывают текущие рабочие экраны.</p>
+              <h2>Каталог</h2>
+              <p>Откройте клиентский каталог в режиме ресторана: карточки можно редактировать, скрывать и менять остатки.</p>
               <div className="admin-quick-actions">
+                <button type="button" onClick={onOpenCatalog}><Utensils />Открыть каталог</button>
                 <button type="button" onClick={onAddDish}><Plus />Добавить блюдо</button>
                 <button type="button" onClick={() => onOpenScreen('settings-categories')}><Tags />Категории</button>
                 <button type="button" onClick={() => onOpenScreen('settings-stock')}><RefreshCcw />Остатки</button>
@@ -3298,7 +3301,7 @@ function RestaurantAdminShell({
 
       <nav className="restaurant-admin-nav" aria-label="Админка ресторана">
         <button className={tab === 'home' ? 'is-active' : ''} type="button" onClick={() => openTab('home')}><Home />Главная</button>
-        <button className={tab === 'dishes' ? 'is-active' : ''} type="button" onClick={() => openTab('dishes')}><Utensils />Блюда</button>
+        <button className={tab === 'dishes' ? 'is-active' : ''} type="button" onClick={() => openTab('dishes')}><Utensils />Каталог</button>
         <button className={tab === 'orders' ? 'is-active' : ''} type="button" onClick={() => openTab('orders')}><ClipboardList />Заказы</button>
         <button className={tab === 'scanner' ? 'is-active' : ''} type="button" onClick={() => openTab('scanner')}><QrCode />Сканер</button>
         <button className={tab === 'settings' ? 'is-active' : ''} type="button" onClick={() => openTab('settings')}><Settings />Настройки</button>
@@ -3790,6 +3793,7 @@ function ProfileSettings({
   const [draft, setDraft] = useState(restaurant);
   const [error, setError] = useState('');
   const [isLocating, setIsLocating] = useState(false);
+  const [isRestaurantMapOpen, setIsRestaurantMapOpen] = useState(false);
 
   useEffect(() => {
     setDraft(restaurant);
@@ -3855,14 +3859,18 @@ function ProfileSettings({
     setError('Сохранено');
   };
 
-  const applyCoordinates = (lat: number, lng: number) => {
+  const applyCoordinates = (lat: number, lng: number, replaceMapLink = false) => {
     setDraft((current) => ({
       ...current,
       lat,
       lng,
-      mapLink: current.mapLink || buildYandexMapLink(lat, lng)
+      mapLink: replaceMapLink || !current.mapLink ? buildYandexMapLink(lat, lng) : current.mapLink
     }));
     setError('');
+  };
+
+  const applyManualRestaurantPoint = ({ lat, lng }: { lat: number; lng: number }) => {
+    applyCoordinates(Number(lat.toFixed(7)), Number(lng.toFixed(7)), true);
   };
 
   const applyCoordinatesFromMapLink = () => {
@@ -3983,9 +3991,9 @@ function ProfileSettings({
           />
         </label>
         <div className="profile-location-tools">
-          <button type="button" onClick={locateRestaurant} disabled={isLocating}>
+          <button type="button" onClick={() => setIsRestaurantMapOpen(true)} disabled={isLocating}>
             <LocateFixed />
-            {isLocating ? 'Определяем...' : 'Определить местоположение'}
+            Определить местоположение
           </button>
           <button type="button" onClick={applyCoordinatesFromMapLink}>
             <MapPin />
@@ -4015,6 +4023,36 @@ function ProfileSettings({
         <small className="profile-location-note">
           Координаты используются в нашей карте и в маршруте до ресторана. Яндекс-ссылка нужна для внешней навигации.
         </small>
+        {isRestaurantMapOpen && (
+          <div className="modal-backdrop delivery-map-backdrop">
+            <div className="delivery-map-sheet">
+              <button
+                className="flow-modal__close"
+                type="button"
+                onClick={() => setIsRestaurantMapOpen(false)}
+                aria-label="Закрыть карту"
+              >
+                <X />
+              </button>
+              <h2>Точка ресторана</h2>
+              <DeliveryMapPicker
+                lat={draft.lat ?? DEFAULT_DELIVERY_LOCATION.lat}
+                lng={draft.lng ?? DEFAULT_DELIVERY_LOCATION.lng}
+                isLocating={isLocating}
+                error={error === 'Сохранено' ? '' : error}
+                onLocate={locateRestaurant}
+                onChange={applyManualRestaurantPoint}
+                onSearchSelect={(result) => {
+                  setDraft((current) => ({
+                    ...current,
+                    address: current.address || result.label
+                  }));
+                }}
+                onDone={() => setIsRestaurantMapOpen(false)}
+              />
+            </div>
+          </div>
+        )}
         {error && <p className={error === 'Сохранено' ? 'settings-status' : 'settings-error'}>{error}</p>}
         <button className="primary-wide" type="submit">
           Сохранить изменения
@@ -5472,13 +5510,18 @@ function AppContent({
   }, [cartCount, cartUpdatedAt, clearCart]);
 
   useEffect(() => {
+    if (routeSection === 'dishes' && isAdmin) {
+      setCatalogCategory('all');
+      setScreen('catalog');
+      return;
+    }
     if (routeSection === 'dashboard' || routeSection === 'orders' || routeSection === 'dishes' || routeSection === 'settings' || routeSection === 'scanner') {
       setScreen('admin-home');
     }
     if (routeSection === 'payments') {
       setScreen('settings-payments');
     }
-  }, [routeSection]);
+  }, [isAdmin, routeSection]);
 
   useEffect(() => {
     if (data?.theme) {
@@ -5992,6 +6035,13 @@ function AppContent({
       paymentSettings={paymentSettings}
       deliverySettings={deliverySettings}
       onOpenScreen={setScreen}
+      onOpenCatalog={() => {
+        setCatalogCategory('all');
+        setScreen('catalog');
+        const targetPath = `/${catalogSlug}/dishes`;
+        rememberPwaResumePath(targetPath);
+        navigate(targetPath, { replace: true });
+      }}
       onAddDish={() => setAdminEditor('dish')}
       onOrderStatus={changeOrderStatus}
       onOrderDelete={(order) => changeOrderStatus(order, 'cancelled', 'restaurant_deleted')}
@@ -6061,10 +6111,16 @@ function AppContent({
         renderSettings()
       ) : (
         <>
-          <TopBar
+            <TopBar
             title={screen === 'product' ? undefined : title}
             canBack={screen !== 'home'}
-            onBack={() => setScreen('home')}
+            onBack={() => {
+              if (isAdmin && routeSection === 'dishes') {
+                openRestaurantAdminPath('admin-home');
+                return;
+              }
+              setScreen('home');
+            }}
             onPlatformBack={() => navigate('/')}
             onSearch={screen === 'home' ? () => setScreen('catalog') : undefined}
             onCart={() => setIsCartOpen(true)}
