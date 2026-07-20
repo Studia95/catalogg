@@ -68,6 +68,7 @@ import { Toaster, toast } from 'sonner';
 import { cabins as demoCabins, categories as demoCategories, products as demoProducts, restaurant as demoRestaurant } from '../data/catalog';
 import type { Cabin, CatalogTag, Category, OrderMode, Product, Restaurant, ThemeSettings } from '../entities/models';
 import { DishEditorPage } from '../features/dish-editor/DishEditorPage';
+import { ScannerPage } from '../pages/scanner/ScannerPage';
 import {
   CART_TTL_MS,
   isSauceProduct,
@@ -3229,16 +3230,7 @@ function RestaurantAdminShell({
 
         {tab === 'scanner' && (
           <section className="restaurant-admin__content">
-            <section className="admin-section-card">
-              <h2>Сканер QR</h2>
-              <p>Открывает ресторан, заказ, подтверждение курьера или экран оплаты по QR-коду.</p>
-              <div className="admin-quick-actions">
-                <a className="admin-action-link" href={`#/${catalogSlug}/scanner`}><QrCode />Открыть сканер</a>
-                <button type="button" onClick={() => window.location.hash = `/${catalogSlug}`}><Store />Каталог</button>
-                <button type="button" onClick={() => openTab('orders')}><ClipboardList />Заказы</button>
-                <button type="button" onClick={() => onOpenScreen('settings-payments')}><CreditCard />Платежи</button>
-              </div>
-            </section>
+            <ScannerPage embedded />
           </section>
         )}
       </div>

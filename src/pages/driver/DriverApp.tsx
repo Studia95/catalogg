@@ -41,7 +41,7 @@ import {
   demoDriverId,
   getAuthenticatedDriverId,
   getDriverDashboard,
-  saveDriverServiceSettlements,
+  saveDriverProfile,
   signOutDriver,
   setDriverAvailability,
   subscribeToDriverRealtime,
@@ -245,6 +245,7 @@ const emptySnapshot: DriverDashboardSnapshot = {
     phone: '',
     vehicleInfo: '',
     carNumber: '',
+    payoutDetails: '',
     photoUrl: '',
     serviceSettlements: [],
     rating: 5,
@@ -556,7 +557,7 @@ export function DriverApp() {
         ) : route === 'earnings' ? (
           <DriverEarningsScreen snapshot={snapshot} />
         ) : route === 'settings' ? (
-          <DriverSettingsScreen profile={profile} />
+          <DriverSettingsScreen profile={profile} onProfileSaved={loadDashboard} />
         ) : route === 'support' ? (
           <DriverSupportScreen />
         ) : (
@@ -1311,8 +1312,8 @@ function DriverProfileScreen({
       <div className="driver-profile-menu">
         <DriverProfileRow icon={<Car />} label="Транспорт" value={`${profile.vehicleInfo} · ${profile.carNumber}`} />
         <DriverProfileRow icon={<ShieldCheck />} label="Документы" value="Проверено" />
-        <DriverProfileRow icon={<CalendarDays />} label="Статистика" value={`${snapshot.stats.ordersToday} заказов`} />
-        <DriverProfileRow icon={<CircleDollarSign />} label="Баланс" value={formatPrice(snapshot.stats.earningsToday)} />
+        <DriverProfileRow icon={<CalendarDays />} label="Статистика" value={`${snapshot.stats.ordersToday} заказов`} to="/driver/earnings" />
+        <DriverProfileRow icon={<CircleDollarSign />} label="Баланс" value={formatPrice(snapshot.stats.earningsToday)} to="/driver/earnings" />
         {menu.map(({ to, label, Icon }) => (
           <Link to={to} key={to}>
             <Icon />
@@ -1325,20 +1326,29 @@ function DriverProfileScreen({
   );
 }
 
-function DriverProfileRow({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
-  return (
-    <article>
+function DriverProfileRow({ icon, label, value, to }: { icon: ReactNode; label: string; value: string; to?: string }) {
+  const content = (
+    <>
       {icon}
       <span>{label}</span>
       <b>{value}</b>
-    </article>
+      {to && <ChevronRight />}
+    </>
   );
+
+  return to ? <Link to={to}>{content}</Link> : <article>{content}</article>;
 }
 
-function DriverSettingsScreen({ profile }: { profile: DriverProfile }) {
+function DriverSettingsScreen({ profile, onProfileSaved }: { profile: DriverProfile; onProfileSaved: () => Promise<void> }) {
   const navigate = useNavigate();
   const clearLocalActiveDelivery = useDriverStore((state) => state.clearLocalActiveDelivery);
+  const [name, setName] = useState(profile.name);
+  const [phone, setPhone] = useState(profile.phone);
+  const [vehicleInfo, setVehicleInfo] = useState(profile.vehicleInfo);
+  const [carNumber, setCarNumber] = useState(profile.carNumber);
+  const [payoutDetails, setPayoutDetails] = useState(profile.payoutDetails);
   const [serviceSettlementsText, setServiceSettlementsText] = useState(profile.serviceSettlements.join('\n'));
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [isSavingSettlements, setIsSavingSettlements] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
@@ -1357,8 +1367,36 @@ function DriverSettingsScreen({ profile }: { profile: DriverProfile }) {
   }, []);
 
   useEffect(() => {
+    setName(profile.name);
+    setPhone(profile.phone);
+    setVehicleInfo(profile.vehicleInfo);
+    setCarNumber(profile.carNumber);
+    setPayoutDetails(profile.payoutDetails);
     setServiceSettlementsText(profile.serviceSettlements.join('\n'));
-  }, [profile.serviceSettlements]);
+  }, [profile.carNumber, profile.name, profile.payoutDetails, profile.phone, profile.serviceSettlements, profile.vehicleInfo]);
+
+  const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+    setIsSavingProfile(true);
+    try {
+      await saveDriverProfile({
+        name,
+        phone,
+        vehicleInfo,
+        carNumber,
+        payoutDetails,
+        serviceSettlements: parseDriverSettlements(serviceSettlementsText)
+      });
+      setMessage('Профиль водителя сохранён');
+      await onProfileSaved();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить профиль водителя');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   const saveSettlements = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1366,8 +1404,16 @@ function DriverSettingsScreen({ profile }: { profile: DriverProfile }) {
     setMessage('');
     setIsSavingSettlements(true);
     try {
-      await saveDriverServiceSettlements(profile.id, parseDriverSettlements(serviceSettlementsText));
+      await saveDriverProfile({
+        name,
+        phone,
+        vehicleInfo,
+        carNumber,
+        payoutDetails,
+        serviceSettlements: parseDriverSettlements(serviceSettlementsText),
+      });
       setMessage('Места работы сохранены');
+      await onProfileSaved();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить места работы');
     } finally {
@@ -1400,18 +1446,27 @@ function DriverSettingsScreen({ profile }: { profile: DriverProfile }) {
       <DriverHeader title="Настройки" />
       {message && <p className="driver-success">{message}</p>}
       {error && <p className="driver-error">{error}</p>}
-      <div className="driver-profile-menu">
-        <DriverProfileRow icon={<User />} label="Имя" value={profile.name} />
-        <DriverProfileRow icon={<Phone />} label="Телефон" value={profile.phone} />
-        <DriverProfileRow icon={<Car />} label="Авто" value={profile.vehicleInfo} />
-        <DriverProfileRow
-          icon={<MapPin />}
-          label="Места работы"
-          value={profile.serviceSettlements.length > 0 ? profile.serviceSettlements.join(', ') : 'Не выбраны'}
-        />
-        <DriverProfileRow icon={<WalletCards />} label="Вывод средств" value="Карта / счёт" />
-      </div>
-      <form className="driver-settings-form" onSubmit={saveSettlements}>
+      <form className="driver-settings-form" onSubmit={saveProfile}>
+        <label>
+          Имя
+          <input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" />
+        </label>
+        <label>
+          Телефон
+          <input value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" inputMode="tel" />
+        </label>
+        <label>
+          Авто
+          <input value={vehicleInfo} onChange={(event) => setVehicleInfo(event.target.value)} placeholder="Марка и модель" />
+        </label>
+        <label>
+          Госномер
+          <input value={carNumber} onChange={(event) => setCarNumber(event.target.value)} placeholder="A123BC 95" />
+        </label>
+        <label>
+          Вывод средств
+          <input value={payoutDetails} onChange={(event) => setPayoutDetails(event.target.value)} placeholder="Карта / счёт" />
+        </label>
         <label>
           Сёла и города, где работаете
           <select
@@ -1424,8 +1479,13 @@ function DriverSettingsScreen({ profile }: { profile: DriverProfile }) {
           </select>
           {directorySettlements.length === 0 && <small>Суперадмин ещё не добавил населённые пункты.</small>}
         </label>
-        <button className="driver-primary" type="submit" disabled={isSavingSettlements}>
-          {isSavingSettlements ? 'Сохраняем...' : 'Сохранить места работы'}
+        <button className="driver-primary" type="submit" disabled={isSavingProfile}>
+          {isSavingProfile ? 'Сохраняем...' : 'Сохранить профиль'}
+        </button>
+      </form>
+      <form className="driver-settings-form" onSubmit={saveSettlements}>
+        <button className="driver-secondary" type="submit" disabled={isSavingSettlements}>
+          {isSavingSettlements ? 'Сохраняем...' : 'Сохранить только места работы'}
         </button>
       </form>
       <form className="driver-settings-form" onSubmit={savePassword}>
@@ -1448,9 +1508,9 @@ function DriverSettingsScreen({ profile }: { profile: DriverProfile }) {
       <div className="driver-profile-menu">
         <button
           type="button"
-          onClick={() => {
+          onClick={async () => {
             clearLocalActiveDelivery();
-            void signOutDriver();
+            await signOutDriver();
             navigate('/login', { replace: true });
           }}
         >

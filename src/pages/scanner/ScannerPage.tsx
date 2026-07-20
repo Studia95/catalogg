@@ -62,7 +62,7 @@ function scanVideoFrame(video: HTMLVideoElement, canvas: HTMLCanvasElement | nul
   return jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' })?.data ?? '';
 }
 
-export function ScannerPage() {
+export function ScannerPage({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate();
   const { slug = '' } = useParams();
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -201,8 +201,10 @@ export function ScannerPage() {
     };
   }, [handleParsed, scannerKey]);
 
+  const ScannerRoot = embedded ? 'section' : 'main';
+
   return (
-    <main className="scanner-page">
+    <ScannerRoot className={`scanner-page${embedded ? ' scanner-page--embedded' : ''}`}>
       <section className={`scanner-camera scanner-camera--${scanState}`}>
         <video ref={videoRef} playsInline muted />
         <canvas ref={canvasRef} aria-hidden="true" />
@@ -231,6 +233,6 @@ export function ScannerPage() {
           Повторить сканирование
         </button>
       </section>
-    </main>
+    </ScannerRoot>
   );
 }

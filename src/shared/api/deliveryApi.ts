@@ -10,7 +10,7 @@ import {
 import { clearPwaResumePath } from '../pwaSession';
 import { parseRestaurantCoordinatesFromMapLink } from '../restaurantLocation';
 import { supabase } from '../supabase';
-import { getSupabaseAuthStorageKey } from '../supabaseAuthScope';
+import { copySupabaseSessionToScope, getSupabaseAuthStorageKey } from '../supabaseAuthScope';
 
 export type DriverProfile = {
   readonly id: string;
@@ -18,6 +18,7 @@ export type DriverProfile = {
   readonly phone: string;
   readonly vehicleInfo: string;
   readonly carNumber: string;
+  readonly payoutDetails: string;
   readonly photoUrl: string;
   readonly serviceSettlements: readonly string[];
   readonly rating: number;
@@ -136,6 +137,7 @@ type DriverRow = {
   phone: string | null;
   vehicle_info: string | null;
   car_number: string | null;
+  payout_details?: string | null;
   photo_url: string | null;
   service_settlements?: string[] | null;
   rating: number | null;
@@ -225,6 +227,7 @@ const demoProfile: DriverProfile = {
   phone: '+7 928 123-45-67',
   vehicleInfo: 'Hyundai Solaris',
   carNumber: 'A123BC 95',
+  payoutDetails: 'Карта / счёт',
   photoUrl: '',
   serviceSettlements: ['Грозный'],
   rating: 4.9,
@@ -457,6 +460,7 @@ const rowToDriverProfile = (row: DriverRow | null): DriverProfile => ({
   phone: row?.phone ?? demoProfile.phone,
   vehicleInfo: row?.vehicle_info ?? demoProfile.vehicleInfo,
   carNumber: row?.car_number ?? demoProfile.carNumber,
+  payoutDetails: row?.payout_details ?? demoProfile.payoutDetails,
   photoUrl: row?.photo_url ?? '',
   serviceSettlements: Array.isArray(row?.service_settlements) ? row.service_settlements : demoProfile.serviceSettlements,
   rating: row?.rating ?? demoProfile.rating,
@@ -484,13 +488,19 @@ const rowToEarning = (row: EarningRow): DriverEarning => {
 
 export const getAuthenticatedDriverId = async (): Promise<string | null> => {
   if (!supabase) return demoDriverId;
-  const { data: rpcDriverId, error: rpcDriverError } = await withDriverRequestTimeout(
-    supabase.rpc('current_driver_id'),
-    'Не удалось проверить вход водителя.',
-    6_000
-  );
-  if (!rpcDriverError) {
-    return typeof rpcDriverId === 'string' && rpcDriverId ? rpcDriverId : null;
+  copySupabaseSessionToScope('driver');
+
+  try {
+    const { data: rpcDriverId, error: rpcDriverError } = await withDriverRequestTimeout(
+      supabase.rpc('current_driver_id'),
+      'Не удалось проверить вход водителя.',
+      10_000
+    );
+    if (!rpcDriverError) {
+      return typeof rpcDriverId === 'string' && rpcDriverId ? rpcDriverId : null;
+    }
+  } catch {
+    // A slow RPC must not look like a logout. Fall back to the restored Supabase session below.
   }
 
   const { data: sessionData, error: sessionError } = await withDriverRequestTimeout(
@@ -500,9 +510,28 @@ export const getAuthenticatedDriverId = async (): Promise<string | null> => {
   );
   const authUser = sessionData.session?.user;
   if (sessionError || !authUser?.id) return null;
+  copySupabaseSessionToScope('driver');
   const metadataDriverId =
     typeof authUser.app_metadata?.driver_id === 'string' ? authUser.app_metadata.driver_id : '';
-  return metadataDriverId || null;
+  if (metadataDriverId) return metadataDriverId;
+
+  const email = authUser.email?.trim().toLowerCase();
+  const fallbackFilters = [`user_id.eq.${authUser.id}`];
+  if (email) {
+    fallbackFilters.push(`email.eq.${email}`);
+  }
+  const { data: driverRow, error: driverError } = await withDriverRequestTimeout(
+    supabase
+      .from('drivers')
+      .select('id')
+      .or(fallbackFilters.join(','))
+      .maybeSingle(),
+    'Не удалось проверить профиль водителя.',
+    10_000
+  );
+
+  if (driverError) return null;
+  return typeof driverRow?.id === 'string' ? driverRow.id : null;
 };
 
 const resolveCurrentDriverId = async (fallbackDriverId: string) => {
@@ -518,7 +547,7 @@ export async function getDriverDashboard(driverId = demoDriverId): Promise<Drive
     Promise.all([
       supabase
         .from('drivers')
-        .select('id, name, phone, vehicle_info, car_number, photo_url, service_settlements, rating, status, is_online, last_lat, last_lng, last_location_at')
+        .select('id, name, phone, vehicle_info, car_number, payout_details, photo_url, service_settlements, rating, status, is_online, last_lat, last_lng, last_location_at')
         .eq('id', resolvedDriverId)
         .maybeSingle(),
       supabase.rpc('get_driver_delivery_offers'),
@@ -530,7 +559,7 @@ export async function getDriverDashboard(driverId = demoDriverId): Promise<Drive
         .limit(30)
     ]),
     'Не удалось загрузить данные водителя. Повторите обновление.',
-    9_000
+    15_000
   );
 
   if (driverResult.error) throw driverResult.error;
@@ -668,7 +697,7 @@ export async function setDriverAvailability(isOnline: boolean) {
       next_is_online: isOnline
     }),
     'Не удалось изменить онлайн-статус. Проверьте связь и повторите.',
-    6_000
+    15_000
   );
 
   if (error) {
@@ -727,6 +756,34 @@ export async function saveDriverServiceSettlements(driverId: string, serviceSett
   if (error) throw error;
 }
 
+export type DriverProfileUpdate = {
+  readonly name: string;
+  readonly phone: string;
+  readonly vehicleInfo: string;
+  readonly carNumber: string;
+  readonly payoutDetails: string;
+  readonly serviceSettlements: readonly string[];
+};
+
+export async function saveDriverProfile(update: DriverProfileUpdate) {
+  if (!supabase) return;
+
+  const { error } = await withDriverRequestTimeout(
+    supabase.rpc('update_current_driver_profile', {
+      next_name: update.name.trim(),
+      next_phone: update.phone.trim(),
+      next_vehicle_info: update.vehicleInfo.trim(),
+      next_car_number: update.carNumber.trim(),
+      next_payout_details: update.payoutDetails.trim(),
+      next_service_settlements: [...update.serviceSettlements]
+    }),
+    'Не удалось сохранить профиль водителя. Проверьте связь и повторите.',
+    15_000
+  );
+
+  if (error) throw error;
+}
+
 export async function changeDriverPassword(newPassword: string) {
   if (!supabase) return;
 
@@ -742,7 +799,7 @@ export async function acceptDeliveryOffer(deliveryId: string) {
       target_delivery_id: deliveryId
     }),
     'Не удалось принять заказ. Проверьте связь и повторите.',
-    7_000
+    15_000
   );
 
   if (!error) return;
@@ -765,7 +822,7 @@ export async function updateDeliveryProgress(deliveryId: string, status: Deliver
       next_status: status
     }),
     'Не удалось обновить статус. Проверьте связь и повторите.',
-    7_000
+    15_000
   );
 
   if (!error) return;
@@ -790,7 +847,7 @@ export async function completeDeliveryProgress(deliveryId: string) {
       target_delivery_id: deliveryId
     }),
     'Не удалось завершить доставку. Проверьте связь и повторите.',
-    7_000
+    15_000
   );
 
   if (error) throw error;
@@ -816,7 +873,7 @@ export async function confirmDriverPickup(deliveryId: string): Promise<boolean> 
       target_delivery_id: deliveryId
     }),
     'Не удалось подтвердить получение заказа.',
-    7_000
+    15_000
   );
 
   if (error) throw error;
