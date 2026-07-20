@@ -477,7 +477,9 @@ export function DriverApp() {
 
   useEffect(() => {
     if (!authChecked || !hasDriverAccess || route !== 'active') return undefined;
-    const intervalId = window.setInterval(() => void loadDashboard(), 5_000);
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadDashboard();
+    }, 20_000);
     return () => window.clearInterval(intervalId);
   }, [authChecked, hasDriverAccess, loadDashboard, route]);
 
@@ -1191,6 +1193,9 @@ function DriverMapScreen({ delivery, profile }: { delivery: DeliveryOffer | null
   const mapData = delivery ? getDriverDeliveryMapData(delivery) : null;
   const completeMapData = hasCompleteDriverDeliveryMapData(mapData) ? mapData : null;
   const displayDeliveryAddress = delivery ? formatDriverDeliveryAddress(delivery.deliveryAddress) : '';
+  const currentDriverPoint = profile.lastLat !== null && profile.lastLng !== null
+    ? { lat: profile.lastLat, lng: profile.lastLng, label: 'Моё местоположение' }
+    : null;
   const nextAddress = navigationStage?.activeLeg === 'client'
     ? displayDeliveryAddress
     : delivery?.restaurantAddress;
@@ -1227,15 +1232,27 @@ function DriverMapScreen({ delivery, profile }: { delivery: DeliveryOffer | null
                 details: [delivery.clientPhone, delivery.deliveryComment].filter((detail): detail is string => Boolean(detail))
               }}
               routePoints={currentRoutePoints}
-              followDriverHeading={profile.lastLat !== null && profile.lastLng !== null}
-              driver={profile.lastLat !== null && profile.lastLng !== null
-                ? { lat: profile.lastLat, lng: profile.lastLng, label: 'Моё местоположение' }
-                : null}
+              followDriverHeading={currentDriverPoint !== null}
+              driver={currentDriverPoint}
             />
           ) : <DriverMapUnavailable tall message={getDriverMapUnavailableMessage(mapData)} />}
         </>
       )}
-      {!delivery && <DriverMapUnavailable tall message="Выберите заказ, чтобы открыть его маршрут" />}
+      {!delivery && (
+        <>
+          <DeliveryTrackingMap
+            className="driver-tracking-map"
+            initialStyle="satellite"
+            enableSearch
+            driver={currentDriverPoint}
+            followDriverHeading={currentDriverPoint !== null}
+          />
+          <section className="driver-order-panel">
+            <DriverRouteLine icon={<MapPin />} label="Следующая точка" value="Нет активного заказа" />
+            <DriverRouteLine icon={<Navigation />} label="Маршрут" value="Откройте заказ, чтобы построить доставку" />
+          </section>
+        </>
+      )}
       {delivery && (
         <section className="driver-order-panel">
           <DriverRouteLine icon={<MapPin />} label="Следующая точка" value={nextAddress ?? ''} />

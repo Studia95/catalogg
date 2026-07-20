@@ -327,6 +327,24 @@ const withDriverRequestTimeout = async <T,>(
   }
 };
 
+type DriverSoftQueryResult<T> = {
+  readonly data: T | null;
+  readonly error: unknown | null;
+};
+
+const runSoftDriverQuery = async <T,>(
+  request: PromiseLike<{ data: T | null; error: unknown | null }>,
+  message: string,
+  timeoutMs = 8_000
+): Promise<DriverSoftQueryResult<T>> => {
+  try {
+    const result = await withDriverRequestTimeout(request, message, timeoutMs);
+    return { data: result.data, error: result.error ?? null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
 const buildDemoSnapshot = (profile: DriverProfile = demoProfile): DriverDashboardSnapshot => ({
   profile,
   activeDelivery: null,
@@ -543,30 +561,36 @@ export async function getDriverDashboard(driverId = demoDriverId): Promise<Drive
   if (!supabase) return buildDemoSnapshot();
 
   const resolvedDriverId = await resolveCurrentDriverId(driverId);
-  const [driverResult, deliveriesResult, earningsResult] = await withDriverRequestTimeout(
-    Promise.all([
-      supabase
-        .from('drivers')
-        .select('id, name, phone, vehicle_info, car_number, payout_details, photo_url, service_settlements, rating, status, is_online, last_lat, last_lng, last_location_at')
-        .eq('id', resolvedDriverId)
-        .maybeSingle(),
-      supabase.rpc('get_driver_delivery_offers'),
-      supabase
-        .from('earnings')
-        .select('id, delivery_id, amount, net_amount, created_at, deliveries(id, order_id, orders(id, restaurants(name)))')
-        .eq('driver_id', resolvedDriverId)
-        .order('created_at', { ascending: false })
-        .limit(30)
-    ]),
+  const driverResult = await withDriverRequestTimeout(
+    supabase
+      .from('drivers')
+      .select('id, name, phone, vehicle_info, car_number, payout_details, photo_url, service_settlements, rating, status, is_online, last_lat, last_lng, last_location_at')
+      .eq('id', resolvedDriverId)
+      .maybeSingle(),
     'Не удалось загрузить данные водителя. Повторите обновление.',
-    15_000
+    10_000
   );
 
   if (driverResult.error) throw driverResult.error;
   const profile = rowToDriverProfile(driverResult.data as DriverRow | null);
 
-  if (deliveriesResult.error) throw deliveriesResult.error;
-  if (earningsResult.error) throw earningsResult.error;
+  const [deliveriesResult, earningsResult] = await Promise.all([
+    runSoftDriverQuery<DeliveryRow[]>(
+      supabase.rpc('get_driver_delivery_offers') as PromiseLike<{ data: DeliveryRow[] | null; error: unknown | null }>,
+      'Не удалось загрузить доставки водителя.',
+      10_000
+    ),
+    runSoftDriverQuery<EarningRow[]>(
+      supabase
+        .from('earnings')
+        .select('id, delivery_id, amount, net_amount, created_at, deliveries(id, order_id, orders(id, restaurants(name)))')
+        .eq('driver_id', resolvedDriverId)
+        .order('created_at', { ascending: false })
+        .limit(30) as PromiseLike<{ data: EarningRow[] | null; error: unknown | null }>,
+      'Не удалось загрузить заработок водителя.',
+      8_000
+    )
+  ]);
 
   let offers = ((deliveriesResult.data ?? []) as unknown as DeliveryRow[])
     .map((row) => rowToOffer(row, profile.id))

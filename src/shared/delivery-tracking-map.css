@@ -109,7 +109,7 @@
   position: absolute;
   inset: 0;
   transform-origin: center;
-  transition: transform 220ms ease;
+  transition: transform 680ms cubic-bezier(.2, .8, .2, 1);
 }
 
 .delivery-tracking-map__controls {
@@ -142,6 +142,7 @@
   position: absolute;
   width: 256px;
   height: 256px;
+  transition: left 520ms cubic-bezier(.2, .8, .2, 1), top 520ms cubic-bezier(.2, .8, .2, 1);
 }
 
 .delivery-tracking-map__tile img {
@@ -173,6 +174,7 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+  transition: opacity 220ms ease;
 }
 
 .delivery-tracking-map__marker {
@@ -189,7 +191,16 @@
   color: #ffffff;
   appearance: none;
   transform: translate(-50%, -90%) rotate(-45deg);
-  transition: transform 160ms ease;
+  transition:
+    left 520ms cubic-bezier(.2, .8, .2, 1),
+    top 520ms cubic-bezier(.2, .8, .2, 1),
+    transform 220ms ease;
+}
+
+.delivery-tracking-map__canvas.is-dragging .delivery-tracking-map__rotator,
+.delivery-tracking-map__canvas.is-dragging .delivery-tracking-map__tile,
+.delivery-tracking-map__canvas.is-dragging .delivery-tracking-map__marker {
+  transition: none;
 }
 
 .delivery-tracking-map__marker:hover {
