@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { getSupabaseAuthScope, getSupabaseAuthStorageKeyForRedirect } from './supabaseAuthScope';
+import {
+  getSupabaseAuthFallbackStorageKeys,
+  getSupabaseAuthScope,
+  getSupabaseAuthStorageKeyForRedirect
+} from './supabaseAuthScope';
 
 describe('Supabase auth scopes', () => {
   it('keeps driver, restaurant and platform admin sessions independent', () => {
@@ -15,5 +19,16 @@ describe('Supabase auth scopes', () => {
     assert.equal(getSupabaseAuthScope('#/mangal'), 'client');
     assert.equal(getSupabaseAuthScope('#/login'), 'login');
     assert.equal(getSupabaseAuthStorageKeyForRedirect('/driver'), 'waycatalog-auth-driver');
+  });
+
+  it('can recover a missing scoped session from other known Supabase session keys', () => {
+    assert.deepEqual(getSupabaseAuthFallbackStorageKeys('driver'), [
+      'waycatalog-auth-driver',
+      'waycatalog-auth-login',
+      'waycatalog-auth-restaurant-admin',
+      'waycatalog-auth-platform-admin',
+      'waycatalog-auth-client',
+      'waycatalog-auth'
+    ]);
   });
 });

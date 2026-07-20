@@ -1,5 +1,7 @@
 export type SupabaseAuthScope = 'client' | 'driver' | 'restaurant-admin' | 'platform-admin' | 'login';
 
+const authScopes: readonly SupabaseAuthScope[] = ['client', 'driver', 'restaurant-admin', 'platform-admin', 'login'];
+
 const restaurantAdminSections = new Set([
   'dashboard',
   'dishes',
@@ -41,3 +43,27 @@ export const getSupabaseAuthStorageKey = (scope: SupabaseAuthScope) => `waycatal
 
 export const getSupabaseAuthStorageKeyForRedirect = (redirect: string) =>
   getSupabaseAuthStorageKey(getSupabaseAuthScope(redirect));
+
+export const getSupabaseAuthFallbackStorageKeys = (scope: SupabaseAuthScope) => {
+  const preferredScopes: readonly SupabaseAuthScope[] =
+    scope === 'client'
+      ? ['client', 'login', 'restaurant-admin', 'driver', 'platform-admin']
+      : [scope, 'login', ...authScopes.filter((candidate) => candidate !== scope && candidate !== 'login' && candidate !== 'client'), 'client'];
+
+  return [...new Set(preferredScopes.map(getSupabaseAuthStorageKey)), 'waycatalog-auth'];
+};
+
+export const copySupabaseSessionToScope = (scope: SupabaseAuthScope, serializedSession?: string | null) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const targetKey = getSupabaseAuthStorageKey(scope);
+    const session =
+      serializedSession ??
+      getSupabaseAuthFallbackStorageKeys(scope)
+        .map((key) => window.localStorage.getItem(key))
+        .find(Boolean);
+    if (session) window.localStorage.setItem(targetKey, session);
+  } catch {
+    // Supabase will keep using the in-memory session if storage is unavailable.
+  }
+};

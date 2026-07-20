@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
+import { copySupabaseSessionToScope } from '../supabaseAuthScope';
 import { clearPwaResumePath } from '../pwaSession';
 
 export type PlatformAdminAccess = {
@@ -46,6 +47,7 @@ export async function signInPlatformAdmin(email: string, password: string) {
 
   if (error) throw new Error(error.message);
 
+  copySupabaseSessionToScope('platform-admin');
   return getPlatformAdminAccess(data.session);
 }
 

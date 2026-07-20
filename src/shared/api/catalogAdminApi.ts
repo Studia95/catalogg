@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
+import { copySupabaseSessionToScope } from '../supabaseAuthScope';
 import { clearPwaResumePath } from '../pwaSession';
 
 export type CatalogAdminAccess = {
@@ -165,6 +166,7 @@ export async function signInCatalogAdmin(slug: string, email: string, password: 
   });
 
   if (error) throw new Error(error.message);
+  copySupabaseSessionToScope('restaurant-admin');
   return getCatalogAdminAccess(slug, data.session);
 }
 

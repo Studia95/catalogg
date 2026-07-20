@@ -5,7 +5,9 @@ import { catalogAccessAllowsAdmin } from './adminSession';
 import { clearPwaResumePath } from './pwaSession';
 import { makeRestaurantCoordinates, parseRestaurantCoordinatesFromMapLink } from './restaurantLocation';
 import {
+  copySupabaseSessionToScope,
   getSupabaseAuthScope,
+  getSupabaseAuthFallbackStorageKeys,
   getSupabaseAuthStorageKey,
   getSupabaseAuthStorageKeyForRedirect
 } from './supabaseAuthScope';
@@ -27,8 +29,10 @@ const currentAuthStorageKey = getSupabaseAuthStorageKey(currentAuthScope);
 if (typeof window !== 'undefined') {
   try {
     if (!window.localStorage.getItem(currentAuthStorageKey)) {
-      const legacySession = window.localStorage.getItem('waycatalog-auth');
-      if (legacySession) window.localStorage.setItem(currentAuthStorageKey, legacySession);
+      const fallbackSession = getSupabaseAuthFallbackStorageKeys(currentAuthScope)
+        .map((key) => window.localStorage.getItem(key))
+        .find(Boolean);
+      if (fallbackSession) window.localStorage.setItem(currentAuthStorageKey, fallbackSession);
     }
   } catch {
     // Supabase falls back to an in-memory session when browser storage is unavailable.
@@ -340,6 +344,7 @@ export async function signInAdmin(email: string, password: string, catalogSlug?:
   if (!isAdmin) {
     await supabase.auth.signOut();
   }
+  if (isAdmin) copySupabaseSessionToScope('restaurant-admin');
   return isAdmin;
 }
 
@@ -610,7 +615,6 @@ export async function saveProductToSupabase(product: Product) {
     return;
   }
   const legacyProduct = { ...product };
-  delete legacyProduct.image_urls;
   await throwOnError(supabase.from('product').upsert(legacyProduct, { onConflict: 'id' }));
 }
 
@@ -625,7 +629,6 @@ export async function updateProductInSupabase(productId: string, patch: Partial<
     return;
   }
   const legacyPatch = { ...patch };
-  delete legacyPatch.image_urls;
   await throwOnError(supabase.from('product').update(legacyPatch).eq('id', productId));
 }
 

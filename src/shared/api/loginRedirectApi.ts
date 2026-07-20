@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import { preserveSupabaseSessionForRedirect, supabase } from '../supabase';
+import { copySupabaseSessionToScope, getSupabaseAuthScope } from '../supabaseAuthScope';
 import { getAuthenticatedDriverId } from './deliveryApi';
 
 const getClientCatalogSlug = (client: { catalogs?: { slug?: string } | { slug?: string }[] | null } | null) => {
@@ -97,6 +98,9 @@ export async function resolveLoginRedirect(email: string, password: string) {
   if (error) throw new Error(error.message);
 
   const redirect = await resolveSessionRedirect(email, data.session);
-  if (redirect) preserveSupabaseSessionForRedirect(redirect);
+  if (redirect) {
+    preserveSupabaseSessionForRedirect(redirect);
+    copySupabaseSessionToScope(getSupabaseAuthScope(redirect));
+  }
   return redirect;
 }
