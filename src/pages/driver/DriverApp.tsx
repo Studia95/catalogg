@@ -1078,7 +1078,7 @@ function DriverActiveScreen({ delivery, profile }: { delivery: DeliveryOffer | n
     if (delivery.status === 'assigned') return { label: 'Я на месте в ресторане', status: 'arrived_to_restaurant' as const };
     if (delivery.status === 'arrived_to_restaurant') return { label: 'Показать QR', status: 'arrived_to_restaurant' as const, to: '/driver/qr' };
     if (delivery.status === 'handed_over') return { label: 'Я взял заказ', status: 'on_the_way' as const };
-    if (delivery.status === 'on_the_way') return { label: 'Я на месте у клиента', status: 'arrived_to_client' as const };
+    if (delivery.status === 'on_the_way') return { label: 'Я на месте у клиента', status: 'delivered' as const };
     if (delivery.status === 'arrived_to_client') return { label: 'Заказ доставлен', status: 'delivered' as const };
     return null;
   }, [delivery]);
