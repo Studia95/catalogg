@@ -41,6 +41,7 @@ import {
   demoDriverId,
   getAuthenticatedDriverId,
   getDriverDashboard,
+  hasDriverAuthSession,
   saveDriverProfile,
   signOutDriver,
   setDriverAvailability,
@@ -49,6 +50,7 @@ import {
   updateDeliveryProgress,
   type DeliveryOffer,
   type DriverDashboardSnapshot,
+  DriverActionError,
   type DriverProfile
 } from '../../shared/api/deliveryApi';
 import { requestDriverDeliveryPrice } from '../../shared/api/deliveryPricingApi';
@@ -339,18 +341,38 @@ export function DriverApp() {
     if (!supabase) return;
 
     let isMounted = true;
-    void getAuthenticatedDriverId()
-      .then((driverId) => {
+    void (async () => {
+      const hasSession = await hasDriverAuthSession();
+      if (!isMounted) return;
+
+      if (hasSession) {
+        setHasDriverAccess(true);
+        setAuthChecked(true);
+      }
+
+      try {
+        const driverId = await getAuthenticatedDriverId();
         if (!isMounted) return;
-        if (driverId) bindDriver(driverId);
-        setHasDriverAccess(Boolean(driverId));
-      })
-      .catch(() => {
-        if (isMounted) setHasDriverAccess(false);
-      })
-      .finally(() => {
+        if (driverId) {
+          bindDriver(driverId);
+          setHasDriverAccess(true);
+          setError('');
+        } else {
+          setHasDriverAccess(hasSession);
+          if (hasSession) {
+            setError('Не удалось загрузить профиль водителя. Нажмите обновить ещё раз.');
+          }
+        }
+      } catch {
+        if (!isMounted) return;
+        setHasDriverAccess(hasSession);
+        if (hasSession) {
+          setError('Не удалось загрузить профиль водителя. Нажмите обновить ещё раз.');
+        }
+      } finally {
         if (isMounted) setAuthChecked(true);
-      });
+      }
+    })();
 
     return () => {
       isMounted = false;
@@ -648,11 +670,16 @@ function DriverHomeScreen({
         void requestRestaurantOrderNotificationPermission({ role: 'driver', driverId: profile.id });
       }
     } catch (availabilityUpdateError) {
-      setOptimisticOnline(!nextOnline);
-      onAvailabilityChanged(!nextOnline);
-      setAvailabilityError(
-        availabilityUpdateError instanceof Error ? availabilityUpdateError.message : 'Не удалось изменить онлайн-статус'
-      );
+      const shouldRollback =
+        availabilityUpdateError instanceof DriverActionError && availabilityUpdateError.code === 'auth';
+      if (shouldRollback) {
+        setOptimisticOnline(!nextOnline);
+        onAvailabilityChanged(!nextOnline);
+        setAvailabilityError(availabilityUpdateError.message);
+      } else {
+        setAvailabilityError('Статус отправлен. Если заказы не появились, нажмите обновить.');
+        void onRefresh();
+      }
     } finally {
       setIsUpdatingAvailability(false);
     }

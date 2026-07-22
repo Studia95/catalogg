@@ -512,7 +512,7 @@ export const getAuthenticatedDriverId = async (): Promise<string | null> => {
     const { data: rpcDriverId, error: rpcDriverError } = await withDriverRequestTimeout(
       supabase.rpc('current_driver_id'),
       'Не удалось проверить вход водителя.',
-      10_000
+      4_000
     );
     if (!rpcDriverError) {
       return typeof rpcDriverId === 'string' && rpcDriverId ? rpcDriverId : null;
@@ -524,7 +524,7 @@ export const getAuthenticatedDriverId = async (): Promise<string | null> => {
   const { data: sessionData, error: sessionError } = await withDriverRequestTimeout(
     supabase.auth.getSession(),
     'Не удалось проверить сессию водителя.',
-    6_000
+    2_000
   );
   const authUser = sessionData.session?.user;
   if (sessionError || !authUser?.id) return null;
@@ -535,9 +535,30 @@ export const getAuthenticatedDriverId = async (): Promise<string | null> => {
 
   const email = authUser.email?.trim().toLowerCase();
   const fallbackFilters = [`user_id.eq.${authUser.id}`];
+
+  const userFilters = [`auth_user_id.eq.${authUser.id}`];
   if (email) {
+    userFilters.push(`email.eq.${email}`);
     fallbackFilters.push(`email.eq.${email}`);
   }
+
+  try {
+    const { data: platformUser } = await withDriverRequestTimeout(
+      supabase
+        .from('users')
+        .select('id')
+        .or(userFilters.join(','))
+        .maybeSingle(),
+      'Не удалось проверить пользователя водителя.',
+      2_500
+    );
+    if (typeof platformUser?.id === 'string') {
+      fallbackFilters.unshift(`user_id.eq.${platformUser.id}`);
+    }
+  } catch {
+    // The driver RPC remains the source of truth; this lookup is only a quick legacy fallback.
+  }
+
   const { data: driverRow, error: driverError } = await withDriverRequestTimeout(
     supabase
       .from('drivers')
@@ -545,12 +566,28 @@ export const getAuthenticatedDriverId = async (): Promise<string | null> => {
       .or(fallbackFilters.join(','))
       .maybeSingle(),
     'Не удалось проверить профиль водителя.',
-    10_000
+    4_000
   );
 
   if (driverError) return null;
   return typeof driverRow?.id === 'string' ? driverRow.id : null;
 };
+
+export async function hasDriverAuthSession() {
+  if (!supabase) return true;
+  copySupabaseSessionToScope('driver');
+
+  try {
+    const { data, error } = await withDriverRequestTimeout(
+      supabase.auth.getSession(),
+      'Не удалось проверить сессию водителя.',
+      2_000
+    );
+    return !error && Boolean(data.session?.user?.id);
+  } catch {
+    return false;
+  }
+}
 
 const resolveCurrentDriverId = async (fallbackDriverId: string) => {
   if (!supabase || fallbackDriverId !== demoDriverId) return fallbackDriverId;
@@ -721,7 +758,7 @@ export async function setDriverAvailability(isOnline: boolean) {
       next_is_online: isOnline
     }),
     'Не удалось изменить онлайн-статус. Проверьте связь и повторите.',
-    15_000
+    6_000
   );
 
   if (error) {
